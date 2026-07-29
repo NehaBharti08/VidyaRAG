@@ -1,0 +1,24 @@
+# Phase 2 baseline: dense retrieval, no reranking, no corrective loop.
+#
+# ============================ FROZEN ========================================
+# This profile is the control group for every measurement in this project.
+# Once Phase 2 ships, DO NOT EDIT IT. Changing it silently invalidates every
+# reported delta in docs/EVALUATION.md and the README results table.
+#
+# To try a variation, add a new profile.
+# ============================================================================
+
+name: baseline
+description: "Dense retrieval + direct generation. Frozen Phase 2 control group."
+
+retrieval:
+  use_hybrid: false
+  use_reranker: false
+  use_decomposition: false
+
+corrective:
+  enabled: false
+
+guardrails:
+  check_user_input: false
+  check_retrieved_context: false

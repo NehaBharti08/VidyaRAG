@@ -1,0 +1,25 @@
+# Development happens on Windows; CI, the container, and the deployed Space all
+# run Linux. Without this, git's autocrlf rewrites line endings on checkout and
+# the pre-commit `mixed-line-ending --fix=lf` hook fights it on every commit --
+# and shell scripts committed with CRLF fail in the container with an opaque
+# "bad interpreter" error.
+#
+# Normalise everything text to LF in the repository.
+* text=auto eol=lf
+
+# Makefiles and shell scripts must be LF regardless of platform.
+Makefile text eol=lf
+*.sh text eol=lf
+
+# Never touch binaries.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.onnx binary
+
+# Generated; collapse in diffs and exclude from language statistics.
+uv.lock linguist-generated=true -diff
+docs/media/** linguist-documentation=true

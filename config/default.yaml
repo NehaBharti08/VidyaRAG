@@ -1,0 +1,57 @@
+# Base pipeline configuration.
+#
+# Every profile in config/profiles/ is this file with a small overlay applied.
+# Keys are validated with extra="forbid", so a typo here is a startup error
+# rather than a silently ignored setting that invalidates a benchmark run.
+
+description: "Base configuration. Profiles overlay this file."
+
+# --- Models -----------------------------------------------------------------
+# Swapped in exactly one place: src/vidyarag/llm/provider.py
+generation_model: gpt-4o-mini
+grader_model: gpt-4o-mini
+embedding_model: text-embedding-3-small
+temperature: 0.0
+
+# --- Chunking ---------------------------------------------------------------
+# 512 tokens is roughly 1.5 paragraphs of textbook prose: large enough to hold
+# a self-contained concept, small enough that a 5-chunk context stays near
+# 2.6k tokens and leaves ample room for generation.
+#
+# Trade-off: 256 raises precision but fragments multi-sentence definitions;
+# 1024 improves recall on long explanations but dilutes the embedding and
+# raises per-query cost. Re-measure before changing.
+chunking:
+  chunk_size: 512
+  chunk_overlap: 64
+  respect_sentence_boundaries: true
+
+# --- Retrieval --------------------------------------------------------------
+# top_k_retrieve > top_k_context by design: a reranker can only add value when
+# given a candidate pool wider than the final selection. 20 -> 5 is a 4x pool,
+# which is the latency/quality sweet spot on 2 vCPU.
+retrieval:
+  top_k_retrieve: 20
+  top_k_context: 5
+  use_hybrid: false
+  use_reranker: false
+  use_decomposition: false
+  # ONNX cross-encoder via fastembed: 80MB and no torch dependency, which
+  # keeps the deployed image near 400MB instead of ~2.5GB.
+  # BAAI/bge-reranker-base (1.04GB, MIT) is ablated against this in Phase 4.
+  reranker_model: Xenova/ms-marco-MiniLM-L-6-v2
+  sparse_model: Qdrant/bm25
+
+# --- Corrective self-check --------------------------------------------------
+# Thresholds are Phase 5 starting points, tuned against the gold set and
+# reported in docs/EVALUATION.md. They are not asserted constants.
+corrective:
+  enabled: false
+  accept_threshold: 0.8
+  abstain_threshold: 0.5
+  max_attempts: 2
+
+# --- Guardrails -------------------------------------------------------------
+guardrails:
+  check_user_input: false
+  check_retrieved_context: false

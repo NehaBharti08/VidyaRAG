@@ -1,0 +1,86 @@
+# ---------------------------------------------------------------------------
+# Secrets. Never commit these.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.json
+.secrets/
+
+# ---------------------------------------------------------------------------
+# Corpus and derived artifacts.
+#
+# Raw OpenStax PDFs are redistributable under CC BY, but they are large and
+# reproducible from `vidyarag.ingest.download` via the checksummed manifest,
+# so they stay out of git. data/index/ holds the embedded Qdrant index that
+# ships to the HF Space through the Space's own repo, not this one.
+# ---------------------------------------------------------------------------
+data/
+*.pdf
+
+# Local Qdrant server volume (docker-compose)
+qdrant_storage/
+
+# fastembed / HF model caches
+.cache/
+.fastembed_cache/
+models/
+
+# ---------------------------------------------------------------------------
+# Evaluation
+#
+# eval/results/*.json IS committed on purpose - the run history is the
+# evidence behind the README results table. Only scratch output is ignored.
+# ---------------------------------------------------------------------------
+eval/results/scratch/
+eval/.eval_cache/
+.eval_cache/
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.installed.cfg
+
+# Environments
+.venv/
+venv/
+env/
+ENV/
+
+# Tooling caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.hypothesis/
+
+# ---------------------------------------------------------------------------
+# Editors / OS
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------------------------------------------------------------------------
+# Gradio
+# ---------------------------------------------------------------------------
+.gradio/
+flagged/

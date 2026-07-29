@@ -1,0 +1,152 @@
+<div align="center">
+
+# VidyaRAG
+
+**A study assistant that checks its own work — and admits when the textbook doesn't have the answer.**
+
+Agentic, self-correcting RAG over open-license OpenStax biology textbooks, with
+page-level citations, a claim-level groundedness check, and an evaluation
+harness that measures whether any of it actually helped.
+
+[![CI](https://github.com/NehaBharti08/VidyaRAG/actions/workflows/ci.yml/badge.svg)](https://github.com/NehaBharti08/VidyaRAG/actions/workflows/ci.yml)
+[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Corpus: CC BY 4.0](https://img.shields.io/badge/corpus-CC%20BY%204.0-lightgrey.svg)](ATTRIBUTION.md)
+
+</div>
+
+> **Status: Phase 0 — foundation.** This README is built up phase by phase.
+> Sections marked _pending_ are filled in as the work that backs them lands.
+> No number appears here before it has been measured.
+
+---
+
+## The problem
+
+Ask a general-purpose chatbot a textbook question and you get a fluent answer
+with no way to tell whether it came from the book, from the model's memory, or
+from nowhere at all. For a student revising for an exam, a confident wrong
+answer is worse than no answer.
+
+VidyaRAG is built around one idea: **a RAG system should be able to prove its
+answer is in the source, and abstain when it isn't.**
+
+- **Page-level citations.** Every claim resolves to `Biology 2e, §7.3, p.214` —
+  a real page in a real section, verified by a test that fails if a citation
+  points nowhere.
+- **A corrective self-check.** A grader scores each atomic claim in the draft
+  answer against the retrieved evidence. Unsupported claims trigger a bounded
+  re-retrieval; if the evidence still isn't there, the system says so instead of
+  inventing it.
+- **Numbers, not adjectives.** Every enhancement is ablated independently
+  against a frozen baseline on a 60-question gold set. Results that didn't help
+  are reported too.
+
+---
+
+## Live demo
+
+_Pending — deploying to Hugging Face Spaces._
+
+---
+
+## Architecture
+
+_Pending (Phase 7) — Mermaid diagram of the ingestion and query paths._
+
+---
+
+## Results
+
+Every configuration is measured against the same 60-question gold set using
+RAGAS. `baseline` is a frozen dense-retrieval control that is never edited
+after Phase 2, so all deltas are directly comparable.
+
+_Pending (Phase 3 onward) — baseline vs. final across faithfulness, answer
+relevancy, context precision, and context recall, plus cost per query._
+
+---
+
+## Quickstart
+
+Requires Python 3.11+ and an OpenAI API key. No Docker required — the default
+configuration runs an in-process vector index.
+
+```bash
+git clone https://github.com/NehaBharti08/VidyaRAG.git
+cd VidyaRAG
+
+# Install uv if you don't have it: https://docs.astral.sh/uv/
+uv sync
+
+cp .env.example .env
+# Edit .env and set OPENAI_API_KEY
+
+uv run vidyarag health
+```
+
+`health` validates configuration, resolves the pipeline profile, and checks
+vector store connectivity. It exits non-zero on failure, so CI and the
+container healthcheck both use it.
+
+```bash
+uv run vidyarag config --profile baseline   # inspect a pipeline variant
+uv run pytest                                # run the test suite
+```
+
+_Ingestion, serving, and evaluation commands are added in Phases 1–3._
+
+---
+
+## How it is put together
+
+| Concern | Choice | Why |
+|---|---|---|
+| Orchestration | LlamaIndex | Structure-aware node metadata survives retrieval, which is what makes citations real rather than decorative. |
+| Vector store | Qdrant | One `QdrantClient` API covers in-process, local server, and cloud — see [`store/client.py`](src/vidyarag/store/client.py). |
+| Models | `gpt-4o-mini`, `text-embedding-3-small` | Routed through a single provider module so the model is swappable in one place. |
+| Reranker | `Xenova/ms-marco-MiniLM-L-6-v2` via fastembed | ONNX, 80 MB, **no torch** — keeps the deployed image near 400 MB instead of ~2.5 GB. |
+| Evaluation | RAGAS | Faithfulness, answer relevancy, context precision, context recall. |
+
+Full rationale, including the alternatives rejected and why, is in
+[docs/DESIGN.md](docs/DESIGN.md). Evaluation methodology and per-phase deltas
+are in [docs/EVALUATION.md](docs/EVALUATION.md).
+
+### Configuration model
+
+Deployment concerns (secrets, endpoints) live in the environment. Pipeline
+behaviour lives in committed YAML profiles under [`config/profiles/`](config/profiles/),
+so a benchmark result can be traced to an exact, diffable configuration.
+Unknown keys are rejected at load time — a typo fails the run instead of
+silently invalidating it.
+
+---
+
+## Limitations
+
+_Expanded as the system is measured. Known now:_
+
+- The corpus is two introductory biology textbooks. Questions outside that
+  scope should be abstained on, not answered — that behaviour is measured, not
+  assumed.
+- Answers are generated by a language model and can be wrong even when
+  well-grounded. This is a study aid, not a reference.
+- The embedded index mode uses a linear scan and is appropriate for this
+  corpus size (~6k chunks), not for arbitrary scale.
+
+---
+
+## Corpus & licensing
+
+The code is MIT licensed. The textbooks are **not** — they are published by
+OpenStax under CC BY 4.0, and that license travels with every retrieved
+passage and generated citation.
+
+See [ATTRIBUTION.md](ATTRIBUTION.md) for per-title licensing, required
+attribution, and why these particular titles were chosen.
+
+> Download Biology 2e for free at https://openstax.org/details/books/biology-2e
+> Download Microbiology for free at https://openstax.org/details/books/microbiology
+
+VidyaRAG is an independent student project and is not affiliated with or
+endorsed by OpenStax or Rice University.
