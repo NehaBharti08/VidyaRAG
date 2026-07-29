@@ -1,0 +1,62 @@
+# Run on every commit. Install once with:  uv run pre-commit install
+#
+# gitleaks is first and non-negotiable: this repo handles an OpenAI key, a
+# Qdrant Cloud key, and an HF token. A leaked key in git history survives
+# `git rm` and has to be rotated, so the cheap check runs before anything else.
+
+default_language_version:
+  python: python3.11
+
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        # Catches a stray PDF or a Qdrant index before it enters history.
+        args: ["--maxkb=2048"]
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+        args: ["--allow-multiple-documents"]
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+      - id: detect-private-key
+
+  # ruff lints, black formats. ruff-format is deliberately NOT enabled: it and
+  # black disagree on edge cases and would rewrite each other's output on every
+  # commit. One formatter, one linter.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+
+  - repo: https://github.com/psf/black
+    rev: 24.10.0
+    hooks:
+      - id: black
+
+  # mypy runs against the core package only -- see [tool.mypy] in pyproject.
+  #
+  # The hook runs in an isolated environment, so every typed dependency the
+  # package imports must be listed here or mypy reports false positives that do
+  # not reproduce locally (e.g. typer's decorators appearing untyped). Keep this
+  # list in sync with the imports in src/vidyarag/.
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        files: ^src/vidyarag/
+        additional_dependencies:
+          - pydantic>=2.9
+          - pydantic-settings>=2.6
+          - types-pyyaml
+          - typer>=0.15
+          - rich>=13.9
