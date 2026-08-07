@@ -20,7 +20,7 @@ from qdrant_client import QdrantClient
 from vidyarag.settings import IN_MEMORY, QdrantMode, Settings
 
 # qdrant-client's local mode warns past this many points and degrades to a
-# linear scan. The Biology 2e + Microbiology corpus is expected to land near
+# linear scan. The Biology + Anatomy and Physiology corpus is expected to land near
 # 6k chunks, so embedded mode is comfortable -- but adding titles is not free.
 LOCAL_MODE_POINT_ADVISORY = 20_000
 
