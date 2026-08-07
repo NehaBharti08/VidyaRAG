@@ -73,17 +73,26 @@ number justifies it.
 CC-BY-NC-4.0 — a non-commercial license is wrong for an MIT-licensed repo that
 others may build on.
 
-### Corpus: Biology 2e + Microbiology
+### Corpus: Biology (1st ed) + Anatomy and Physiology (1st ed)
 
-Both CC BY 4.0, verified per title (see [ATTRIBUTION.md](../ATTRIBUTION.md)).
+Both CC BY 4.0, verified per title *and per edition* against OpenStax's content
+API (see [ATTRIBUTION.md](../ATTRIBUTION.md)).
 
-*Rejected: Concepts of Biology.* Also CC BY 4.0 and an obvious third candidate,
-but it overlaps Biology 2e substantially. Indexing both would let the same fact
-be retrieved from two titles, which makes context-precision scores ambiguous —
-a chunk would score as "irrelevant" only because a near-duplicate outranked it.
-Corpus redundancy would have been measured as retrieval error.
+*Rejected: Biology 2e, Microbiology, Concepts of Biology, A&P 2e.* All four are
+CC BY-**NC-SA** 4.0, not CC BY. OpenStax relicensed much of its catalog on the
+second edition, so the license cannot be inferred from the title — only the
+first editions of *Biology* and *Anatomy and Physiology* remain CC BY, and they
+are therefore the complete usable biology corpus rather than a preference among
+many. A NonCommercial + ShareAlike corpus would restrict downstream reuse of an
+MIT-licensed repo, which is the same objection that rules out the Jina reranker
+above; applying it to a model but not to the corpus would be incoherent.
 
-Biology 2e and Microbiology are complementary, which also makes genuine
+The two chosen titles are complementary — general biology against human organ
+systems — with overlap confined to *Biology*'s animal-systems unit. That matters
+for measurement, not just coverage: heavily redundant titles make
+context-precision ambiguous, because a chunk scores as "irrelevant" only when a
+near-duplicate from the other book outranks it, and corpus redundancy then shows
+up as retrieval error. The shallow seam that does exist is what makes genuine
 cross-title multi-hop questions possible rather than contrived.
 
 ### Formatting: black only

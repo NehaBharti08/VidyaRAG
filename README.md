@@ -31,7 +31,7 @@ answer is worse than no answer.
 VidyaRAG is built around one idea: **a RAG system should be able to prove its
 answer is in the source, and abstain when it isn't.**
 
-- **Page-level citations.** Every claim resolves to `Biology 2e, §7.3, p.214` —
+- **Page-level citations.** Every claim resolves to `Biology, §7.3, p.214` —
   a real page in a real section, verified by a test that fails if a citation
   points nowhere.
 - **A corrective self-check.** A grader scores each atomic claim in the draft
@@ -145,8 +145,8 @@ passage and generated citation.
 See [ATTRIBUTION.md](ATTRIBUTION.md) for per-title licensing, required
 attribution, and why these particular titles were chosen.
 
-> Download Biology 2e for free at https://openstax.org/details/books/biology-2e
-> Download Microbiology for free at https://openstax.org/details/books/microbiology
+> Download Biology for free at https://openstax.org/details/books/biology
+> Download Anatomy and Physiology for free at https://openstax.org/details/books/anatomy-and-physiology
 
 VidyaRAG is an independent student project and is not affiliated with or
 endorsed by OpenStax or Rice University.
