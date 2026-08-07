@@ -22,8 +22,11 @@ dependencies = [
     # Models
     "openai>=1.60,<3.0",
     "tiktoken>=0.8,<1.0",
-    # Ingestion
+    # Ingestion. httpx is already present transitively via openai, but corpus
+    # download depends on it directly -- an undeclared import that survives only
+    # because another package happens to pull it in is a break waiting to happen.
     "pymupdf>=1.24,<2.0",
+    "httpx>=0.27,<1.0",
     # Service
     "fastapi>=0.115,<1.0",
     "uvicorn[standard]>=0.32,<1.0",
@@ -131,6 +134,14 @@ module = [
     "gradio.*",
 ]
 ignore_missing_imports = true
+
+# PyMuPDF ships partial annotations: the module imports cleanly under strict
+# mode, but its constructors are untyped, so every `pymupdf.open(...)` trips
+# disallow_untyped_calls. Narrowed to that one rule rather than silencing the
+# module, so genuine type errors in our own PyMuPDF usage still surface.
+[[tool.mypy.overrides]]
+module = ["vidyarag.ingest.*"]
+disallow_untyped_calls = false
 
 [tool.pytest.ini_options]
 minversion = "8.0"

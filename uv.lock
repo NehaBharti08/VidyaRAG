@@ -2929,6 +2929,7 @@ source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "gradio" },
+    { name = "httpx" },
     { name = "llama-index-core" },
     { name = "llama-index-embeddings-openai" },
     { name = "llama-index-llms-openai" },
@@ -2970,6 +2971,7 @@ eval = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115,<1.0" },
     { name = "gradio", specifier = ">=5.0,<6.0" },
+    { name = "httpx", specifier = ">=0.27,<1.0" },
     { name = "llama-index-core", specifier = ">=0.12,<0.15" },
     { name = "llama-index-embeddings-openai", specifier = ">=0.3,<0.6" },
     { name = "llama-index-llms-openai", specifier = ">=0.3,<0.6" },
