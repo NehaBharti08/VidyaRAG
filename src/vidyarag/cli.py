@@ -8,9 +8,19 @@ from __future__ import annotations
 
 import typer
 from rich.console import Console
+from rich.progress import (
+    BarColumn,
+    DownloadColumn,
+    Progress,
+    SpinnerColumn,
+    TaskID,
+    TextColumn,
+    TransferSpeedColumn,
+)
 from rich.table import Table
 
 from vidyarag import __version__
+from vidyarag.ingest import CORPUS, download_corpus, get_book
 from vidyarag.settings import Settings, load_pipeline_config
 from vidyarag.store import build_client, describe_target
 
@@ -64,6 +74,54 @@ def config(
             f"max_attempts={cfg.corrective.max_attempts}",
         )
     console.print(table)
+
+
+@app.command()
+def download(
+    book: str = typer.Option(None, "--book", "-b", help="Fetch only this slug."),
+    force: bool = typer.Option(False, "--force", help="Re-download even if already present."),
+) -> None:
+    """Fetch the source corpus and write data/raw/manifest.json.
+
+    Safe to re-run: existing files are checksummed and skipped, and an
+    interrupted transfer resumes rather than restarting.
+    """
+    try:
+        books = (get_book(book),) if book else CORPUS
+    except KeyError as exc:
+        console.print(f"[red]FAIL[/red]  {exc}")
+        raise typer.Exit(code=1) from exc
+
+    columns = (
+        SpinnerColumn(),
+        TextColumn("[bold]{task.description}"),
+        BarColumn(),
+        DownloadColumn(),
+        TransferSpeedColumn(),
+    )
+    with Progress(*columns, console=console) as bar:
+        tasks: dict[str, TaskID] = {}
+
+        def on_progress(slug: str, done: int, total: int) -> None:
+            if slug not in tasks:
+                tasks[slug] = bar.add_task(slug, total=total or None)
+            bar.update(tasks[slug], completed=done, total=total or None)
+
+        manifest = download_corpus(books=books, force=force, progress=on_progress)
+
+    table = Table(title="Corpus", show_header=True, header_style="bold")
+    for column in ("Title", "Pages", "Size", "SHA-256", "License"):
+        table.add_column(column)
+    for record in manifest.books:
+        table.add_row(
+            f"{record.title} ({record.edition})",
+            f"{record.page_count:,}",
+            f"{record.size_mb:,.0f} MB",
+            record.sha256[:12],
+            record.license_name,
+        )
+    console.print(table)
+    console.print(f"[green]OK[/green]    manifest written for {len(manifest.books)} book(s)")
 
 
 @app.command()
