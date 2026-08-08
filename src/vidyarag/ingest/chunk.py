@@ -9,11 +9,17 @@ Chunks may still span a page break, which is deliberate: a definition split
 across pages 213 and 214 should stay whole, so a chunk records the page range
 it covers and cites the page where it starts.
 
-Size is 512 tokens with 64 of overlap, measured with the same tokeniser the
-embedding model uses -- counting words or characters instead would leave the
-real token length varying by ~30% across chunks, which is what actually
-overflows a context window. The trade-off behind 512 is recorded in
-``config/default.yaml``; the number lives there, not here.
+Size is 512 tokens with 64 of overlap, measured with **the embedding model's own
+tokeniser** -- which is load-bearing, not pedantry. ``bge-base-en-v1.5`` uses
+BERT WordPiece and truncates hard at 512 tokens, while ``cl100k_base`` counts
+the same English prose about 7% shorter. Sizing to 512 tiktoken tokens would
+therefore hand the embedder ~548 of its own tokens and have the tail of every
+full-size chunk silently dropped -- text still shown to the reader and still
+named in the citation, but contributing nothing to the vector that retrieved
+it. No error, no warning, just quietly worse retrieval.
+
+The trade-off behind 512 is recorded in ``config/default.yaml``; the number
+lives there, not here.
 """
 
 from __future__ import annotations
@@ -23,9 +29,10 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from itertools import groupby
 
-import tiktoken
-
 from vidyarag.ingest.parse import PageText
+from vidyarag.llm.provider import count_tokens
+
+DEFAULT_EMBEDDING_MODEL = "BAAI/bge-base-en-v1.5"
 
 # Abbreviations that end in a period without ending a sentence. Splitting after
 # "e.g." or "Fig." would cut a sentence in half and hand the fragment to the
@@ -136,15 +143,6 @@ def split_sentences(text: str) -> list[str]:
     return sentences
 
 
-def _encoder(model: str) -> tiktoken.Encoding:
-    try:
-        return tiktoken.encoding_for_model(model)
-    except KeyError:
-        # Unknown model names fall back to the encoding every current OpenAI
-        # embedding and chat model uses, rather than failing ingestion.
-        return tiktoken.get_encoding("cl100k_base")
-
-
 def _section_key(page: PageText) -> tuple[str, str | None, str | None]:
     return (page.book_slug, page.chapter, page.section)
 
@@ -163,15 +161,17 @@ def chunk_pages(
     *,
     chunk_size: int = 512,
     chunk_overlap: int = 64,
-    embedding_model: str = "text-embedding-3-small",
+    embedding_model: str = DEFAULT_EMBEDDING_MODEL,
 ) -> Iterator[Chunk]:
     """Turn parsed pages into overlapping, sentence-aligned chunks.
 
     Args:
         pages: Output of :func:`vidyarag.ingest.parse.extract_pages`, in order.
-        chunk_size: Target maximum tokens per chunk.
+        chunk_size: Target maximum tokens per chunk, in ``embedding_model``'s
+            own tokens -- the model truncates at its sequence limit, so this
+            must be measured the way the model measures.
         chunk_overlap: Tokens of trailing context repeated into the next chunk.
-        embedding_model: Tokeniser to measure against.
+        embedding_model: The model whose tokeniser defines a token here.
 
     Yields:
         :class:`Chunk` records in document order.
@@ -183,8 +183,6 @@ def chunk_pages(
     if chunk_overlap >= chunk_size:
         raise ValueError(f"chunk_overlap ({chunk_overlap}) must be < chunk_size ({chunk_size})")
 
-    encoding = _encoder(embedding_model)
-
     for (slug, chapter, section), group in groupby(pages, key=_section_key):
         section_pages = list(group)
         printed = {p.page: p.label for p in section_pages}
@@ -193,7 +191,7 @@ def chunk_pages(
         sentences = split_sentences(_tag_pages(section_pages))
         yield from _pack(
             sentences,
-            encoding=encoding,
+            embedding_model=embedding_model,
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
             slug=slug,
@@ -208,7 +206,7 @@ def chunk_pages(
 def _pack(
     sentences: list[str],
     *,
-    encoding: tiktoken.Encoding,
+    embedding_model: str,
     chunk_size: int,
     chunk_overlap: int,
     slug: str,
@@ -238,7 +236,7 @@ def _pack(
             page_end=max(pages),
             printed_page=printed.get(start),
             text=text,
-            token_count=len(encoding.encode(text)),
+            token_count=count_tokens(text, embedding_model),
         )
 
     for sentence in sentences:
@@ -248,7 +246,7 @@ def _pack(
         if not clean:
             continue
 
-        cost = len(encoding.encode(clean))
+        cost = count_tokens(clean, embedding_model)
 
         # A single sentence longer than the budget cannot be packed; emit it
         # alone rather than dropping it or splitting mid-clause.

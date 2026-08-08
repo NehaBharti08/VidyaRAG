@@ -69,8 +69,10 @@ relevancy, context precision, and context recall, plus cost per query._
 
 ## Quickstart
 
-Requires Python 3.11+ and an OpenAI API key. No Docker required — the default
-configuration runs an in-process vector index.
+Requires Python 3.11+. No Docker, no vector-store account, and **no API key to
+build the index** — embeddings run locally on CPU and the default configuration
+uses an in-process vector store. A free Gemini key is needed only to *answer*
+questions.
 
 ```bash
 git clone https://github.com/NehaBharti08/VidyaRAG.git
@@ -80,9 +82,12 @@ cd VidyaRAG
 uv sync
 
 cp .env.example .env
-# Edit .env and set OPENAI_API_KEY
+# Optional for ingestion; needed to answer questions.
+# Free key, no credit card: https://aistudio.google.com/apikey
 
-uv run vidyarag health
+uv run vidyarag health          # validate config and store connectivity
+uv run vidyarag download        # fetch the OpenStax PDFs (~415 MB, resumable)
+uv run vidyarag ingest          # parse, chunk, embed, index (~15 min, offline)
 ```
 
 `health` validates configuration, resolves the pipeline profile, and checks
@@ -104,7 +109,8 @@ _Ingestion, serving, and evaluation commands are added in Phases 1–3._
 |---|---|---|
 | Orchestration | LlamaIndex | Structure-aware node metadata survives retrieval, which is what makes citations real rather than decorative. |
 | Vector store | Qdrant | One `QdrantClient` API covers in-process, local server, and cloud — see [`store/client.py`](src/vidyarag/store/client.py). |
-| Models | `gpt-4o-mini`, `text-embedding-3-small` | Routed through a single provider module so the model is swappable in one place. |
+| Embeddings | `BAAI/bge-base-en-v1.5` via fastembed | ONNX on CPU, **no torch, no API key**. Retrieval therefore has no external dependency at all — the published demo cannot be broken by an expired account. |
+| Generation | `gemini-3.5-flash` (grading: `gemini-3.5-flash-lite`) | Pinned, never aliased: `-latest` would change model underneath a benchmark and make every reported delta incomparable. Routed through one provider module. |
 | Reranker | `Xenova/ms-marco-MiniLM-L-6-v2` via fastembed | ONNX, 80 MB, **no torch** — keeps the deployed image near 400 MB instead of ~2.5 GB. |
 | Evaluation | RAGAS | Faithfulness, answer relevancy, context precision, context recall. |
 
