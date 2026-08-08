@@ -13,15 +13,13 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     # Orchestration
     "llama-index-core>=0.12,<0.15",
-    "llama-index-llms-openai>=0.3,<0.6",
-    "llama-index-embeddings-openai>=0.3,<0.6",
     "llama-index-vector-stores-qdrant>=0.4,<0.8",
-    # Vector store. [fastembed] provides ONNX sparse (BM25) + cross-encoder
-    # reranking without dragging in torch.
+    # Vector store. [fastembed] provides ONNX dense embeddings, sparse (BM25),
+    # and cross-encoder reranking -- all on CPU, without dragging in torch.
     "qdrant-client[fastembed]>=1.12,<2.0",
-    # Models
-    "openai>=1.60,<3.0",
-    "tiktoken>=0.8,<1.0",
+    # Generation and grading. Embeddings are local, so this is the only
+    # external model dependency, and ingestion does not need it at all.
+    "google-genai>=1.0,<2.0",
     # Ingestion. httpx is already present transitively via openai, but corpus
     # download depends on it directly -- an undeclared import that survives only
     # because another package happens to pull it in is a break waiting to happen.

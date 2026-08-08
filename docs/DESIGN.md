@@ -55,6 +55,43 @@ time. The failure mode this prevents is specific and nasty: a misspelled key is
 silently ignored, the run completes, and the resulting number is attributed to
 a configuration that was never actually applied.
 
+### Models: local embeddings, hosted generation
+
+Embeddings run **locally** (`BAAI/bge-base-en-v1.5` via fastembed: ONNX, CPU,
+768-dim, no torch). Generation and grading go to **Gemini**
+(`gemini-3.5-flash` / `gemini-3.5-flash-lite`).
+
+*Why split them:* embedding is a fixed, mechanical transformation where a small
+open model is close enough to a hosted one to be worth the trade; answering a
+question and grading its groundedness are not. Spending the external dependency
+only where it buys something keeps the important property intact — **retrieval
+has no runtime dependency on any third party.** The deployed demo already ships
+a self-contained index so a suspended cloud cluster cannot break it months
+later; local embeddings close the last hole in that argument, because
+retrieving a passage now requires no account, no key, and no network.
+
+It also makes ingestion runnable by anyone who clones the repo, with no
+credentials at all — which is the difference between a reproducible project and
+one that merely claims to be.
+
+*Models are pinned, never aliased.* `gemini-flash-latest` would silently change
+model underneath a benchmark and make every reported delta incomparable. Note
+also that `gemini-2.5-*` returns 404 for accounts created after ~mid-2026
+("no longer available to new users"), so the 3.x line is what a new key can
+actually call — worth knowing before copying a tutorial that predates it.
+
+*The tokeniser is not interchangeable.* `bge-base-en-v1.5` truncates at 512
+tokens and counts BERT WordPiece, roughly 7% more than `cl100k_base` on the same
+prose. Chunks sized with tiktoken would run ~548 model tokens and have their
+tails silently dropped at embed time — text still shown to the reader and still
+named in the citation, contributing nothing to the vector that retrieved it. So
+chunking measures with the embedding model's own tokeniser.
+
+*Rejected: OpenAI (`gpt-4o-mini` + `text-embedding-3-small`).* The original
+plan, and a fine stack, but it requires funded billing. The free path above
+costs nothing to run and produces a *stronger* deployment story, so the paid
+one was buying convenience rather than capability.
+
 ### Reranker: ONNX cross-encoder, not a torch one
 
 `Xenova/ms-marco-MiniLM-L-6-v2` via fastembed — 80 MB, ONNX runtime, **no torch

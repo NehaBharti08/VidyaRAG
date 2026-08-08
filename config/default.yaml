@@ -8,10 +8,28 @@ description: "Base configuration. Profiles overlay this file."
 
 # --- Models -----------------------------------------------------------------
 # Swapped in exactly one place: src/vidyarag/llm/provider.py
-generation_model: gpt-4o-mini
-grader_model: gpt-4o-mini
-embedding_model: text-embedding-3-small
+#
+# Models are PINNED, never aliased. `gemini-flash-latest` would silently change
+# model underneath a benchmark and make every reported delta incomparable -- the
+# one thing this project cannot afford. Note that gemini-2.5-* returns 404 for
+# accounts created after ~mid-2026 ("no longer available to new users"), so the
+# 3.x line is not a preference, it is what exists.
+generation_model: gemini-3.5-flash
+grader_model: gemini-3.5-flash-lite
 temperature: 0.0
+
+# Embeddings run locally via fastembed (ONNX, CPU, no torch, no API key).
+#
+# This is not only a cost decision. The deployed Space already ships a
+# self-contained Qdrant index so a dead cloud cluster cannot break the demo
+# months later; embedding locally closes the last hole in that story, leaving
+# retrieval with no external dependency at all.
+#
+# 512 is the model's hard sequence limit -- text beyond it is silently dropped
+# at embed time, so chunking measures against this tokeniser, not tiktoken.
+embedding_model: BAAI/bge-base-en-v1.5
+embedding_dim: 768
+embedding_max_tokens: 512
 
 # --- Chunking ---------------------------------------------------------------
 # 512 tokens is roughly 1.5 paragraphs of textbook prose: large enough to hold

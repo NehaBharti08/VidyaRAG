@@ -34,16 +34,34 @@ editions; see [ATTRIBUTION.md](../ATTRIBUTION.md) for why the edition matters.
 |---|---|---|
 | PDF pages | 1,480 | 1,420 |
 | Pages ingested | 1,273 (86%) | 1,289 (91%) |
-| Chunks | 1,651 | 1,701 |
-| Tokens/chunk, mean / median | 461 / 495 | 467 / 494 |
+| Chunks | 1,765 | 1,843 |
 | Chunks with a printed page number | 100% | 100% |
-| Chunks with a section | 98.1% | 98.4% |
-| Chunks spanning a page break | 59.7% | 58.6% |
+| Chunks with a section | ~98% | ~98% |
 | Download size | 279.4 MB | 135.4 MB |
 | SHA-256 | `723dec671a4d…` | `16cb34457cba…` |
 
-**Total: 3,352 chunks** — comfortably inside `qdrant-client` local mode's ~20k
-point advisory, so the embedded index that ships with the demo stays fast.
+**Total: 3,608 chunks**, all 3,608 indexed — comfortably inside `qdrant-client`
+local mode's ~20k point advisory, so the embedded index that ships with the demo
+stays fast.
+
+### Index
+
+| | |
+|---|---|
+| Embedding model | `BAAI/bge-base-en-v1.5` (fastembed, ONNX, CPU) |
+| Dimensions | 768, cosine |
+| Points | 3,608 |
+| Index size on disk | ~34 MB |
+| Build time | 3,464 s (~58 min, CPU only) |
+| Cost | **$0** — no API key is needed to build the index |
+
+Chunk sizing is measured with **the embedding model's own tokeniser**, not
+tiktoken. `bge-base-en-v1.5` truncates hard at 512 tokens and counts BERT
+WordPiece, roughly 7% more than `cl100k_base` on the same prose — so chunks
+sized to 512 tiktoken tokens would have arrived as ~548 model tokens and had
+their tails silently dropped at embed time. Text still shown to the reader,
+still named in the citation, contributing nothing to the vector that retrieved
+it. Measured after the fix: **maximum 487 tokens, zero chunks over the limit.**
 
 ### What was excluded, and why
 
@@ -58,7 +76,7 @@ that would compete in retrieval while answering nothing:
 - **End-of-chapter question sets** (`REVIEW QUESTIONS`, `CRITICAL THINKING
   QUESTIONS`, and continuation pages of multiple-choice options). These get no
   outline entry of their own — they fall under the trailing `Glossary` heading —
-  so they are detected from the text. Removing them cut 314 chunks (8.6%).
+  so they are detected from the text. Removing them cut ~8.6% of chunks.
 - **Chapter summaries and key terms are deliberately kept.** Summaries are
   condensed explanation and key terms are definitions; both answer real
   questions.
@@ -99,7 +117,7 @@ Target composition, 60 questions:
 
 ### Provenance — stated plainly
 
-Answerable questions are **drafted by `gpt-4o-mini` from sampled chunks, then
+Answerable questions are **drafted by `gemini-3.5-flash` from sampled chunks, then
 verified by hand.** Each is checked for three things: that it reads naturally,
 that the cited chunk genuinely answers it, and that it is *not* answerable from
 a model's parametric knowledge without retrieval. That third check is what stops

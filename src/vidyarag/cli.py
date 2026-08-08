@@ -15,12 +15,14 @@ from rich.progress import (
     SpinnerColumn,
     TaskID,
     TextColumn,
+    TimeElapsedColumn,
     TransferSpeedColumn,
 )
 from rich.table import Table
 
 from vidyarag import __version__
 from vidyarag.ingest import CORPUS, download_corpus, get_book
+from vidyarag.ingest.pipeline import ingest as run_ingest
 from vidyarag.settings import Settings, load_pipeline_config
 from vidyarag.store import build_client, describe_target
 
@@ -122,6 +124,70 @@ def download(
         )
     console.print(table)
     console.print(f"[green]OK[/green]    manifest written for {len(manifest.books)} book(s)")
+
+
+@app.command()
+def ingest(
+    profile: str = typer.Option(None, "--profile", "-p", help="Profile to take chunking from."),
+    recreate: bool = typer.Option(False, "--recreate", help="Drop the collection and re-embed."),
+    batch_size: int = typer.Option(64, "--batch-size", help="Chunks per embed/upsert batch."),
+) -> None:
+    """Build the search index from downloaded PDFs.
+
+    Runs entirely offline -- embeddings are local, so no API key is required.
+    Safe to interrupt: a later run resumes from whatever was already written.
+    """
+    settings = Settings()
+    cfg = load_pipeline_config(profile or settings.profile)
+
+    console.print(f"[bold]collection[/bold]  {settings.qdrant_collection}")
+    console.print(f"[bold]target    [/bold]  {describe_target(settings)}")
+    console.print(f"[bold]embedder  [/bold]  {cfg.embedding_model} ({cfg.embedding_dim}d, local)")
+
+    client = build_client(settings)
+    columns = (
+        SpinnerColumn(),
+        TextColumn("[bold]{task.description}"),
+        BarColumn(),
+        TextColumn("{task.completed}/{task.total}"),
+        TimeElapsedColumn(),
+    )
+    with Progress(*columns, console=console) as bar:
+        tasks: dict[str, TaskID] = {}
+
+        def on_progress(stage: str, done: int, total: int) -> None:
+            if stage not in tasks:
+                tasks[stage] = bar.add_task(stage, total=total or None)
+            bar.update(tasks[stage], completed=done, total=total or None)
+
+        report = run_ingest(
+            client,
+            collection=settings.qdrant_collection,
+            embedding_model=cfg.embedding_model,
+            embedding_dim=cfg.embedding_dim,
+            chunk_size=cfg.chunking.chunk_size,
+            chunk_overlap=cfg.chunking.chunk_overlap,
+            batch_size=batch_size,
+            recreate=recreate,
+            progress=on_progress,
+        )
+
+    table = Table(title="Ingest", show_header=True, header_style="bold")
+    for column in ("Book", "Pages", "Chunks", "Embedded", "Skipped"):
+        table.add_column(column)
+    for book in report.books:
+        table.add_row(
+            book.title,
+            f"{book.pages_parsed:,}",
+            f"{book.chunks_created:,}",
+            f"{book.chunks_embedded:,}",
+            f"{book.chunks_skipped:,}",
+        )
+    console.print(table)
+    console.print(
+        f"[green]OK[/green]    {report.points_in_collection:,} points in "
+        f"'{report.collection}' in {report.duration_seconds:.0f}s"
+    )
 
 
 @app.command()

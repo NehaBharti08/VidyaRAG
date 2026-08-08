@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -44,9 +45,9 @@ class TestSettings:
 
     def test_secrets_are_not_exposed_by_repr(self) -> None:
         """A settings object must be safe to log."""
-        settings = Settings(_env_file=None, OPENAI_API_KEY="sk-super-secret")  # type: ignore[call-arg]
-        assert "sk-super-secret" not in repr(settings)
-        assert settings.openai_api_key.get_secret_value() == "sk-super-secret"
+        settings = Settings(_env_file=None, GOOGLE_API_KEY="AQ.super-secret")  # type: ignore[call-arg]
+        assert "AQ.super-secret" not in repr(settings)
+        assert settings.google_api_key.get_secret_value() == "AQ.super-secret"
 
     def test_memory_sentinel_is_preserved(self) -> None:
         settings = Settings(_env_file=None, QDRANT_PATH=IN_MEMORY)  # type: ignore[call-arg]
@@ -111,3 +112,19 @@ class TestPipelineConfig:
         """A typo in a profile must fail loudly, not silently invalidate a run."""
         with pytest.raises(ValueError, match=r"extra_inputs_not_permitted|Extra inputs"):
             PipelineConfig.model_validate({"retrieval": {"top_k_retreive": 20}})
+
+    def test_env_example_names_a_profile_that_exists(self, config_dir: Path) -> None:
+        """`.env.example` is the quickstart. It shipped `VIDYARAG_PROFILE=corrective`
+        while only `baseline.yaml` existed, so a fresh clone following the README
+        crashed on the first command that read a profile."""
+        example = (config_dir.parent / ".env.example").read_text(encoding="utf-8")
+        match = re.search(r"^VIDYARAG_PROFILE=(.+)$", example, re.MULTILINE)
+        assert match, ".env.example must set VIDYARAG_PROFILE"
+        load_pipeline_config(match.group(1).strip(), config_dir=config_dir)
+
+    def test_every_shipped_profile_loads(self, config_dir: Path) -> None:
+        """A broken profile should fail the build, not only a run that selects it."""
+        profiles = sorted(p.stem for p in (config_dir / "profiles").glob("*.yaml"))
+        assert profiles
+        for name in profiles:
+            assert load_pipeline_config(name, config_dir=config_dir).name == name
