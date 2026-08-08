@@ -62,10 +62,11 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    openai_api_key: SecretStr = Field(
+    google_api_key: SecretStr = Field(
         default=SecretStr(""),
-        validation_alias="OPENAI_API_KEY",
+        validation_alias="GOOGLE_API_KEY",
     )
+    """Gemini API key. Not needed for ingestion -- embeddings run locally."""
 
     qdrant_mode: QdrantMode = Field(default=QdrantMode.EMBEDDED, validation_alias="QDRANT_MODE")
     qdrant_url: str | None = Field(default=None, validation_alias="QDRANT_URL")
@@ -159,10 +160,12 @@ class PipelineConfig(BaseModel):
 
     name: str = "baseline"
     description: str = ""
-    generation_model: str = "gpt-4o-mini"
-    grader_model: str = "gpt-4o-mini"
-    embedding_model: str = "text-embedding-3-small"
+    generation_model: str = "gemini-3.5-flash"
+    grader_model: str = "gemini-3.5-flash-lite"
     temperature: float = 0.0
+    embedding_model: str = "BAAI/bge-base-en-v1.5"
+    embedding_dim: int = 768
+    embedding_max_tokens: int = 512
     chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
     retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
     corrective: CorrectiveConfig = Field(default_factory=CorrectiveConfig)

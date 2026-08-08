@@ -25,7 +25,7 @@ def _isolate_env(monkeypatch: pytest.MonkeyPatch) -> None:
     CI (or worse, spend money).
     """
     for var in (
-        "OPENAI_API_KEY",
+        "GOOGLE_API_KEY",
         "QDRANT_MODE",
         "QDRANT_URL",
         "QDRANT_API_KEY",
@@ -43,7 +43,7 @@ def memory_settings() -> Settings:
     """Settings pointed at an ephemeral in-process Qdrant."""
     return Settings(
         _env_file=None,  # type: ignore[call-arg]
-        OPENAI_API_KEY="test-key-not-real",
+        GOOGLE_API_KEY="test-key-not-real",
         QDRANT_MODE=QdrantMode.EMBEDDED,
         QDRANT_PATH=IN_MEMORY,
         QDRANT_COLLECTION="test_collection",
