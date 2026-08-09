@@ -1,8 +1,8 @@
 # Run on every commit. Install once with:  uv run pre-commit install
 #
-# gitleaks is first and non-negotiable: this repo handles an OpenAI key, a
-# Qdrant Cloud key, and an HF token. A leaked key in git history survives
-# `git rm` and has to be rotated, so the cheap check runs before anything else.
+# gitleaks is first and non-negotiable: this repo handles a Gemini key and an HF
+# token. A leaked key in git history survives `git rm` and has to be rotated, so
+# the cheap check runs before anything else.
 
 default_language_version:
   python: python3.11
@@ -60,3 +60,6 @@ repos:
           - types-pyyaml
           - typer>=0.15
           - rich>=13.9
+          - fastapi>=0.115
+          - httpx>=0.27
+          - structlog>=24.4
