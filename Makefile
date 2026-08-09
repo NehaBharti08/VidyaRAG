@@ -18,6 +18,18 @@ install: ## Sync dependencies and install pre-commit hooks
 health: ## Verify configuration and vector store connectivity
 	$(UV) run vidyarag health
 
+.PHONY: download
+download: ## Fetch the OpenStax PDFs (resumable, ~415MB)
+	$(UV) run vidyarag download
+
+.PHONY: ingest
+ingest: ## Parse, chunk, embed and index the corpus (offline, no API key)
+	$(UV) run vidyarag ingest
+
+.PHONY: serve
+serve: ## Run the HTTP API on :8000
+	$(UV) run uvicorn vidyarag.api.main:app --reload
+
 .PHONY: test
 test: ## Run the test suite (excludes tests that call paid APIs)
 	$(UV) run pytest -m "not costly"
