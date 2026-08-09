@@ -87,8 +87,29 @@ cp .env.example .env
 
 uv run vidyarag health          # validate config and store connectivity
 uv run vidyarag download        # fetch the OpenStax PDFs (~415 MB, resumable)
-uv run vidyarag ingest          # parse, chunk, embed, index (~15 min, offline)
+uv run vidyarag ingest          # parse, chunk, embed, index (~1 hr, offline)
+
+# Answering needs a free Gemini key in .env
+uv run vidyarag ask "How does facilitated diffusion move glucose into a cell?"
+uv run uvicorn vidyarag.api.main:app     # then POST /v1/query
 ```
+
+A real answer, abridged:
+
+```
+Because glucose is both large and polar, it cannot cross the cell membrane's
+lipid bilayer through simple diffusion [1, 2]. Instead it enters via
+facilitated diffusion, moving down its concentration gradient with the help of
+selective carrier proteins [1, 3, 5]...
+
+[1] Anatomy and Physiology, 3.1. The Cell Membrane, p.92 (CC BY 4.0)
+[3] Biology, 5.2. Passive Transport, p.147 (CC BY 4.0)
+
+10437ms [retrieve=3163ms generate=7274ms] 2553+227 tok
+```
+
+Page numbers are the **printed** ones, so they can be checked against a paper
+copy — not the PDF page index, which differs by 12 in Biology.
 
 `health` validates configuration, resolves the pipeline profile, and checks
 vector store connectivity. It exits non-zero on failure, so CI and the

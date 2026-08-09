@@ -23,6 +23,7 @@ from rich.table import Table
 from vidyarag import __version__
 from vidyarag.ingest import CORPUS, download_corpus, get_book
 from vidyarag.ingest.pipeline import ingest as run_ingest
+from vidyarag.pipeline import Pipeline
 from vidyarag.settings import Settings, load_pipeline_config
 from vidyarag.store import build_client, describe_target
 
@@ -188,6 +189,49 @@ def ingest(
         f"[green]OK[/green]    {report.points_in_collection:,} points in "
         f"'{report.collection}' in {report.duration_seconds:.0f}s"
     )
+
+
+@app.command()
+def ask(
+    question: str = typer.Argument(..., help="The question to answer."),
+    profile: str = typer.Option(None, "--profile", "-p", help="Pipeline profile to use."),
+    show_context: bool = typer.Option(False, "--context", help="Print the passages used."),
+) -> None:
+    """Answer a question from the indexed corpus."""
+    settings = Settings()
+    cfg = load_pipeline_config(profile or settings.profile)
+    pipeline = Pipeline(settings, cfg)
+
+    try:
+        with console.status("thinking..."):
+            result = pipeline.answer(question)
+    except ValueError as exc:
+        console.print(f"[red]FAIL[/red]  {exc}")
+        raise typer.Exit(code=1) from exc
+    finally:
+        pipeline.close()
+
+    console.print()
+    console.print(result.text)
+
+    if result.citations:
+        console.print("\n[bold]Sources[/bold]")
+        for citation in result.citations:
+            console.print(
+                f"  [{citation.marker}] {citation.citation}  [dim]({citation.license_name})[/dim]"
+            )
+    else:
+        console.print(
+            "\n[yellow]WARN[/yellow]  no citation resolved - treat this answer as unsupported"
+        )
+
+    if show_context:
+        console.print("\n[bold]Context[/bold]")
+        for index, chunk in enumerate(result.retrieved, start=1):
+            console.print(f"  [{index}] {chunk.score:.3f}  {chunk.citation}")
+            console.print(f"      [dim]{' '.join(chunk.text.split())[:160]}...[/dim]")
+
+    console.print(f"\n[dim]{result.trace.summary()}[/dim]")
 
 
 @app.command()
