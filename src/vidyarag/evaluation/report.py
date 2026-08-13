@@ -37,6 +37,16 @@ def _fmt(value: float | int | None, places: int = 3) -> str:
     return f"{value:.{places}f}"
 
 
+def _one_line(message: str, limit: int = 140) -> str:
+    """Collapse an exception to one readable line.
+
+    Instructor wraps retry failures in a multi-line XML-ish blob; pasted
+    verbatim it buries the actual cause under a screen of markup.
+    """
+    collapsed = " ".join(message.split())
+    return collapsed if len(collapsed) <= limit else collapsed[: limit - 1] + "…"
+
+
 def _delta(current: float | None, baseline: float | None) -> str:
     """Signed change against the baseline, or an em dash when incomparable."""
     if current is None or baseline is None:
@@ -208,8 +218,16 @@ def render_report(run: EvalRun, baseline: EvalRun | None = None) -> str:
             add(f"- **{sample.id}** answering failed — `{sample.error}`")
         for sample in grader_errors:
             for metric, message in sample.ragas_errors.items():
-                add(f"- **{sample.id}** `{metric}` — `{message[:160]}`")
+                add(f"- **{sample.id}** `{metric}` — `{_one_line(message)}`")
         add("")
+        if any("429" in m for s in grader_errors for m in s.ragas_errors.values()):
+            add(
+                "> Rate-limit failures mean the affected metrics were **not measured**. "
+                "They are excluded from the averages above rather than counted as zero, "
+                "but a run with many of them is averaging over fewer samples than it "
+                "appears to. Re-run with a lower `--rate` before trusting it."
+            )
+            add("")
 
     return "\n".join(lines)
 

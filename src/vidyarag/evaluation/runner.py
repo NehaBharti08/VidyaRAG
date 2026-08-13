@@ -47,7 +47,11 @@ from vidyarag.evaluation.goldset import (
     load_goldset,
     summarise_goldset,
 )
-from vidyarag.evaluation.metrics import METRIC_NAMES, MetricSuite
+from vidyarag.evaluation.metrics import (
+    DEFAULT_SCORES_PER_MINUTE,
+    METRIC_NAMES,
+    MetricSuite,
+)
 from vidyarag.evaluation.retrieval import score_retrieval
 from vidyarag.pipeline import Pipeline, build_pipeline
 from vidyarag.settings import REPO_ROOT, PipelineConfig, Settings, load_pipeline_config
@@ -190,6 +194,8 @@ async def _grade_all(
         # Abstention is checked on every question. On answerable ones it
         # measures the cost of over-refusing, which precision alone hides.
         if not result.abstained and result.answer:
+            # Shares the grader's quota, so it shares the grader's pacing.
+            await suite.limiter.acquire()
             result.abstained = await judge_abstention(
                 suite.client,
                 model=judge_model,
@@ -222,6 +228,7 @@ def run_evaluation(
     goldset_path: Path | None = None,
     limit: int | None = None,
     concurrency: int = 3,
+    scores_per_minute: float = DEFAULT_SCORES_PER_MINUTE,
     use_cache: bool = True,
     settings: Settings | None = None,
     on_answered: Callable[[SampleResult], None] | None = None,
@@ -287,6 +294,7 @@ def run_evaluation(
         embedding_model=config.embedding_model,
         cache_dir=CACHE_DIR if use_cache else None,
         concurrency=concurrency,
+        scores_per_minute=scores_per_minute,
     )
     by_id = {q.id: q for q in questions}
 

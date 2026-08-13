@@ -444,6 +444,9 @@ def evaluate(
     goldset: Path = typer.Option(None, "--goldset", help="Gold set JSONL."),
     limit: int = typer.Option(None, "--limit", help="Only the first N questions (smoke run)."),
     concurrency: int = typer.Option(3, "--concurrency", help="Simultaneous grading requests."),
+    rate: float = typer.Option(
+        6.0, "--rate", help="Graded metrics per minute. Lower this if you see 429s."
+    ),
     no_cache: bool = typer.Option(False, "--no-cache", help="Ignore cached grader responses."),
     compare: str = typer.Option(
         "baseline", "--compare", help="Profile to diff against. Empty to skip."
@@ -475,6 +478,7 @@ def evaluate(
                 goldset_path=goldset,
                 limit=limit,
                 concurrency=concurrency,
+                scores_per_minute=rate,
                 use_cache=not no_cache,
                 settings=settings,
                 on_answered=lambda _: bar.advance(answering),

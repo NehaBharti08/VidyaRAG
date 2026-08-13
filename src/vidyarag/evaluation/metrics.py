@@ -50,13 +50,50 @@ METRIC_NAMES: tuple[str, ...] = (
     "context_recall",
 )
 
-# Free-tier Gemini is rate limited per minute. Grading one question issues
-# several calls (faithfulness alone extracts statements, then runs an
-# entailment check over them), so a whole run is easily hundreds of requests.
-# Modest concurrency finishes in reasonable time without tripping 429s.
+# Free-tier Gemini is rate limited per minute, and grading is far more
+# request-hungry than it looks: one `ascore` is several HTTP calls, because
+# faithfulness extracts statements and then runs an entailment check over them.
+#
+# Measured on a 6-question smoke run at concurrency 3 with no pacing: ~60
+# requests in 163s (~22/min), and 7 of 24 metric calls died on HTTP 429. A
+# semaphore alone cannot fix that -- it bounds how many calls are in flight,
+# not how many happen per minute.
+#
+# So requests are paced by a rate limiter instead. The default assumes ~2.5
+# HTTP calls per ascore against a 15/min quota.
 DEFAULT_CONCURRENCY = 3
-MAX_ATTEMPTS = 4
-BACKOFF_SECONDS = 8.0
+DEFAULT_SCORES_PER_MINUTE = 6.0
+
+# Quotas reset on a clock, so a retry that waits out the window succeeds where
+# a fast exponential retry just burns attempts against the same exhausted minute.
+MAX_ATTEMPTS = 5
+BACKOFF_SECONDS = 30.0
+
+
+class RateLimiter:
+    """Paces async operations to a fixed rate.
+
+    Deliberately simple: each acquirer reserves the next slot and sleeps until
+    it arrives, so callers are spread evenly rather than released in a burst
+    that immediately trips the quota it was meant to respect.
+    """
+
+    def __init__(self, per_minute: float) -> None:
+        self._interval = 60.0 / per_minute if per_minute > 0 else 0.0
+        self._lock = asyncio.Lock()
+        self._next_slot = 0.0
+
+    async def acquire(self) -> None:
+        if self._interval <= 0:
+            return
+        loop = asyncio.get_running_loop()
+        async with self._lock:
+            now = loop.time()
+            slot = max(now, self._next_slot)
+            self._next_slot = slot + self._interval
+        delay = slot - loop.time()
+        if delay > 0:
+            await asyncio.sleep(delay)
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,6 +213,7 @@ class MetricSuite:
         embedding_model: str,
         cache_dir: Path | None = None,
         concurrency: int = DEFAULT_CONCURRENCY,
+        scores_per_minute: float = DEFAULT_SCORES_PER_MINUTE,
     ) -> None:
         if not api_key:
             raise ValueError(
@@ -184,6 +222,7 @@ class MetricSuite:
         self.grader_model = grader_model
         self.embedding_model = embedding_model
         self._semaphore = asyncio.Semaphore(concurrency)
+        self.limiter = RateLimiter(scores_per_minute)
         self._client = self._build_client(api_key)
         self._llm = self._build_llm(cache_dir)
         self._metrics = self._build_metrics()
@@ -249,6 +288,7 @@ class MetricSuite:
         last_error = ""
         for attempt in range(1, MAX_ATTEMPTS + 1):
             try:
+                await self.limiter.acquire()
                 async with self._semaphore:
                     result = await metric.ascore(**kwargs)
                 return _clean(getattr(result, "value", result)), None
@@ -256,8 +296,9 @@ class MetricSuite:
                 last_error = f"{type(exc).__name__}: {exc}"
                 if attempt == MAX_ATTEMPTS:
                     break
-                # Linear backoff: per-minute quotas recover on a clock, so
-                # exponential growth mostly just wastes wall time here.
+                # Linear, not exponential. Per-minute quotas recover on a clock,
+                # so the useful thing is to wait out the current window rather
+                # than to back off ever further from it.
                 await asyncio.sleep(BACKOFF_SECONDS * attempt)
         return None, last_error
 
