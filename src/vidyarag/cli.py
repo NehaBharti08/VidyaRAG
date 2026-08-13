@@ -6,6 +6,9 @@ and print. Any logic worth testing belongs in a module, not here.
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Any
+
 import typer
 from rich.console import Console
 from rich.progress import (
@@ -23,6 +26,7 @@ from rich.table import Table
 from vidyarag import __version__
 from vidyarag.ingest import CORPUS, download_corpus, get_book
 from vidyarag.ingest.pipeline import ingest as run_ingest
+from vidyarag.llm.provider import get_gemini_client
 from vidyarag.pipeline import Pipeline
 from vidyarag.settings import Settings, load_pipeline_config
 from vidyarag.store import build_client, describe_target
@@ -279,6 +283,253 @@ def health() -> None:
             f"[yellow]WARN[/yellow]  collection '{settings.qdrant_collection}' not found "
             "- run ingestion first"
         )
+
+
+# ---------------------------------------------------------------------------
+# Gold set
+# ---------------------------------------------------------------------------
+
+goldset_app = typer.Typer(
+    name="goldset",
+    help="Build and validate the evaluation gold set.",
+    no_args_is_help=True,
+)
+app.add_typer(goldset_app)
+
+
+@goldset_app.command("draft")
+def goldset_draft(
+    factual: int = typer.Option(28, "--factual", help="Single-passage questions to draft."),
+    multi_hop: int = typer.Option(20, "--multi-hop", help="Two-passage questions to draft."),
+    unanswerable: int = typer.Option(12, "--unanswerable", help="Blank stubs to emit."),
+    out: Path = typer.Option(
+        Path("eval/goldset/drafts.jsonl"), "--out", help="Where to write candidates."
+    ),
+    seed: int = typer.Option(20260813, "--seed", help="Sampling seed, for reproducibility."),
+    oversample: int = typer.Option(
+        6, "--oversample", help="Candidates sampled per question wanted."
+    ),
+) -> None:
+    """Draft gold-set candidates from the indexed corpus.
+
+    Produces CANDIDATES, not a gold set. Every draft needs human review before
+    it is worth anything, and the unanswerable questions are emitted as blank
+    stubs because a model cannot write them usefully.
+    """
+    from vidyarag.evaluation import draft as drafting
+
+    settings = Settings()
+    cfg = load_pipeline_config(settings.profile)
+    client = build_client(settings)
+
+    with console.status("reading corpus..."):
+        chunks = drafting.scroll_chunks(client, settings.qdrant_collection)
+
+    if not chunks:
+        console.print("[red]FAIL[/red]  collection is empty - run `vidyarag ingest` first")
+        raise typer.Exit(code=1)
+    console.print(f"[green]OK[/green]    {len(chunks):,} chunks available")
+
+    llm = get_gemini_client(settings.google_api_key.get_secret_value())
+    # Two independent pools, each heavily oversampled. Roughly half of all
+    # drafts are dropped for being answerable from general knowledge -- that
+    # rejection rate is the parametric-knowledge check working, not a fault --
+    # and drawing both types from one pool let the factual pass consume it all
+    # and starve multi-hop entirely.
+    factual_pool = drafting.sample_chunks(chunks, factual * oversample, seed=seed)
+    multihop_pool = drafting.sample_chunks(chunks, multi_hop * oversample, seed=seed + 1)
+
+    drafts: list[dict[str, Any]] = []
+    columns = (
+        SpinnerColumn(),
+        TextColumn("[bold]{task.description}"),
+        BarColumn(),
+        TextColumn("{task.completed}/{task.total}"),
+        TimeElapsedColumn(),
+    )
+    with Progress(*columns, console=console) as bar:
+        task = bar.add_task("factual", total=factual)
+        for candidate in factual_pool:
+            if sum(1 for d in drafts if d["type"] == "factual") >= factual:
+                break
+            drafted = drafting.draft_factual(llm, cfg.grader_model, candidate)
+            if drafted:
+                drafts.append(drafted)
+                bar.update(task, completed=sum(1 for d in drafts if d["type"] == "factual"))
+
+        task = bar.add_task("multi-hop", total=multi_hop)
+        # Each seed is paired with its nearest neighbour from another section
+        # rather than with whatever came next in a shuffled list. Random pairs
+        # yield questions that join unrelated passages under a token "both
+        # involve..." framing, which is not multi-hop reasoning.
+        for seed_chunk in multihop_pool:
+            if sum(1 for d in drafts if d["type"] == "multi_hop") >= multi_hop:
+                break
+            partner = drafting.find_related_chunk(
+                client,
+                settings.qdrant_collection,
+                seed=seed_chunk,
+                embedding_model=cfg.embedding_model,
+            )
+            if partner is None:
+                continue
+            drafted = drafting.draft_multihop(llm, cfg.grader_model, seed_chunk, partner)
+            if drafted:
+                drafts.append(drafted)
+                bar.update(task, completed=sum(1 for d in drafts if d["type"] == "multi_hop"))
+
+    client.close()
+    drafting.assign_ids(drafts)
+    records = drafts + drafting.unanswerable_stubs(unanswerable)
+    written = drafting.write_jsonl(records, out, header=drafting.UNANSWERABLE_STUB_HEADER)
+    review = drafting.write_review_sheet(drafts, out.with_name("REVIEW.md"))
+
+    table = Table(title="Drafted", show_header=True, header_style="bold")
+    table.add_column("Type")
+    table.add_column("Count", justify="right")
+    for kind in ("factual", "multi_hop"):
+        table.add_row(kind, str(sum(1 for d in drafts if d["type"] == kind)))
+    table.add_row("unanswerable (stubs)", str(unanswerable))
+    console.print(table)
+    console.print(f"[green]OK[/green]    candidates -> {written}")
+    console.print(f"[green]OK[/green]    review sheet -> {review}")
+    console.print(
+        "\n[yellow]NOT A GOLD SET YET.[/yellow] Review every question, write the "
+        f"{unanswerable} unanswerable ones by hand, then rename to "
+        "[bold]goldset_v1.jsonl[/bold]."
+    )
+
+
+@goldset_app.command("check")
+def goldset_check(
+    path: Path = typer.Option(None, "--path", help="Gold set to validate."),
+) -> None:
+    """Validate a gold set and show its composition."""
+    from vidyarag.evaluation.goldset import load_goldset, summarise_goldset
+
+    try:
+        questions = load_goldset(path)
+    except (FileNotFoundError, ValueError) as exc:
+        console.print(f"[red]FAIL[/red]  {exc}")
+        raise typer.Exit(code=1) from exc
+
+    counts = summarise_goldset(questions)
+    table = Table(title=f"Gold set ({len(questions)} questions)", header_style="bold")
+    table.add_column("Type")
+    table.add_column("Count", justify="right")
+    table.add_column("Share", justify="right")
+    for kind, count in counts.items():
+        share = f"{count / len(questions):.0%}" if questions else "-"
+        table.add_row(kind, str(count), share)
+    console.print(table)
+
+    todo = [q for q in questions if q.question.startswith("TODO")]
+    if todo:
+        console.print(
+            f"[yellow]WARN[/yellow]  {len(todo)} unwritten stub(s) remain - "
+            "results measured now would be meaningless"
+        )
+    else:
+        console.print("[green]OK[/green]    gold set is valid")
+
+
+# ---------------------------------------------------------------------------
+# Evaluation
+# ---------------------------------------------------------------------------
+
+
+@app.command("eval")
+def evaluate(
+    profile: str = typer.Option(None, "--profile", "-p", help="Profile to evaluate."),
+    goldset: Path = typer.Option(None, "--goldset", help="Gold set JSONL."),
+    limit: int = typer.Option(None, "--limit", help="Only the first N questions (smoke run)."),
+    concurrency: int = typer.Option(3, "--concurrency", help="Simultaneous grading requests."),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Ignore cached grader responses."),
+    compare: str = typer.Option(
+        "baseline", "--compare", help="Profile to diff against. Empty to skip."
+    ),
+) -> None:
+    """Run a profile against the gold set and write a versioned result file."""
+    from vidyarag.evaluation.report import render_report
+    from vidyarag.evaluation.runner import latest_run, run_evaluation
+
+    settings = Settings()
+    name = profile or settings.profile
+    console.print(f"[bold]profile   [/bold]  {name}")
+    console.print(f"[bold]target    [/bold]  {describe_target(settings)}")
+
+    columns = (
+        SpinnerColumn(),
+        TextColumn("[bold]{task.description}"),
+        BarColumn(),
+        TextColumn("{task.completed}/{task.total}"),
+        TimeElapsedColumn(),
+    )
+    try:
+        with Progress(*columns, console=console) as bar:
+            answering = bar.add_task("answering", total=limit)
+            grading = bar.add_task("grading", total=limit)
+
+            run = run_evaluation(
+                profile=name,
+                goldset_path=goldset,
+                limit=limit,
+                concurrency=concurrency,
+                use_cache=not no_cache,
+                settings=settings,
+                on_answered=lambda _: bar.advance(answering),
+                on_graded=lambda _: bar.advance(grading),
+            )
+    except (FileNotFoundError, ValueError) as exc:
+        console.print(f"[red]FAIL[/red]  {exc}")
+        raise typer.Exit(code=1) from exc
+
+    written = run.save()
+    baseline = latest_run(compare) if compare and compare != run.profile else None
+    report_path = written.with_suffix(".md")
+    report_path.write_text(render_report(run, baseline), encoding="utf-8")
+
+    table = Table(title=f"{run.profile} · {run.run_id}", header_style="bold")
+    table.add_column("Metric")
+    table.add_column("Score", justify="right")
+    for key, value in run.aggregates.items():
+        if key == "graded_samples":
+            continue
+        table.add_row(key, "—" if value is None else f"{value:.3f}")
+    for key, value in run.retrieval_aggregates.items():
+        table.add_row(f"[dim]{key}[/dim]", "—" if value is None else f"{value:.3f}")
+    recall = run.abstention.get("recall")
+    table.add_row("abstention recall", "—" if recall is None else f"{recall:.3f}")
+    console.print(table)
+
+    failed = int(run.totals.get("failed", 0))
+    if failed:
+        console.print(f"[yellow]WARN[/yellow]  {failed} question(s) failed to answer")
+    console.print(f"[green]OK[/green]    results -> {written}")
+    console.print(f"[green]OK[/green]    report  -> {report_path}")
+
+
+@app.command()
+def report(
+    profiles: list[str] = typer.Argument(None, help="Profiles to compare, baseline first."),
+) -> None:
+    """Print a comparison table across the latest run of each profile."""
+    from vidyarag.evaluation.report import render_comparison
+    from vidyarag.evaluation.runner import latest_run
+
+    names = profiles or ["baseline"]
+    runs = []
+    for name in names:
+        run = latest_run(name)
+        if run is None:
+            console.print(f"[yellow]WARN[/yellow]  no results for profile {name!r}")
+            continue
+        runs.append(run)
+
+    if not runs:
+        console.print("[red]FAIL[/red]  nothing to report - run `vidyarag eval` first")
+        raise typer.Exit(code=1)
+    console.print(render_comparison(runs))
 
 
 if __name__ == "__main__":  # pragma: no cover

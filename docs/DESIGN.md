@@ -132,6 +132,81 @@ near-duplicate from the other book outranks it, and corpus redundancy then shows
 up as retrieval error. The shallow seam that does exist is what makes genuine
 cross-title multi-hop questions possible rather than contrived.
 
+### Evaluation: RAGAS, and two upstream bugs
+
+RAGAS is the metric suite, but making it run against Gemini took two
+workarounds. Both are pinned and commented at the point of use, because a
+future reader will otherwise see an inexplicable dependency and remove it.
+
+**1. `import ragas` fails outright.** ragas 0.4.x imports
+`langchain_community.chat_models.vertexai`, which langchain-community deleted
+in 0.4.0 (ragas [#2741](https://github.com/vibrantlabsai/ragas/issues/2741),
+[#2745](https://github.com/vibrantlabsai/ragas/issues/2745)). Downgrading ragas
+does not help — 0.3.9 fails identically, because the break is on the langchain
+side. Pinning `langchain-community<0.4` fixes it while keeping the modern
+`ragas.metrics.collections` API.
+
+**2. Gemini cannot drive the metrics as shipped.** RAGAS decides whether an LLM
+client is async by looking for `chat.completions.create` — an OpenAI shape. A
+`google.genai.Client` has no such attribute, so RAGAS concludes "synchronous",
+while the collections metrics only expose an async path. Every call raises
+`Cannot use agenerate() with a synchronous client`.
+
+The fix is Google's own OpenAI-compatibility endpoint: an `AsyncOpenAI` client
+pointed at `generativelanguage.googleapis.com` satisfies the detection and
+still calls Gemini. **The `openai` package is a client library here, not a model
+provider** — no OpenAI account or spend is involved.
+
+*Rejected: writing the metrics by hand.* Tempting after two bugs, and it would
+have removed both. But "we implemented our own faithfulness metric" is far
+weaker evidence than a standard one, precisely because a hand-rolled metric is
+unfalsifiable by a reader who does not know its internals.
+
+### Evaluation: what is measured without a model
+
+RAGAS context precision and recall are LLM-judged against a reference answer,
+so a low score is ambiguous — retrieval may have missed the passage, or the
+grader may have disagreed about relevance. Ordinary ranking metrics computed
+from chunk ids (recall@k, hit rate, MRR) have no such ambiguity, cost nothing,
+never rate-limit, and are exactly reproducible. Both are reported. When they
+disagree, the deterministic one says where the fault actually is.
+
+Recall is reported twice: over the whole candidate pool, and over only the
+chunks that reached the prompt. A gold chunk retrieved at rank 18 but cut
+before generation is a retrieval success and a pipeline failure at once, and
+one number cannot show both. Closing that gap is what Phase 4 reranking is for.
+
+Abstention is scored separately from RAGAS, because faithfulness cannot express
+"there was no answer to give, and saying so was correct". Precision is always
+reported beside the **false abstention rate**: a system that refused everything
+would score perfect abstention precision, and only that second column reveals it.
+
+### Gold set: what a model may draft, and what it may not
+
+Factual and multi-hop questions are drafted by a model from sampled passages,
+then verified by hand. Unanswerable questions are written by hand outright.
+
+That split is not fastidiousness. Asked to produce questions a corpus cannot
+answer, a model reliably produces obviously out-of-domain ones — refusing those
+is trivial, so the abstention metric they generate would be meaningless. The
+unanswerable questions are the ones that prove the differentiating capability,
+so they are the ones a person has to write.
+
+Every draft is also asked whether it could be answered from general knowledge
+without the passage, and those are dropped. **Roughly 80% of single-passage
+candidates are rejected by this check** on an introductory biology corpus,
+which is high enough to be worth stating: much of an intro textbook genuinely
+is general knowledge, and a gold set full of such questions would show a
+healthy score for a system whose retrieval was completely broken.
+
+*Multi-hop pairing is semantic, not random.* The first implementation paired
+two randomly sampled chunks, and the output was unusable — asked to connect
+skeletal muscle tone to plant water potential, the model produced a question
+joining them on "both rely on continuous processes". That is a non sequitur
+with a question mark. Pairing each seed passage with its nearest neighbour from
+a *different section* yields pairs that share a topic but not a location, which
+is what a real multi-hop question needs.
+
 ### Formatting: black only
 
 ruff lints; black formats. `ruff-format` is deliberately disabled — the two
