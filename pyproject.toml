@@ -65,6 +65,27 @@ dev = [
 # API is confined to eval/metrics.py so version churn touches one file.
 eval = [
     "ragas>=0.4,<0.5",
+    # UPSTREAM BUG PIN. ragas 0.4.x imports
+    # `langchain_community.chat_models.vertexai`, which langchain-community
+    # removed in 0.4.0, so `import ragas` fails outright (ragas #2741, #2745).
+    # Downgrading ragas does not help -- 0.3.9 fails identically, because the
+    # break is on the langchain side. Pinning langchain-community to the 0.3.x
+    # line keeps the modern `ragas.metrics.collections` API working.
+    #
+    # Contained to this group, so the runtime image never sees langchain at all.
+    # Revisit when ragas ships a release that drops the dead import.
+    "langchain-community<0.4",
+    # SECOND UPSTREAM WORKAROUND. ragas decides whether an LLM client is async
+    # by looking for `chat.completions.create` -- an OpenAI shape. A
+    # `google.genai.Client` has no such attribute, so ragas concludes
+    # "synchronous", while the collections metrics only have an async path.
+    # Gemini therefore cannot drive them as shipped.
+    #
+    # The fix is Google's own OpenAI-compatibility endpoint: an AsyncOpenAI
+    # client pointed at generativelanguage.googleapis.com satisfies the
+    # detection and still calls Gemini. So `openai` is a client library here,
+    # not a model provider -- no OpenAI account or spend is involved.
+    "openai>=1.60,<3.0",
     "pandas>=2.2,<3.0",
     "datasets>=3.0,<5.0",
 ]
@@ -130,8 +151,22 @@ module = [
     "llama_index.*",
     "fitz",
     "gradio.*",
+    # `eval` dependency group -- not installed in the default dev sync, and
+    # imported lazily so the runtime package works without them.
+    "ragas.*",
+    "openai.*",
+    "pandas.*",
 ]
 ignore_missing_imports = true
+
+# The RAGAS embedding adapter subclasses a base class that resolves to `Any`
+# whenever the `eval` group is absent -- which is exactly the case inside the
+# pre-commit mypy hook's isolated environment. Without this, the hook reports an
+# error the project-level mypy cannot reproduce. Scoped to the one module that
+# legitimately needs it rather than relaxed globally.
+[[tool.mypy.overrides]]
+module = "vidyarag.evaluation.metrics"
+disallow_subclassing_any = false
 
 # PyMuPDF ships partial annotations: the module imports cleanly under strict
 # mode, but its constructors are untyped, so every `pymupdf.open(...)` trips
