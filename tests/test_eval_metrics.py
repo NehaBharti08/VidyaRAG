@@ -13,7 +13,12 @@ from vidyarag.evaluation.abstention import (
     is_structural_abstention,
     summarise_abstention,
 )
-from vidyarag.evaluation.metrics import METRIC_NAMES, SampleScores, _clean
+from vidyarag.evaluation.metrics import (
+    METRIC_NAMES,
+    RateLimiter,
+    SampleScores,
+    _clean,
+)
 from vidyarag.evaluation.retrieval import (
     hit_at_k,
     recall_at_k,
@@ -125,6 +130,33 @@ class TestSampleScores:
             context_recall=0.7,
         )
         assert scores.complete
+
+
+class TestRateLimiter:
+    """Pacing exists because a semaphore bounds concurrency, not requests/minute.
+
+    A 6-question smoke run at concurrency 3 with no pacing lost 7 of 24 metric
+    calls to HTTP 429, which is what motivated this.
+    """
+
+    async def test_spreads_calls_rather_than_bursting(self) -> None:
+        import asyncio
+
+        limiter = RateLimiter(per_minute=600)  # 0.1s apart
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        await asyncio.gather(*(limiter.acquire() for _ in range(4)))
+        # Four slots at 0.1s apart: the last waits ~0.3s.
+        assert loop.time() - started >= 0.25
+
+    async def test_zero_rate_disables_pacing(self) -> None:
+        import asyncio
+
+        limiter = RateLimiter(per_minute=0)
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        await limiter.acquire()
+        assert loop.time() - started < 0.05
 
 
 class TestStructuralAbstention:
