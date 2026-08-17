@@ -60,6 +60,42 @@ class TestAcceptance:
         assert "0.310" in _check(in_domain=False, top_score=0.31, answerable=None).verdict
 
 
+class TestDiversity:
+    """A gold set of twelve rephrasings of one question measures one question.
+
+    Worse, a set that shares a distinctive phrasing is gameable: a system could
+    pattern-match the wording and refuse, scoring perfect abstention with no
+    groundedness reasoning at all. An unguided run produced exactly that --
+    eleven of twelve questions contained the word "exact".
+    """
+
+    def test_near_duplicate_is_rejected_despite_passing_both_checks(self) -> None:
+        candidate = _check(similarity_to_accepted=0.95)
+        assert candidate.in_domain is True
+        assert candidate.answerable is False
+        assert candidate.accepted is False
+        assert "near-duplicate" in candidate.verdict
+
+    def test_distinct_question_is_kept(self) -> None:
+        assert _check(similarity_to_accepted=0.42).accepted is True
+
+    def test_duplicate_is_reported_before_a_grader_error(self) -> None:
+        """A duplicate is skipped before grading, so it has no grader verdict."""
+        candidate = _check(similarity_to_accepted=0.95, answerable=None)
+        assert "near-duplicate" in candidate.verdict
+
+    def test_shapes_are_rotated_not_repeated(self) -> None:
+        from vidyarag.evaluation.verify import QUESTION_SHAPES
+
+        assert len(QUESTION_SHAPES) == len(set(QUESTION_SHAPES))
+        assert len(QUESTION_SHAPES) >= 6
+
+    def test_no_similarity_when_nothing_accepted_yet(self) -> None:
+        from vidyarag.evaluation.verify import most_similar_accepted
+
+        assert most_similar_accepted("anything", [], "unused-model") == 0.0
+
+
 class TestThresholdCalibration:
     """The cutoff is derived from known in-domain questions, not chosen by feel."""
 

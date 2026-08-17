@@ -43,6 +43,7 @@ from pydantic import BaseModel, Field
 from qdrant_client import QdrantClient
 
 from vidyarag.evaluation.goldset import GoldQuestion
+from vidyarag.llm.provider import embed_texts
 from vidyarag.retrieve.dense import RetrievedChunk, retrieve_dense
 
 # Free-tier pacing. Verification is only a couple of calls per candidate, so a
@@ -111,11 +112,16 @@ class UnanswerableCheck:
     in_domain: bool = False
     answerable: bool | None = None
     grader_reason: str = ""
+    similarity_to_accepted: float = 0.0
+
+    @property
+    def duplicate(self) -> bool:
+        return self.similarity_to_accepted >= DIVERSITY_THRESHOLD
 
     @property
     def accepted(self) -> bool:
-        """Topically adjacent, and not answered by what that adjacency retrieves."""
-        return self.in_domain and self.answerable is False
+        """In domain, unanswered by what that adjacency retrieves, and not a repeat."""
+        return self.in_domain and self.answerable is False and not self.duplicate
 
     @property
     def verdict(self) -> str:
@@ -125,6 +131,8 @@ class UnanswerableCheck:
         # the wrong thing.
         if not self.in_domain:
             return f"reject: off-topic (top score {self.top_score:.3f})"
+        if self.duplicate:
+            return f"reject: near-duplicate ({self.similarity_to_accepted:.3f})"
         if self.answerable is None:
             return "error: grader failed"
         if self.answerable:
@@ -146,6 +154,35 @@ class TriageFinding:
         return self.supported is not True
 
 
+QUESTION_SHAPES: tuple[str, ...] = (
+    "a specific quantitative value the textbook never states -- a rate, a "
+    "concentration, a threshold, a duration",
+    "a named regulatory mechanism or signalling pathway more advanced than an "
+    "introductory text covers",
+    "a clinical management detail: a treatment protocol, a drug's action, a "
+    "diagnostic criterion",
+    "a named researcher, landmark experiment, or the history of how something " "was discovered",
+    "a comparison with another species or system that the textbook does not draw",
+    "a developmental detail: what happens at a particular stage, and when",
+    "an evolutionary origin question -- where a structure or process came from",
+    "the specific molecular basis of a named disease or disorder",
+)
+"""Rotated across candidates to force variety.
+
+Without this the model converges hard on one template: an unguided run produced
+twelve questions of which eleven contained the word "exact" and nine opened
+"What is the exact...". A gold set shaped like that makes abstention trivially
+gameable -- a system could pattern-match the phrasing and refuse, scoring
+perfectly with no groundedness reasoning at all, which is the failure this whole
+verification exists to prevent."""
+
+DIVERSITY_THRESHOLD = 0.88
+"""Reject a candidate this similar to one already accepted.
+
+The same unguided run produced two near-identical questions about the
+actin-myosin cross-bridge. Duplicates waste gold-set slots and quietly
+over-weight whatever topic they land on."""
+
 UNANSWERABLE_PROMPT = """\
 You are helping build an evaluation set for a study assistant whose corpus is \
 two OpenStax textbooks: *Biology* (1st ed) and *Anatomy and Physiology* (1st ed), \
@@ -160,17 +197,23 @@ Here is a passage from that corpus, to show you the topic and depth:
 Write ONE question that a student might plausibly ask about this topic, but which \
 an INTRODUCTORY textbook would NOT answer.
 
+For this one, ask about **{shape}**.
+
 It must be:
-- Clearly biology or human anatomy/physiology. Never another field.
-- Plausible enough that someone could reasonably expect the book to cover it.
+- Clearly biology or human anatomy/physiology. Never another field, and never \
+about laboratory instruments or imaging hardware.
+- Phrased the way a curious student would actually say it, out loud.
 - Genuinely beyond introductory scope.
 
-Good shapes: a named signalling pathway or molecular mechanism more advanced than \
-an intro text covers; a specific quantitative value the book does not state; a \
-clinical protocol or dosage; a named researcher or study; a recent discovery.
+IMPORTANT -- avoid these, they have been overused:
+- The words "exact", "precise", or "atomic-level".
+- Asking for a crystal structure, an amino-acid sequence, or atomic coordinates.
+- Opening with "What is the exact...".
 
-Bad shapes: anything off-topic; anything so vague it has no answer; anything the \
-passage above plainly does answer.
+A question that telegraphs its own unanswerability through stiff phrasing is \
+useless here: it could be refused on style alone, without reading the textbook. \
+Make it sound answerable. The difficulty must be that the book does not cover it, \
+not that the question reads like a trick.
 
 Return the question, a one-sentence rationale for why an intro text omits it, and \
 the in-corpus topic it sits next to.
@@ -267,6 +310,28 @@ def _format_passages(chunks: list[RetrievedChunk]) -> str:
     return "\n\n".join(f"--- {c.citation} ---\n{c.text}" for c in chunks)
 
 
+def _cosine(left: list[float], right: list[float]) -> float:
+    dot = sum(a * b for a, b in zip(left, right, strict=True))
+    norm_left = sum(a * a for a in left) ** 0.5
+    norm_right = sum(b * b for b in right) ** 0.5
+    return 0.0 if norm_left == 0 or norm_right == 0 else dot / (norm_left * norm_right)
+
+
+def most_similar_accepted(
+    question: str,
+    accepted: list[str],
+    embedding_model: str,
+) -> float:
+    """Highest similarity between ``question`` and anything already accepted.
+
+    Returns 0.0 when nothing has been accepted yet.
+    """
+    if not accepted:
+        return 0.0
+    vectors = embed_texts([question, *accepted], embedding_model)
+    return max(_cosine(vectors[0], other) for other in vectors[1:])
+
+
 def in_domain_threshold(
     client: QdrantClient,
     questions: list[GoldQuestion],
@@ -324,6 +389,7 @@ def check_unanswerable(
     embedding_model: str,
     threshold: float,
     context_k: int = DEFAULT_CONTEXT_K,
+    already_accepted: list[str] | None = None,
 ) -> UnanswerableCheck:
     """Test one candidate against the corpus.
 
@@ -346,9 +412,17 @@ def check_unanswerable(
         retrieved=[c.citation for c in hits],
     )
     check.in_domain = bool(hits) and check.top_score >= threshold
+    check.similarity_to_accepted = most_similar_accepted(
+        candidate.question, already_accepted or [], embedding_model
+    )
     if not check.in_domain:
         check.answerable = None
         check.grader_reason = "not graded: failed the in-domain check"
+        return check
+    if check.duplicate:
+        # No point spending a grader call on a question that cannot be accepted.
+        check.answerable = None
+        check.grader_reason = "not graded: near-duplicate of an accepted question"
         return check
 
     verdict, error = _structured(
@@ -399,15 +473,22 @@ def propose_unanswerable(
         12 of 13 was not being selective enough to trust.
     """
     checks: list[UnanswerableCheck] = []
-    accepted = 0
+    accepted_questions: list[str] = []
     consecutive_failures = 0
-    for seed in seeds:
-        if accepted >= wanted:
+    for index, seed in enumerate(seeds):
+        if len(accepted_questions) >= wanted:
             break
         candidate, error = _structured(
             llm,
             draft_model,
-            UNANSWERABLE_PROMPT.format(citation=seed.citation, text=seed.text),
+            UNANSWERABLE_PROMPT.format(
+                citation=seed.citation,
+                text=seed.text,
+                # Rotate the requested shape so the set does not collapse onto
+                # one template. Indexed rather than random so a seed reproduces
+                # the same run.
+                shape=QUESTION_SHAPES[index % len(QUESTION_SHAPES)],
+            ),
             UnanswerableCandidate,
             # Drafting wants variety across seeds; grading below stays at 0.0
             # because a verdict that changes between runs is not a verdict.
@@ -434,13 +515,14 @@ def propose_unanswerable(
             embedding_model=embedding_model,
             threshold=threshold,
             context_k=DEFAULT_CONTEXT_K,
+            already_accepted=accepted_questions,
         )
         time.sleep(REQUEST_GAP_SECONDS)
         checks.append(check)
         if on_result is not None:
             on_result(check)
         if check.accepted:
-            accepted += 1
+            accepted_questions.append(check.question)
     return checks
 
 

@@ -152,6 +152,39 @@ Measured acceptance rate: **roughly a third of candidates**. A filter that
 accepted nearly everything would not be filtering, so the rate is reported and
 the tool warns above 90%.
 
+### A third check the first two missed
+
+The two checks above catch *topical* triviality. They are blind to *stylistic*
+triviality, and the first full run demonstrated the difference painfully: of
+twelve accepted questions, **eleven contained the word "exact"** and nine opened
+"What is the exact...". Two were near-duplicates of each other.
+
+Every one passed both checks legitimately. They were in domain and genuinely
+absent from the corpus. They were also worthless, because a system could learn
+"phrasing like *exact atomic-level crystal structure of X* → refuse" and score
+perfect abstention without doing any groundedness reasoning at all — precisely
+the failure the verification was built to prevent, arriving through a door
+nobody was watching.
+
+Two additions fixed it:
+
+- **Shape rotation.** Eight question forms — a quantitative value, a named
+  mechanism, a clinical detail, a landmark experiment, a cross-species
+  comparison, a developmental timing, an evolutionary origin, a disease basis —
+  cycled by index so the set cannot collapse onto one template. Indexed rather
+  than randomised, so a seed still reproduces its run exactly.
+- **Near-duplicate rejection** at cosine ≥ 0.88 against already-accepted
+  questions, evaluated *before* the grader call so a duplicate costs no quota.
+
+The prompt also now states that a question which telegraphs its own
+unanswerability through stiff phrasing is useless, because it can be refused on
+style alone without reading the textbook.
+
+**The general lesson is worth keeping:** an automated filter validates what it
+was told to look for, and is perfectly happy for everything it was not told
+about to go wrong. The acceptance count looked healthy in both runs. Only
+reading the questions revealed that one set was unusable.
+
 A person still approves every one, because the grader is a language model and
 can be wrong. What changed is the size of that job — approving twelve verified
 candidates instead of authoring twelve from scratch. That trade is worth making
