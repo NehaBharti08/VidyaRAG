@@ -73,6 +73,41 @@ def render_report(run: EvalRun, baseline: EvalRun | None = None) -> str:
     add(f"**Run** `{run.run_id}` · {run.created_at}")
     add("")
 
+    if not run.is_valid:
+        # Lead with this, and omit every metric below. A number that must not
+        # be used should not be sitting in a tidy table waiting to be copied
+        # into a README by someone who skimmed past a warning.
+        by_type = run.failures_by_type()
+        add("## ⛔ INVALID RUN — no metrics reported")
+        add("")
+        add(
+            f"**{len(run.failed)} of {len(run.samples)} questions "
+            f"({run.failure_rate:.0%}) never produced an answer**, so any average "
+            "would describe whichever subset happened to survive."
+        )
+        add("")
+        add("Questions lost, by type:")
+        add("")
+        add("| Type | Failed |")
+        add("|---|---:|")
+        for kind, count in sorted(by_type.items()):
+            add(f"| {kind} | {count} |")
+        add("")
+        add(
+            "That distribution is the reason metrics are withheld rather than "
+            "merely flagged. Failures are not spread evenly: the gold set is "
+            "ordered by type, so an interrupted run loses whole categories. "
+            "Averaging over what remains produces a confident measurement of an "
+            "easier task, not a noisier measurement of the intended one."
+        )
+        add("")
+        if run.failed:
+            add(f"First failure: `{_one_line(str(run.failed[0].error))}`")
+            add("")
+        add("Re-run when the cause is resolved. Cached answers make it cheap.")
+        add("")
+        return "\n".join(lines) + "\n"
+
     # --- Provenance --------------------------------------------------------
     add("## Configuration")
     add("")

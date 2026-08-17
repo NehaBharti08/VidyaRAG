@@ -40,6 +40,7 @@ from vidyarag.evaluation.abstention import (
     judge_abstention,
     summarise_abstention,
 )
+from vidyarag.evaluation.answer_cache import AnswerCache, answer_key
 from vidyarag.evaluation.goldset import (
     DEFAULT_GOLDSET,
     GoldQuestion,
@@ -53,11 +54,24 @@ from vidyarag.evaluation.metrics import (
     MetricSuite,
 )
 from vidyarag.evaluation.retrieval import score_retrieval
+from vidyarag.generate.prompts import ANSWER_PROMPT_VERSION
 from vidyarag.pipeline import Pipeline, build_pipeline
 from vidyarag.settings import REPO_ROOT, PipelineConfig, Settings, load_pipeline_config
 
 RESULTS_DIR = REPO_ROOT / "eval" / "results"
 CACHE_DIR = REPO_ROOT / ".eval_cache"
+ANSWER_CACHE_DIR = REPO_ROOT / ".eval_cache" / "answers"
+
+MAX_FAILURE_RATE = 0.10
+"""Above this share of failed questions, a run reports no aggregate metrics.
+
+Not a stylistic preference. A run that lost 39 of 58 questions to quota
+exhaustion still printed a metrics table, and because the gold set is ordered
+factual -> multi-hop -> unanswerable, the survivors were 17 factual, 0
+multi-hop and 2 unanswerable. Faithfulness read 0.949 -- measured almost
+entirely on the easiest slice, and high *because* of what was missing. A
+partial run is not a weaker measurement of the same thing; it is a confident
+measurement of a different, easier thing."""
 
 
 class SampleResult(BaseModel):
@@ -88,6 +102,10 @@ class SampleResult(BaseModel):
     run that silently shrinks when questions fail reports an average over
     whatever happened to succeed."""
 
+    cached: bool = False
+    """Whether the answer was reused from a previous run rather than generated.
+    Recorded so a report can never imply a fresh measurement it did not make."""
+
 
 class EvalRun(BaseModel):
     """One complete evaluation, with enough context to reproduce it."""
@@ -109,6 +127,36 @@ class EvalRun(BaseModel):
     retrieval_aggregates: dict[str, float | None] = Field(default_factory=dict)
     abstention: dict[str, float | int | None] = Field(default_factory=dict)
     totals: dict[str, float] = Field(default_factory=dict)
+
+    @property
+    def failed(self) -> list[SampleResult]:
+        return [s for s in self.samples if s.error is not None]
+
+    @property
+    def failure_rate(self) -> float:
+        return len(self.failed) / len(self.samples) if self.samples else 0.0
+
+    @property
+    def is_valid(self) -> bool:
+        """Whether the aggregates may be quoted as a measurement.
+
+        False means some questions never got an answer, so the averages are
+        over whichever subset happened to survive -- and that subset is rarely
+        random. See :data:`MAX_FAILURE_RATE`.
+        """
+        return self.failure_rate <= MAX_FAILURE_RATE
+
+    def failures_by_type(self) -> dict[str, int]:
+        """Failure counts per question type.
+
+        Reported because *which* questions were lost matters more than how
+        many. Losing every multi-hop question is not a smaller version of
+        losing a tenth of each.
+        """
+        counts: dict[str, int] = {}
+        for sample in self.failed:
+            counts[sample.type.value] = counts.get(sample.type.value, 0) + 1
+        return counts
 
     def path(self, directory: Path | None = None) -> Path:
         return (directory or RESULTS_DIR) / f"{self.profile}__{self.run_id}.json"
@@ -275,11 +323,42 @@ def run_evaluation(
     )
 
     # --- Phase 1: generate, sequentially -----------------------------------
+    #
+    # Answers are cached so a run stopped by a daily quota resumes tomorrow
+    # instead of restarting. Without it a 58-question run that died at
+    # question 19 discarded those 19 and spent the same quota recomputing them.
     contexts: dict[str, list[str]] = {}
+    answers = AnswerCache(ANSWER_CACHE_DIR if use_cache else None)
     pipeline = build_pipeline(resolved_settings, config)
     try:
         for question in questions:
-            result, passages = _answer_one(pipeline, question, config)
+            key = answer_key(
+                profile=config.name,
+                generation_model=config.generation_model,
+                embedding_model=config.embedding_model,
+                temperature=config.temperature,
+                top_k_retrieve=config.retrieval.top_k_retrieve,
+                top_k_context=config.retrieval.top_k_context,
+                prompt_version=ANSWER_PROMPT_VERSION,
+                collection=resolved_settings.qdrant_collection,
+                question_id=question.id,
+                question=question.question,
+            )
+            cached = answers.get(key)
+            if cached is not None:
+                result = SampleResult.model_validate(cached["result"])
+                passages = list(cached.get("contexts", []))
+                result.cached = True
+            else:
+                result, passages = _answer_one(pipeline, question, config)
+                # Only successful answers are cached. Caching a quota failure
+                # would make the failure permanent and silently shrink every
+                # later run to the same truncated subset.
+                if result.error is None:
+                    answers.put(
+                        key,
+                        {"result": result.model_dump(mode="json"), "contexts": passages},
+                    )
             contexts[result.id] = passages
             run.samples.append(result)
             if on_answered is not None:

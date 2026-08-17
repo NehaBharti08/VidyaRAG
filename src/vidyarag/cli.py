@@ -699,6 +699,32 @@ def evaluate(
     report_path = written.with_suffix(".md")
     report_path.write_text(render_report(run, baseline), encoding="utf-8")
 
+    if not run.is_valid:
+        # Withhold the table entirely. Printing scores beside a warning invites
+        # someone to read the scores and skip the warning, and these scores are
+        # not a weaker version of the real ones -- they describe an easier task.
+        console.print(
+            f"\n[red]INVALID RUN[/red]  {len(run.failed)} of {len(run.samples)} "
+            f"questions ({run.failure_rate:.0%}) never produced an answer."
+        )
+        for kind, count in sorted(run.failures_by_type().items()):
+            console.print(f"              lost {count:>3} {kind}")
+        console.print(
+            "\n[dim]Metrics are withheld, not merely flagged. The gold set is ordered\n"
+            "by type, so an interrupted run loses whole categories and the average\n"
+            "over what remains measures an easier task.[/dim]"
+        )
+        if run.failed:
+            first = " ".join(str(run.failed[0].error).split())[:150]
+            console.print(f"\n[dim]first failure: {first}[/dim]")
+        console.print(f"\n[green]OK[/green]    results -> {written}")
+        console.print(f"[green]OK[/green]    report  -> {report_path}")
+        console.print(
+            "\n[dim]Answers are cached, so re-running once the cause is resolved\n"
+            "only pays for the questions that failed.[/dim]"
+        )
+        raise typer.Exit(code=1)
+
     table = Table(title=f"{run.profile} · {run.run_id}", header_style="bold")
     table.add_column("Metric")
     table.add_column("Score", justify="right")

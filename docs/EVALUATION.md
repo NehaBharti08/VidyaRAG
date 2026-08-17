@@ -223,9 +223,49 @@ is not something a faithfulness score captures:
 
 ---
 
+## Run validity
+
+A run is only quotable if it actually answered the questions. Above a **10%
+failure rate the harness reports no metrics at all** — not a warning beside the
+numbers, but the numbers withheld.
+
+That rule was written after a specific incident, recorded here because the
+failure mode is easy to walk into and hard to notice.
+
+The first full baseline attempt lost **39 of 58 questions** to Gemini quota
+exhaustion. It printed a clean table:
+
+| Metric | Reported |
+|---|---:|
+| Faithfulness | 0.949 |
+| Context recall | 0.941 |
+| Hit rate | 0.941 |
+
+Those numbers are excellent, and worthless. The gold set is ordered factual →
+multi-hop → unanswerable, so the run died partway through and the survivors
+were **17 factual, 0 multi-hop, and 2 unanswerable**. Faithfulness read 0.949
+because every hard question was missing — the score was high *as a direct
+consequence of the failure*.
+
+The lesson generalises past this project: **a partial run is not a noisier
+measurement of the intended task, it is a confident measurement of an easier
+one.** Nothing about the output looked wrong. There was a `WARN` line beneath
+the table, and a table is far easier to copy than a warning is to heed.
+
+Two changes followed:
+
+- Metrics are withheld entirely when the failure rate exceeds the threshold,
+  and the report leads with which *categories* were lost, since losing every
+  multi-hop question is not a smaller version of losing a tenth of each.
+- Generated answers are now cached by configuration and question, so a run
+  stopped by a daily quota resumes rather than restarting. Previously the 19
+  successful answers were discarded and the next attempt spent the same quota
+  recomputing them — which on a free tier is the difference between a benchmark
+  completable across two days and one not completable at all.
+
 ## Results
 
-_Pending Phase 3._
+_Pending — the first valid baseline run._
 
 ## What did not work
 
