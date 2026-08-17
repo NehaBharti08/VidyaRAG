@@ -9,12 +9,16 @@ What is drafted, and what deliberately is not:
 * **Factual and multi-hop questions are drafted here.** They are grounded in
   sampled passages, so a model can write a reasonable question and the human
   pass is a check rather than an authoring job.
-* **Unanswerable questions are not.** Asked for questions a corpus cannot
-  answer, a model reliably produces obviously out-of-domain ones -- "what is
-  the capital of France" against a biology textbook. Refusing those is trivial,
-  so the abstention metric they produce would be meaningless. They must be
-  in-domain and plausible, which takes a person who knows the corpus. A stub
-  file is emitted for them instead.
+* **Unanswerable questions are not drafted here.** Asked for questions a corpus
+  cannot answer, a model reliably produces obviously out-of-domain ones -- "what
+  is the capital of France" against a biology textbook. Refusing those is
+  trivial, so the abstention metric they produce would be meaningless. This
+  module emits blank stubs for them.
+
+  They can be filled either by hand, or by ``evaluation.verify``, which proposes
+  candidates and then checks each one against the real index before a human
+  approves it. Generation alone is not trustworthy here; generation plus
+  verification is.
 
 The parametric-knowledge check is the other reason this is not just prompting.
 Each draft is also asked whether it could be answered from general knowledge

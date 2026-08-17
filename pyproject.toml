@@ -128,7 +128,9 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["ARG001", "ARG002"]
+# Test doubles legitimately accept arguments they ignore -- a stub standing in
+# for a real signature has to match it without using it.
+"tests/**" = ["ARG001", "ARG002", "ARG005"]
 
 [tool.black]
 line-length = 100

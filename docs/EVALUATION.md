@@ -117,19 +117,56 @@ Target composition, 60 questions:
 
 ### Provenance — stated plainly
 
-Answerable questions are **drafted by `gemini-3.5-flash` from sampled chunks, then
+Answerable questions are **drafted by the generation model from sampled chunks, then
 verified by hand.** Each is checked for three things: that it reads naturally,
 that the cited chunk genuinely answers it, and that it is *not* answerable from
 a model's parametric knowledge without retrieval. That third check is what stops
 the evaluation from silently measuring nothing.
 
-Unanswerable questions are **written by hand.** An LLM asked to produce
-unanswerable questions reliably produces obviously out-of-domain ones, which
-would make abstention look easy and the resulting metric meaningless. These must
-be biology-shaped and plausible.
+Unanswerable questions are **machine-proposed, mechanically verified against the
+corpus, then approved by hand** — recorded as `llm_drafted_retrieval_verified`,
+never as `human_written`.
 
-This is standard practice and is documented rather than described as
-"hand-curated", which would be inaccurate.
+The original plan was to author these by hand, for a good reason: an LLM asked
+plainly for questions a corpus cannot answer produces obviously out-of-domain
+ones. "What is the capital of France?" is refused trivially, and an abstention
+score built on such questions measures nothing.
+
+The objection is to *unverified* generation, though, not to generation as such.
+So a candidate here has to clear two independent checks before a person ever
+sees it:
+
+1. **In domain**, measured as retrieval similarity against the real index. The
+   cutoff is not chosen by feel — it is the 10th percentile of the top-1 scores
+   of the drafted answerable questions, which are in domain by construction,
+   having been written *from* corpus passages. Calibrated value: **0.714**.
+2. **Genuinely absent**, judged by a grader reading the passages that similarity
+   actually retrieved.
+
+The useful case is exactly a question that scores high on the first and fails
+the second: topically adjacent, plausibly in scope, and not in the book. Neither
+check alone finds those, and the out-of-domain failure mode is eliminated by the
+first one rather than by hoping the prompt was good enough.
+
+Measured acceptance rate: **roughly a third of candidates**. A filter that
+accepted nearly everything would not be filtering, so the rate is reported and
+the tool warns above 90%.
+
+A person still approves every one, because the grader is a language model and
+can be wrong. What changed is the size of that job — approving twelve verified
+candidates instead of authoring twelve from scratch. That trade is worth making
+on its own terms: **a review small enough to actually happen is worth more than
+a more rigorous one that gets skipped**, and an unreviewed gold set is worth
+nothing at all.
+
+### What is deliberately *not* checked
+
+Triage never drops a question because retrieval failed to find its gold chunk.
+That would be measuring the system with the instrument meant to calibrate it:
+removing the questions the pipeline currently misses leaves a gold set the
+baseline already succeeds on, and every later "improvement" would then be scored
+against a target quietly moved to meet it. A gold chunk ranked nowhere is a
+result, not a defect.
 
 ---
 

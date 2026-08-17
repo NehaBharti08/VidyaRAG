@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field
 GEMINI_PRICING: dict[str, tuple[float, float]] = {
     "gemini-3.5-flash": (0.30, 2.50),
     "gemini-3.5-flash-lite": (0.10, 0.40),
+    "gemini-3.1-flash-lite": (0.10, 0.40),
     "gemini-3.6-flash": (0.30, 2.50),
 }
 _FALLBACK_PRICING = (0.30, 2.50)

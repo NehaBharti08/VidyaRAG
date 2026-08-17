@@ -131,7 +131,7 @@ _Ingestion, serving, and evaluation commands are added in Phases 1–3._
 | Orchestration | LlamaIndex | Structure-aware node metadata survives retrieval, which is what makes citations real rather than decorative. |
 | Vector store | Qdrant | One `QdrantClient` API covers in-process, local server, and cloud — see [`store/client.py`](src/vidyarag/store/client.py). |
 | Embeddings | `BAAI/bge-base-en-v1.5` via fastembed | ONNX on CPU, **no torch, no API key**. Retrieval therefore has no external dependency at all — the published demo cannot be broken by an expired account. |
-| Generation | `gemini-3.5-flash` (grading: `gemini-3.5-flash-lite`) | Pinned, never aliased: `-latest` would change model underneath a benchmark and make every reported delta incomparable. Routed through one provider module. |
+| Generation | `gemini-3.5-flash-lite` (grading: `gemini-3.1-flash-lite`) | Pinned, never aliased: `-latest` would change model underneath a benchmark and make every reported delta incomparable. Generator and grader are deliberately different models — a model grading its own output rates it favourably. |
 | Reranker | `Xenova/ms-marco-MiniLM-L-6-v2` via fastembed | ONNX, 80 MB, **no torch** — keeps the deployed image near 400 MB instead of ~2.5 GB. |
 | Evaluation | RAGAS | Faithfulness, answer relevancy, context precision, context recall. |
 

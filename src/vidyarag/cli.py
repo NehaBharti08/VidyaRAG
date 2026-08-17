@@ -433,6 +433,212 @@ def goldset_check(
         console.print("[green]OK[/green]    gold set is valid")
 
 
+@goldset_app.command("unanswerable")
+def goldset_unanswerable(
+    drafts: Path = typer.Option(
+        Path("eval/goldset/drafts.jsonl"), "--drafts", help="Draft file to fill stubs in."
+    ),
+    wanted: int = typer.Option(12, "--wanted", help="Accepted candidates to produce."),
+    attempts: int = typer.Option(40, "--attempts", help="Maximum candidates to try."),
+    seed: int = typer.Option(20260816, "--seed", help="Sampling seed, for reproducibility."),
+    write: bool = typer.Option(
+        False, "--write", help="Replace the TODO stubs in --drafts with accepted candidates."
+    ),
+) -> None:
+    """Propose unanswerable questions and verify them against the corpus.
+
+    A candidate is accepted only if it is topically in domain -- judged by
+    retrieval similarity against the real index -- AND the passages that
+    similarity retrieves do not answer it. That combination is the hard case
+    abstention has to handle; either check alone admits questions that make the
+    metric look good for the wrong reason.
+
+    Output is still candidates. Read them before trusting them.
+    """
+    import json
+
+    from vidyarag.evaluation import draft as drafting
+    from vidyarag.evaluation import verify
+    from vidyarag.evaluation.goldset import GoldQuestion
+
+    settings = Settings()
+    cfg = load_pipeline_config(settings.profile)
+    client = build_client(settings)
+
+    with console.status("reading corpus..."):
+        chunks = drafting.scroll_chunks(client, settings.qdrant_collection)
+    if not chunks:
+        console.print("[red]FAIL[/red]  collection is empty - run `vidyarag ingest` first")
+        raise typer.Exit(code=1)
+
+    # Calibrate the in-domain cutoff from questions already known to be in
+    # domain, rather than picking a number that feels right.
+    existing = [
+        GoldQuestion.model_validate(json.loads(line))
+        for line in drafts.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.strip().startswith(("#", "//"))
+    ]
+    answerable = [q for q in existing if q.is_answerable]
+    if not answerable:
+        console.print("[red]FAIL[/red]  no answerable questions to calibrate against")
+        raise typer.Exit(code=1)
+
+    with console.status("calibrating in-domain threshold..."):
+        threshold = verify.in_domain_threshold(
+            client,
+            answerable,
+            collection=settings.qdrant_collection,
+            embedding_model=cfg.embedding_model,
+        )
+    console.print(
+        f"[green]OK[/green]    in-domain cutoff [bold]{threshold:.3f}[/bold] "
+        f"(10th percentile of {len(answerable)} known in-domain questions)"
+    )
+
+    llm = get_gemini_client(settings.google_api_key.get_secret_value())
+    seeds = drafting.sample_chunks(chunks, attempts, seed=seed)
+
+    def show(check: verify.UnanswerableCheck) -> None:
+        mark = "[green]accept[/green]" if check.accepted else "[dim]reject[/dim]"
+        console.print(f"  {mark}  {check.question[:88]}")
+        if not check.accepted:
+            console.print(f"          [dim]{check.verdict}[/dim]")
+
+    try:
+        checks = verify.propose_unanswerable(
+            llm,
+            client,
+            seeds,
+            draft_model=cfg.generation_model,
+            grader_model=cfg.grader_model,
+            collection=settings.qdrant_collection,
+            embedding_model=cfg.embedding_model,
+            threshold=threshold,
+            wanted=wanted,
+            on_result=show,
+        )
+    except verify.ProposalAborted as exc:
+        console.print(f"\n[red]FAIL[/red]  {exc}")
+        console.print(
+            "[dim]Gemini's free tier has a daily request cap as well as a per-minute "
+            "one. A daily cap does not recover within a retry - wait for the reset "
+            "or use a different key.[/dim]"
+        )
+        raise typer.Exit(code=1) from exc
+
+    accepted = [c for c in checks if c.accepted]
+    console.print(
+        f"\n[green]OK[/green]    accepted [bold]{len(accepted)}[/bold] of {len(checks)} candidates"
+    )
+    if len(checks) and len(accepted) / len(checks) > 0.9:
+        console.print(
+            "[yellow]WARN[/yellow]  acceptance rate above 90% - the checks may be too "
+            "permissive to be filtering anything"
+        )
+
+    if not write:
+        console.print("\n[dim]Re-run with --write to replace the TODO stubs.[/dim]")
+        return
+
+    lines = drafts.read_text(encoding="utf-8").splitlines()
+    queue = list(accepted)
+    out: list[str] = []
+    replaced = 0
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith(("#", "//")):
+            out.append(line)
+            continue
+        record = json.loads(stripped)
+        if record.get("type") == "unanswerable" and str(record.get("question", "")).startswith(
+            "TODO"
+        ):
+            if not queue:
+                out.append(line)
+                continue
+            check = queue.pop(0)
+            record["question"] = check.question
+            record["provenance"] = "llm_drafted_retrieval_verified"
+            record["notes"] = (
+                f"APPROVE OR DELETE. Adjacent to: {check.topic}. "
+                f"Why absent: {check.rationale} "
+                f"Verified: top similarity {check.top_score:.3f} >= {threshold:.3f}; "
+                f"grader says corpus does not answer it ({check.grader_reason})"
+            )
+            replaced += 1
+            out.append(json.dumps(record, ensure_ascii=False))
+        else:
+            out.append(line)
+
+    drafts.write_text("\n".join(out) + "\n", encoding="utf-8")
+    console.print(f"[green]OK[/green]    replaced {replaced} stub(s) in {drafts}")
+
+
+@goldset_app.command("triage")
+def goldset_triage(
+    drafts: Path = typer.Option(
+        Path("eval/goldset/drafts.jsonl"), "--drafts", help="Draft file to triage."
+    ),
+) -> None:
+    """Flag drafted questions whose gold passage does not support the answer.
+
+    Checks data quality only. It deliberately does NOT check whether retrieval
+    finds the gold chunk: dropping questions the pipeline currently misses would
+    leave a gold set the baseline already succeeds on, and every later
+    improvement would be measured against a target moved to meet it.
+    """
+    import json
+
+    from vidyarag.evaluation import draft as drafting
+    from vidyarag.evaluation.goldset import GoldQuestion
+
+    settings = Settings()
+    cfg = load_pipeline_config(settings.profile)
+    client = build_client(settings)
+
+    questions = [
+        GoldQuestion.model_validate(json.loads(line))
+        for line in drafts.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.strip().startswith(("#", "//"))
+    ]
+    answerable = [q for q in questions if q.is_answerable]
+    if not answerable:
+        console.print("[yellow]WARN[/yellow]  nothing to triage")
+        return
+
+    with console.status("reading corpus..."):
+        chunks = drafting.scroll_chunks(client, settings.qdrant_collection)
+    lookup = {c.chunk_id: (c.citation, c.text) for c in chunks}
+
+    llm = get_gemini_client(settings.google_api_key.get_secret_value())
+
+    def show(finding: Any) -> None:
+        if finding.needs_attention:
+            console.print(f"  [yellow]flag[/yellow]  {finding.id}  {finding.question[:76]}")
+            console.print(f"          [dim]{finding.reason[:110]}[/dim]")
+
+    from vidyarag.evaluation import verify
+
+    findings = verify.triage_answerable(
+        llm,
+        answerable,
+        lookup,
+        grader_model=cfg.grader_model,
+        on_result=show,
+    )
+
+    flagged = [f for f in findings if f.needs_attention]
+    console.print(
+        f"\n[green]OK[/green]    {len(findings) - len(flagged)} of {len(findings)} "
+        "questions supported by their gold passage"
+    )
+    if flagged:
+        console.print(
+            f"[yellow]WARN[/yellow]  {len(flagged)} need a look - "
+            "delete rather than repair anything doubtful"
+        )
+
+
 # ---------------------------------------------------------------------------
 # Evaluation
 # ---------------------------------------------------------------------------

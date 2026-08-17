@@ -40,9 +40,11 @@ class QuestionType(enum.StrEnum):
     UNANSWERABLE = "unanswerable"
     """In-domain and plausible, but genuinely absent from the corpus.
 
-    These prove abstention. They must be written by hand: an LLM asked for
-    unanswerable questions produces obviously out-of-domain ones, which makes
-    refusing them trivial and the resulting metric meaningless.
+    These prove abstention, and they are the easiest questions to get wrong. An
+    LLM asked plainly for unanswerable questions produces obviously
+    out-of-domain ones, which makes refusing them trivial and the resulting
+    metric meaningless -- so a candidate must be shown to be in domain *and*
+    absent before it counts. See ``evaluation.verify``.
     """
 
     AMBIGUOUS = "ambiguous"
@@ -50,10 +52,31 @@ class QuestionType(enum.StrEnum):
 
 
 class Provenance(enum.StrEnum):
-    """How a question was produced. Reported verbatim in docs/EVALUATION.md."""
+    """How a question was produced. Reported verbatim in docs/EVALUATION.md.
+
+    This field exists so the honest answer to "is this evaluation real?" lives
+    in the data rather than in a claim about it. Nothing here may overstate: a
+    question a model wrote must never be recorded as one a person wrote.
+    """
 
     HUMAN_WRITTEN = "human_written"
+    """Authored by a person from scratch."""
+
     LLM_DRAFTED_HUMAN_VERIFIED = "llm_drafted_human_verified"
+    """Drafted from a sampled passage, then checked by a person."""
+
+    LLM_DRAFTED_RETRIEVAL_VERIFIED = "llm_drafted_retrieval_verified"
+    """Drafted, then mechanically checked against the corpus, then approved.
+
+    Used for unanswerable questions. The mechanical step is what makes this
+    trustworthy enough to stand beside hand authoring: the candidate must clear
+    an in-domain similarity check against the real index *and* be judged
+    unanswered by a grader reading the passages that check retrieved. A person
+    still approves the result -- the grader is a language model and can be
+    wrong -- but approving verified candidates is a far smaller job than
+    authoring them, and a review that is small enough to happen is worth more
+    than one that is skipped.
+    """
 
 
 class GoldQuestion(BaseModel):

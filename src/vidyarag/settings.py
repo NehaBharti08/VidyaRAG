@@ -160,8 +160,8 @@ class PipelineConfig(BaseModel):
 
     name: str = "baseline"
     description: str = ""
-    generation_model: str = "gemini-3.5-flash"
-    grader_model: str = "gemini-3.5-flash-lite"
+    generation_model: str = "gemini-3.5-flash-lite"
+    grader_model: str = "gemini-3.1-flash-lite"
     temperature: float = 0.0
     embedding_model: str = "BAAI/bge-base-en-v1.5"
     embedding_dim: int = 768
