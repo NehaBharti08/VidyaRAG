@@ -41,7 +41,7 @@ from vidyarag.evaluation.abstention import (
     judge_abstention,
     summarise_abstention,
 )
-from vidyarag.evaluation.answer_cache import AnswerCache, answer_key
+from vidyarag.evaluation.answer_cache import AnswerCache, abstention_key, answer_key
 from vidyarag.evaluation.goldset import (
     DEFAULT_GOLDSET,
     GoldQuestion,
@@ -62,6 +62,7 @@ from vidyarag.settings import REPO_ROOT, PipelineConfig, Settings, load_pipeline
 RESULTS_DIR = REPO_ROOT / "eval" / "results"
 CACHE_DIR = REPO_ROOT / ".eval_cache"
 ANSWER_CACHE_DIR = REPO_ROOT / ".eval_cache" / "answers"
+ABSTENTION_CACHE_DIR = REPO_ROOT / ".eval_cache" / "abstention"
 
 ANSWER_GAP_SECONDS = 4.0
 """Minimum spacing between generation calls.
@@ -243,6 +244,7 @@ async def _grade_all(
     results: list[SampleResult],
     questions: dict[str, GoldQuestion],
     contexts: dict[str, list[str]],
+    verdicts: AnswerCache,
     *,
     judge_model: str,
     on_graded: Callable[[SampleResult], None] | None = None,
@@ -255,14 +257,26 @@ async def _grade_all(
         # Abstention is checked on every question. On answerable ones it
         # measures the cost of over-refusing, which precision alone hides.
         if not result.abstained and result.answer:
-            # Shares the grader's quota, so it shares the grader's pacing.
-            await suite.limiter.acquire()
-            result.abstained = await judge_abstention(
-                suite.client,
-                model=judge_model,
+            key = abstention_key(
+                judge_model=judge_model,
                 question=result.question,
                 answer=result.answer,
             )
+            entry = verdicts.get(key)
+            if entry is not None:
+                result.abstained = bool(entry["abstained"])
+            else:
+                # Shares the grader's quota, so it shares the grader's pacing.
+                await suite.limiter.acquire()
+                started = asyncio.get_running_loop().time()
+                result.abstained = await judge_abstention(
+                    suite.client,
+                    model=judge_model,
+                    question=result.question,
+                    answer=result.answer,
+                )
+                suite.limiter.observe(asyncio.get_running_loop().time() - started)
+                verdicts.put(key, {"abstained": result.abstained})
 
         # RAGAS needs a reference and a genuine attempt. A refusal has no
         # faithfulness to measure; scoring it would invent a number.
@@ -396,6 +410,10 @@ def run_evaluation(
         scores_per_minute=scores_per_minute,
     )
     by_id = {q.id: q for q in questions}
+    # Abstention verdicts are the one grading call RAGAS does not cache. With
+    # one per question, paced against a free-tier quota, they alone put a ~12
+    # minute floor under a re-run whose every other call came from disk.
+    verdicts = AnswerCache(ABSTENTION_CACHE_DIR if use_cache else None)
 
     async def grade() -> None:
         try:
@@ -404,6 +422,7 @@ def run_evaluation(
                 run.samples,
                 by_id,
                 contexts,
+                verdicts,
                 judge_model=config.grader_model,
                 on_graded=on_graded,
             )

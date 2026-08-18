@@ -70,21 +70,50 @@ MAX_ATTEMPTS = 5
 BACKOFF_SECONDS = 30.0
 
 
-class RateLimiter:
-    """Paces async operations to a fixed rate.
+CACHE_HIT_SECONDS = 0.25
+"""Below this, a call cannot have crossed the network and must have been served
+from RAGAS's disk cache. Used to decide whether pacing is needed at all."""
 
-    Deliberately simple: each acquirer reserves the next slot and sleeps until
-    it arrives, so callers are spread evenly rather than released in a burst
-    that immediately trips the quota it was meant to respect.
+
+class RateLimiter:
+    """Paces async operations to a fixed rate, skipping the wait when it buys nothing.
+
+    Each acquirer reserves the next slot and sleeps until it arrives, so callers
+    are spread evenly rather than released in a burst that immediately trips the
+    quota the pacing exists to respect.
+
+    **Pacing is suspended while calls are being served from cache.** Grader
+    responses are cached on disk, so re-running a profile after a code change is
+    mostly cache hits -- and a cache hit consumes no quota. Pacing those was
+    pure waiting: a fully cached 58-question run took the same ~50 minutes as
+    the uncached one, which makes the Phase 4 ablations far more expensive than
+    they need to be, and discourages exactly the re-running the harness exists
+    to enable.
+
+    The limiter therefore watches how long calls take. It starts unpaced; the
+    first call that takes long enough to have crossed the network turns pacing
+    on, and a run that goes back to cache hits turns it off again. Up to
+    `concurrency` calls can slip through at the transition, which the retry and
+    backoff already handle.
     """
 
     def __init__(self, per_minute: float) -> None:
         self._interval = 60.0 / per_minute if per_minute > 0 else 0.0
         self._lock = asyncio.Lock()
         self._next_slot = 0.0
+        self._pacing = False
+        """Off until a call proves slow enough to have been a real request."""
+
+    @property
+    def pacing(self) -> bool:
+        return self._pacing
+
+    def observe(self, elapsed_seconds: float) -> None:
+        """Record how long a call took, to decide whether the next needs pacing."""
+        self._pacing = elapsed_seconds >= CACHE_HIT_SECONDS
 
     async def acquire(self) -> None:
-        if self._interval <= 0:
+        if self._interval <= 0 or not self._pacing:
             return
         loop = asyncio.get_running_loop()
         async with self._lock:
@@ -289,8 +318,12 @@ class MetricSuite:
         for attempt in range(1, MAX_ATTEMPTS + 1):
             try:
                 await self.limiter.acquire()
+                started = asyncio.get_running_loop().time()
                 async with self._semaphore:
                     result = await metric.ascore(**kwargs)
+                # Feed the duration back so the limiter can tell a cached call
+                # from a real one and stop pacing work that costs no quota.
+                self.limiter.observe(asyncio.get_running_loop().time() - started)
                 return _clean(getattr(result, "value", result)), None
             except Exception as exc:  # noqa: BLE001 - any failure is recorded, never fatal
                 last_error = f"{type(exc).__name__}: {exc}"

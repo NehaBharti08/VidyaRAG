@@ -132,6 +132,50 @@ class TestSampleScores:
         assert scores.complete
 
 
+class TestPacingSuspension:
+    """Pacing a cache hit is pure waiting.
+
+    Grader responses are cached, so re-running a profile is mostly cache hits,
+    and a cache hit consumes no quota. Pacing them made a fully cached
+    58-question run take the same ~50 minutes as an uncached one -- which
+    penalises exactly the re-running the harness exists to make cheap.
+    """
+
+    async def test_starts_unpaced(self) -> None:
+        assert RateLimiter(per_minute=60).pacing is False
+
+    async def test_a_slow_call_turns_pacing_on(self) -> None:
+        limiter = RateLimiter(per_minute=60)
+        limiter.observe(1.4)
+        assert limiter.pacing is True
+
+    async def test_a_cache_hit_turns_pacing_off_again(self) -> None:
+        limiter = RateLimiter(per_minute=60)
+        limiter.observe(1.4)
+        limiter.observe(0.01)
+        assert limiter.pacing is False
+
+    async def test_unpaced_acquire_does_not_wait(self) -> None:
+        import asyncio
+
+        limiter = RateLimiter(per_minute=6)  # 10s apart if pacing
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        await asyncio.gather(*(limiter.acquire() for _ in range(5)))
+        assert loop.time() - started < 0.05
+
+    async def test_pacing_still_applies_once_engaged(self) -> None:
+        """The optimisation must not disable pacing for real calls."""
+        import asyncio
+
+        limiter = RateLimiter(per_minute=600)  # 0.1s apart
+        limiter.observe(1.0)
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        await asyncio.gather(*(limiter.acquire() for _ in range(4)))
+        assert loop.time() - started >= 0.25
+
+
 class TestRateLimiter:
     """Pacing exists because a semaphore bounds concurrency, not requests/minute.
 
@@ -143,6 +187,9 @@ class TestRateLimiter:
         import asyncio
 
         limiter = RateLimiter(per_minute=600)  # 0.1s apart
+        # Pacing engages once a call is slow enough to have been a real request;
+        # see TestPacingSuspension for why it starts off.
+        limiter.observe(1.0)
         loop = asyncio.get_running_loop()
         started = loop.time()
         await asyncio.gather(*(limiter.acquire() for _ in range(4)))
@@ -153,6 +200,7 @@ class TestRateLimiter:
         import asyncio
 
         limiter = RateLimiter(per_minute=0)
+        limiter.observe(1.0)
         loop = asyncio.get_running_loop()
         started = loop.time()
         await limiter.acquire()

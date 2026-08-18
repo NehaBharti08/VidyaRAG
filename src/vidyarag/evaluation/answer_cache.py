@@ -64,6 +64,19 @@ def answer_key(
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]
 
 
+def abstention_key(*, judge_model: str, question: str, answer: str) -> str:
+    """Stable identity for one abstention verdict.
+
+    The judgement is "did this answer decline to answer?", which depends only on
+    the answer text, the question, and the model asked. Caching it matters
+    because it is the one grading call RAGAS does not cache: with 58 of them
+    paced against a free-tier quota, they alone put a ~12 minute floor under a
+    re-run whose every other call was already served from disk.
+    """
+    payload = "\x1f".join((CACHE_VERSION, "abstention", judge_model, question, answer))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]
+
+
 class AnswerCache:
     """JSON-per-entry cache. Absent directory disables it entirely."""
 
