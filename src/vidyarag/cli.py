@@ -6,6 +6,8 @@ and print. Any logic worth testing belongs in a module, not here.
 
 from __future__ import annotations
 
+import contextlib
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +16,7 @@ from rich.console import Console
 from rich.progress import (
     BarColumn,
     DownloadColumn,
+    MofNCompleteColumn,
     Progress,
     SpinnerColumn,
     TaskID,
@@ -37,7 +40,37 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
 )
+# Windows consoles default to cp1252, and redirecting output to a file makes
+# that the encoding Python writes with. Rich's spinner glyphs are outside
+# cp1252, so `vidyarag eval > log.txt` on Windows died with a UnicodeEncodeError
+# after fifty minutes of grading -- the work survived only because it was
+# cached. Forcing UTF-8 costs nothing and removes a whole class of failure that
+# only ever appears when output is being captured, which is exactly when a long
+# run is least likely to be watched.
+for _stream in (sys.stdout, sys.stderr):
+    _reconfigure = getattr(_stream, "reconfigure", None)
+    if _reconfigure is not None:
+        with contextlib.suppress(ValueError, OSError):
+            _reconfigure(encoding="utf-8", errors="replace")
+
 console = Console()
+
+
+def _progress_columns() -> tuple[Any, ...]:
+    """Progress columns, with the animated spinner dropped when not on a TTY.
+
+    A spinner redrawn into a log file is noise at best; it was also the source
+    of the encoding crash above. Piped output gets the same information without
+    the animation.
+    """
+    head: tuple[Any, ...] = (SpinnerColumn(),) if console.is_terminal else ()
+    return (
+        *head,
+        TextColumn("[bold]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TimeElapsedColumn(),
+    )
 
 
 @app.command()
@@ -667,13 +700,7 @@ def evaluate(
     console.print(f"[bold]profile   [/bold]  {name}")
     console.print(f"[bold]target    [/bold]  {describe_target(settings)}")
 
-    columns = (
-        SpinnerColumn(),
-        TextColumn("[bold]{task.description}"),
-        BarColumn(),
-        TextColumn("{task.completed}/{task.total}"),
-        TimeElapsedColumn(),
-    )
+    columns = _progress_columns()
     try:
         with Progress(*columns, console=console) as bar:
             answering = bar.add_task("answering", total=limit)
