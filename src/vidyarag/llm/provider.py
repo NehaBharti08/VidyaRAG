@@ -99,6 +99,13 @@ def embed_texts(
     return [vector.tolist() for vector in embedder.embed(texts, batch_size=batch_size)]
 
 
+REQUEST_TIMEOUT_MS = 90_000
+"""Hard bound on one model call.
+
+Generous enough for a long answer, short enough that a rate-limited call fails
+visibly instead of hanging the run inside the SDK's own retry loop."""
+
+
 def get_gemini_client(api_key: str) -> Any:
     """Construct a Gemini client.
 
@@ -120,8 +127,18 @@ def get_gemini_client(api_key: str) -> Any:
             "GOOGLE_API_KEY is not set. Get a free key at https://aistudio.google.com/apikey"
         )
     from google import genai
+    from google.genai import types
 
     # The SDK also reads this from the environment; setting it explicitly keeps
     # a caller-supplied key authoritative over whatever the shell happens to have.
     os.environ.setdefault("GOOGLE_API_KEY", api_key)
-    return genai.Client(api_key=api_key)
+
+    # An explicit timeout matters more than it looks. The SDK retries 429s
+    # internally with backoff, so without a bound a single rate-limited call
+    # blocks indefinitely -- an evaluation run was observed hung for minutes on
+    # one question, producing no output and no error, which is far harder to
+    # diagnose than a failure would have been.
+    return genai.Client(
+        api_key=api_key,
+        http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS),
+    )

@@ -27,6 +27,7 @@ import asyncio
 import hashlib
 import json
 import platform
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -61,6 +62,18 @@ from vidyarag.settings import REPO_ROOT, PipelineConfig, Settings, load_pipeline
 RESULTS_DIR = REPO_ROOT / "eval" / "results"
 CACHE_DIR = REPO_ROOT / ".eval_cache"
 ANSWER_CACHE_DIR = REPO_ROOT / ".eval_cache" / "answers"
+
+ANSWER_GAP_SECONDS = 4.0
+"""Minimum spacing between generation calls.
+
+Grading was rate limited from the start; answering was not, which was an
+inconsistency rather than a decision. The answering loop fired as fast as
+retrieval allowed, tripped a per-minute limit partway through, and then hung
+inside the SDK's internal retry -- 18 of 58 questions answered, no output, no
+error. Pacing the cheaper half costs a few minutes and removes that failure.
+
+Cache hits skip the wait entirely, so a resumed run is not slowed by questions
+it already answered."""
 
 MAX_FAILURE_RATE = 0.10
 """Above this share of failed questions, a run reports no aggregate metrics.
@@ -329,6 +342,7 @@ def run_evaluation(
     # question 19 discarded those 19 and spent the same quota recomputing them.
     contexts: dict[str, list[str]] = {}
     answers = AnswerCache(ANSWER_CACHE_DIR if use_cache else None)
+    answered_live = 0
     pipeline = build_pipeline(resolved_settings, config)
     try:
         for question in questions:
@@ -350,6 +364,12 @@ def run_evaluation(
                 passages = list(cached.get("contexts", []))
                 result.cached = True
             else:
+                # Space out real calls only. A cache hit costs nothing and must
+                # not be slowed down, or resuming a long run would be as slow as
+                # the original.
+                if answered_live:
+                    time.sleep(ANSWER_GAP_SECONDS)
+                answered_live += 1
                 result, passages = _answer_one(pipeline, question, config)
                 # Only successful answers are cached. Caching a quota failure
                 # would make the failure permanent and silently shrink every
