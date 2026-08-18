@@ -59,7 +59,7 @@ a configuration that was never actually applied.
 
 Embeddings run **locally** (`BAAI/bge-base-en-v1.5` via fastembed: ONNX, CPU,
 768-dim, no torch). Generation and grading go to **Gemini**
-(`gemini-3.5-flash` / `gemini-3.5-flash-lite`).
+(`gemini-3.5-flash-lite` / `gemini-3.1-flash-lite`).
 
 *Why split them:* embedding is a fixed, mechanical transformation where a small
 open model is close enough to a hosted one to be worth the trade; answering a
@@ -79,6 +79,21 @@ model underneath a benchmark and make every reported delta incomparable. Note
 also that `gemini-2.5-*` returns 404 for accounts created after ~mid-2026
 ("no longer available to new users"), so the 3.x line is what a new key can
 actually call — worth knowing before copying a tutorial that predates it.
+
+*Generator and grader are different models, deliberately.* A model asked to
+judge whether its own output is grounded rates it favourably, which would
+inflate faithfulness precisely where this project claims to measure it
+honestly. The separation costs nothing and removes the objection.
+
+*Why the lite tier for generation.* `gemini-3.5-flash` is the stronger model and
+was the original choice, but its free tier allows **20 requests per day** —
+measured, not inferred: three calls spaced 65 seconds apart all returned 429,
+so it is a daily cap rather than a per-minute one. One 60-question evaluation
+needs ~60 generation calls, which is three days of quota for a single run, and
+Phase 4's ablations need several runs. The lite models served every call in the
+same session. Choosing a slightly weaker model that can actually be *measured*
+beats a stronger one that can only be run once a week; an unmeasured improvement
+is indistinguishable from no improvement.
 
 *The tokeniser is not interchangeable.* `bge-base-en-v1.5` truncates at 512
 tokens and counts BERT WordPiece, roughly 7% more than `cl100k_base` on the same
@@ -131,6 +146,94 @@ context-precision ambiguous, because a chunk scores as "irrelevant" only when a
 near-duplicate from the other book outranks it, and corpus redundancy then shows
 up as retrieval error. The shallow seam that does exist is what makes genuine
 cross-title multi-hop questions possible rather than contrived.
+
+### Evaluation: RAGAS, and two upstream bugs
+
+RAGAS is the metric suite, but making it run against Gemini took two
+workarounds. Both are pinned and commented at the point of use, because a
+future reader will otherwise see an inexplicable dependency and remove it.
+
+**1. `import ragas` fails outright.** ragas 0.4.x imports
+`langchain_community.chat_models.vertexai`, which langchain-community deleted
+in 0.4.0 (ragas [#2741](https://github.com/vibrantlabsai/ragas/issues/2741),
+[#2745](https://github.com/vibrantlabsai/ragas/issues/2745)). Downgrading ragas
+does not help — 0.3.9 fails identically, because the break is on the langchain
+side. Pinning `langchain-community<0.4` fixes it while keeping the modern
+`ragas.metrics.collections` API.
+
+**2. Gemini cannot drive the metrics as shipped.** RAGAS decides whether an LLM
+client is async by looking for `chat.completions.create` — an OpenAI shape. A
+`google.genai.Client` has no such attribute, so RAGAS concludes "synchronous",
+while the collections metrics only expose an async path. Every call raises
+`Cannot use agenerate() with a synchronous client`.
+
+The fix is Google's own OpenAI-compatibility endpoint: an `AsyncOpenAI` client
+pointed at `generativelanguage.googleapis.com` satisfies the detection and
+still calls Gemini. **The `openai` package is a client library here, not a model
+provider** — no OpenAI account or spend is involved.
+
+*Rejected: writing the metrics by hand.* Tempting after two bugs, and it would
+have removed both. But "we implemented our own faithfulness metric" is far
+weaker evidence than a standard one, precisely because a hand-rolled metric is
+unfalsifiable by a reader who does not know its internals.
+
+### Evaluation: what is measured without a model
+
+RAGAS context precision and recall are LLM-judged against a reference answer,
+so a low score is ambiguous — retrieval may have missed the passage, or the
+grader may have disagreed about relevance. Ordinary ranking metrics computed
+from chunk ids (recall@k, hit rate, MRR) have no such ambiguity, cost nothing,
+never rate-limit, and are exactly reproducible. Both are reported. When they
+disagree, the deterministic one says where the fault actually is.
+
+Recall is reported twice: over the whole candidate pool, and over only the
+chunks that reached the prompt. A gold chunk retrieved at rank 18 but cut
+before generation is a retrieval success and a pipeline failure at once, and
+one number cannot show both. Closing that gap is what Phase 4 reranking is for.
+
+Abstention is scored separately from RAGAS, because faithfulness cannot express
+"there was no answer to give, and saying so was correct". Precision is always
+reported beside the **false abstention rate**: a system that refused everything
+would score perfect abstention precision, and only that second column reveals it.
+
+### Gold set: what a model may draft, and what it may not
+
+Factual and multi-hop questions are drafted by a model from sampled passages,
+then verified by hand.
+
+Unanswerable questions were originally going to be written by hand outright,
+for a real reason: asked to produce questions a corpus cannot answer, a model
+reliably produces obviously out-of-domain ones — refusing those is trivial, so
+the abstention metric they generate would be meaningless. These are the
+questions that prove the differentiating capability, so they are the ones worth
+being strict about.
+
+**That reasoning objects to unverified generation, not to generation.** So they
+are now machine-proposed and then *mechanically checked* before a person sees
+them: a candidate must be in domain, measured as retrieval similarity against
+the real index, and judged unanswered by a grader reading the passages that
+similarity retrieved. The out-of-domain failure mode is eliminated by the first
+check rather than by trusting the prompt. Roughly a third of candidates survive.
+
+A person still approves each one. The change is the size of that job — approving
+twelve verified candidates rather than authoring twelve — and a review small
+enough to actually happen is worth more than a stricter one that gets skipped.
+Provenance is recorded as `llm_drafted_retrieval_verified`, never `human_written`.
+
+Every draft is also asked whether it could be answered from general knowledge
+without the passage, and those are dropped. **Roughly 80% of single-passage
+candidates are rejected by this check** on an introductory biology corpus,
+which is high enough to be worth stating: much of an intro textbook genuinely
+is general knowledge, and a gold set full of such questions would show a
+healthy score for a system whose retrieval was completely broken.
+
+*Multi-hop pairing is semantic, not random.* The first implementation paired
+two randomly sampled chunks, and the output was unusable — asked to connect
+skeletal muscle tone to plant water potential, the model produced a question
+joining them on "both rely on continuous processes". That is a non sequitur
+with a question mark. Pairing each seed passage with its nearest neighbour from
+a *different section* yields pairs that share a topic but not a location, which
+is what a real multi-hop question needs.
 
 ### Formatting: black only
 

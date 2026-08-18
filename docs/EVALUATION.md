@@ -117,19 +117,89 @@ Target composition, 60 questions:
 
 ### Provenance — stated plainly
 
-Answerable questions are **drafted by `gemini-3.5-flash` from sampled chunks, then
+Answerable questions are **drafted by the generation model from sampled chunks, then
 verified by hand.** Each is checked for three things: that it reads naturally,
 that the cited chunk genuinely answers it, and that it is *not* answerable from
 a model's parametric knowledge without retrieval. That third check is what stops
 the evaluation from silently measuring nothing.
 
-Unanswerable questions are **written by hand.** An LLM asked to produce
-unanswerable questions reliably produces obviously out-of-domain ones, which
-would make abstention look easy and the resulting metric meaningless. These must
-be biology-shaped and plausible.
+Unanswerable questions are **machine-proposed, mechanically verified against the
+corpus, then approved by hand** — recorded as `llm_drafted_retrieval_verified`,
+never as `human_written`.
 
-This is standard practice and is documented rather than described as
-"hand-curated", which would be inaccurate.
+The original plan was to author these by hand, for a good reason: an LLM asked
+plainly for questions a corpus cannot answer produces obviously out-of-domain
+ones. "What is the capital of France?" is refused trivially, and an abstention
+score built on such questions measures nothing.
+
+The objection is to *unverified* generation, though, not to generation as such.
+So a candidate here has to clear two independent checks before a person ever
+sees it:
+
+1. **In domain**, measured as retrieval similarity against the real index. The
+   cutoff is not chosen by feel — it is the 10th percentile of the top-1 scores
+   of the drafted answerable questions, which are in domain by construction,
+   having been written *from* corpus passages. Calibrated value: **0.714**.
+2. **Genuinely absent**, judged by a grader reading the passages that similarity
+   actually retrieved.
+
+The useful case is exactly a question that scores high on the first and fails
+the second: topically adjacent, plausibly in scope, and not in the book. Neither
+check alone finds those, and the out-of-domain failure mode is eliminated by the
+first one rather than by hoping the prompt was good enough.
+
+Measured acceptance rate: **roughly a third of candidates**. A filter that
+accepted nearly everything would not be filtering, so the rate is reported and
+the tool warns above 90%.
+
+### A third check the first two missed
+
+The two checks above catch *topical* triviality. They are blind to *stylistic*
+triviality, and the first full run demonstrated the difference painfully: of
+twelve accepted questions, **eleven contained the word "exact"** and nine opened
+"What is the exact...". Two were near-duplicates of each other.
+
+Every one passed both checks legitimately. They were in domain and genuinely
+absent from the corpus. They were also worthless, because a system could learn
+"phrasing like *exact atomic-level crystal structure of X* → refuse" and score
+perfect abstention without doing any groundedness reasoning at all — precisely
+the failure the verification was built to prevent, arriving through a door
+nobody was watching.
+
+Two additions fixed it:
+
+- **Shape rotation.** Eight question forms — a quantitative value, a named
+  mechanism, a clinical detail, a landmark experiment, a cross-species
+  comparison, a developmental timing, an evolutionary origin, a disease basis —
+  cycled by index so the set cannot collapse onto one template. Indexed rather
+  than randomised, so a seed still reproduces its run exactly.
+- **Near-duplicate rejection** at cosine ≥ 0.88 against already-accepted
+  questions, evaluated *before* the grader call so a duplicate costs no quota.
+
+The prompt also now states that a question which telegraphs its own
+unanswerability through stiff phrasing is useless, because it can be refused on
+style alone without reading the textbook.
+
+**The general lesson is worth keeping:** an automated filter validates what it
+was told to look for, and is perfectly happy for everything it was not told
+about to go wrong. The acceptance count looked healthy in both runs. Only
+reading the questions revealed that one set was unusable.
+
+A person still approves every one, because the grader is a language model and
+can be wrong. What changed is the size of that job — approving twelve verified
+candidates instead of authoring twelve from scratch. That trade is worth making
+on its own terms: **a review small enough to actually happen is worth more than
+a more rigorous one that gets skipped**, and an unreviewed gold set is worth
+nothing at all.
+
+### What is deliberately *not* checked
+
+Triage never drops a question because retrieval failed to find its gold chunk.
+That would be measuring the system with the instrument meant to calibrate it:
+removing the questions the pipeline currently misses leaves a gold set the
+baseline already succeeds on, and every later "improvement" would then be scored
+against a target quietly moved to meet it. A gold chunk ranked nowhere is a
+result, not a defect.
 
 ---
 
@@ -153,9 +223,110 @@ is not something a faithfulness score captures:
 
 ---
 
+## Run validity
+
+A run is only quotable if it actually answered the questions. Above a **10%
+failure rate the harness reports no metrics at all** — not a warning beside the
+numbers, but the numbers withheld.
+
+That rule was written after a specific incident, recorded here because the
+failure mode is easy to walk into and hard to notice.
+
+The first full baseline attempt lost **39 of 58 questions** to Gemini quota
+exhaustion. It printed a clean table:
+
+| Metric | Reported |
+|---|---:|
+| Faithfulness | 0.949 |
+| Context recall | 0.941 |
+| Hit rate | 0.941 |
+
+Those numbers are excellent, and worthless. The gold set is ordered factual →
+multi-hop → unanswerable, so the run died partway through and the survivors
+were **17 factual, 0 multi-hop, and 2 unanswerable**. Faithfulness read 0.949
+because every hard question was missing — the score was high *as a direct
+consequence of the failure*.
+
+The lesson generalises past this project: **a partial run is not a noisier
+measurement of the intended task, it is a confident measurement of an easier
+one.** Nothing about the output looked wrong. There was a `WARN` line beneath
+the table, and a table is far easier to copy than a warning is to heed.
+
+Two changes followed:
+
+- Metrics are withheld entirely when the failure rate exceeds the threshold,
+  and the report leads with which *categories* were lost, since losing every
+  multi-hop question is not a smaller version of losing a tenth of each.
+- Generated answers are now cached by configuration and question, so a run
+  stopped by a daily quota resumes rather than restarting. Previously the 19
+  successful answers were discarded and the next attempt spent the same quota
+  recomputing them — which on a free tier is the difference between a benchmark
+  completable across two days and one not completable at all.
+
 ## Results
 
-_Pending Phase 3._
+### Baseline — `20260818T075845Z`
+
+Dense retrieval, no reranking, no corrective loop. 58 questions, **0 failures**,
+0 grader errors. `goldset_v1.jsonl` sha256 `258cb6f9b1a2ab04`.
+
+| RAGAS metric | Score |
+|---|---:|
+| Faithfulness | 0.954 |
+| Answer relevancy | 0.798 |
+| Context precision | 0.732 |
+| Context recall | 0.938 |
+
+Averaged over the 46 answerable questions the system attempted.
+
+| Retrieval metric | Score |
+|---|---:|
+| Hit rate @k | 0.978 |
+| Recall @k | 0.967 |
+| Recall @context | 0.880 |
+| MRR | 0.770 |
+
+| Abstention | Value |
+|---|---:|
+| Unanswerable questions | 12 |
+| …correctly refused | **0** |
+| Abstention recall | **0.000** |
+| False abstention rate | 0.000 |
+
+| Cost & latency | |
+|---|---:|
+| Mean latency | 2,485 ms |
+| List price per query | $0.00027 |
+| Actual spend | $0 |
+
+### What this baseline says
+
+**Abstention recall is 0.000.** The baseline answered all twelve unanswerable
+questions rather than refusing any of them. That is the expected behaviour of a
+pipeline with no corrective loop — nothing in it can decline — and it is the
+single most useful number in this table, because it makes the project's
+headline claim falsifiable. Phase 5 either moves it or it does not.
+
+Note that abstention *precision* is undefined rather than zero: the system never
+refused anything, so there is nothing to compute a precision over. Reporting it
+as 0.0 would imply refusals were made and were wrong.
+
+**Retrieval already finds the right passage; the prompt often does not get it.**
+Recall @k is 0.967 but recall @context is 0.880 — an 8.7-point gap. The gold
+chunk is in the retrieved pool for essentially every question, and is then
+ranked out of the top 5 before generation for roughly one question in eight.
+That gap is precisely what reranking exists to close, so Phase 4 has a
+well-defined target rather than a hope.
+
+**Context precision (0.732) is the weakest generation-side metric** while
+faithfulness is 0.954. The model is being scrupulous with the evidence it is
+given, and a quarter of that evidence is not relevant. This is consistent with
+the recall gap above: the context window is being padded with near-misses.
+
+**Faithfulness at 0.954 leaves little headroom**, which is worth saying plainly
+before Phase 4 starts. Improvements will have to show up in context precision,
+the recall gap, and abstention — not in faithfulness, where there is barely a
+twentieth of the scale left to win.
 
 ## What did not work
 
