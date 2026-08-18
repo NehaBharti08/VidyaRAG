@@ -265,7 +265,68 @@ Two changes followed:
 
 ## Results
 
-_Pending — the first valid baseline run._
+### Baseline — `20260818T075845Z`
+
+Dense retrieval, no reranking, no corrective loop. 58 questions, **0 failures**,
+0 grader errors. `goldset_v1.jsonl` sha256 `258cb6f9b1a2ab04`.
+
+| RAGAS metric | Score |
+|---|---:|
+| Faithfulness | 0.954 |
+| Answer relevancy | 0.798 |
+| Context precision | 0.732 |
+| Context recall | 0.938 |
+
+Averaged over the 46 answerable questions the system attempted.
+
+| Retrieval metric | Score |
+|---|---:|
+| Hit rate @k | 0.978 |
+| Recall @k | 0.967 |
+| Recall @context | 0.880 |
+| MRR | 0.770 |
+
+| Abstention | Value |
+|---|---:|
+| Unanswerable questions | 12 |
+| …correctly refused | **0** |
+| Abstention recall | **0.000** |
+| False abstention rate | 0.000 |
+
+| Cost & latency | |
+|---|---:|
+| Mean latency | 2,485 ms |
+| List price per query | $0.00027 |
+| Actual spend | $0 |
+
+### What this baseline says
+
+**Abstention recall is 0.000.** The baseline answered all twelve unanswerable
+questions rather than refusing any of them. That is the expected behaviour of a
+pipeline with no corrective loop — nothing in it can decline — and it is the
+single most useful number in this table, because it makes the project's
+headline claim falsifiable. Phase 5 either moves it or it does not.
+
+Note that abstention *precision* is undefined rather than zero: the system never
+refused anything, so there is nothing to compute a precision over. Reporting it
+as 0.0 would imply refusals were made and were wrong.
+
+**Retrieval already finds the right passage; the prompt often does not get it.**
+Recall @k is 0.967 but recall @context is 0.880 — an 8.7-point gap. The gold
+chunk is in the retrieved pool for essentially every question, and is then
+ranked out of the top 5 before generation for roughly one question in eight.
+That gap is precisely what reranking exists to close, so Phase 4 has a
+well-defined target rather than a hope.
+
+**Context precision (0.732) is the weakest generation-side metric** while
+faithfulness is 0.954. The model is being scrupulous with the evidence it is
+given, and a quarter of that evidence is not relevant. This is consistent with
+the recall gap above: the context window is being padded with near-misses.
+
+**Faithfulness at 0.954 leaves little headroom**, which is worth saying plainly
+before Phase 4 starts. Improvements will have to show up in context precision,
+the recall gap, and abstention — not in faithfulness, where there is barely a
+twentieth of the scale left to win.
 
 ## What did not work
 

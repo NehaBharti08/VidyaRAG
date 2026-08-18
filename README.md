@@ -58,12 +58,40 @@ _Pending (Phase 7) — Mermaid diagram of the ingestion and query paths._
 
 ## Results
 
-Every configuration is measured against the same 60-question gold set using
-RAGAS. `baseline` is a frozen dense-retrieval control that is never edited
-after Phase 2, so all deltas are directly comparable.
+Every configuration is measured against the same 58-question gold set. `baseline`
+is a frozen dense-retrieval control, never edited after Phase 2, so all deltas
+are directly comparable.
 
-_Pending (Phase 3 onward) — baseline vs. final across faithfulness, answer
-relevancy, context precision, and context recall, plus cost per query._
+**Baseline** — 58 questions, 0 failures. Run `20260818T075845Z`.
+
+| | Baseline | Final |
+|---|---:|---:|
+| Faithfulness | 0.954 | _pending_ |
+| Answer relevancy | 0.798 | _pending_ |
+| Context precision | 0.732 | _pending_ |
+| Context recall | 0.938 | _pending_ |
+| Recall @k / @context | 0.967 / 0.880 | _pending_ |
+| MRR | 0.770 | _pending_ |
+| **Abstention recall** | **0.000** | _pending_ |
+| Latency (mean) | 2,485 ms | _pending_ |
+| Cost per query (list price) | $0.00027 | _pending_ |
+
+Three things this baseline establishes, before any improvement is claimed:
+
+- **It never refuses.** All twelve unanswerable questions got an answer —
+  abstention recall 0.000. That is the correct behaviour for a pipeline with no
+  corrective loop, and it is what makes the project's headline claim testable
+  rather than rhetorical.
+- **Retrieval finds the passage; the prompt often loses it.** Recall @k 0.967 vs
+  @context 0.880. The gold chunk is nearly always retrieved and then ranked out
+  of the top 5 about one question in eight. That gap is reranking's target.
+- **Faithfulness has almost no headroom left** at 0.954. Gains have to appear in
+  context precision, the recall gap, and abstention — not here.
+
+Full methodology, gold-set provenance, and the failures that shaped the harness
+are in [docs/EVALUATION.md](docs/EVALUATION.md). Every run is a committed JSON
+file under [`eval/results/`](eval/results/); a number here that cannot be traced
+to one of those files is not evidence.
 
 ---
 
