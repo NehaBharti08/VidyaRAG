@@ -1,0 +1,30 @@
+# Phase 4 ablation: dense retrieval + cross-encoder reranking.
+#
+# Exactly one flag differs from `baseline`. That is the point of an ablation --
+# if two things change, the measurement cannot be attributed to either.
+#
+# What this is expected to move, taken from the baseline run:
+#
+#   recall @k         0.967   the gold chunk is almost always retrieved
+#   recall @context   0.880   ...and ranked out of the top 5 one time in eight
+#   context precision 0.732   the weakest generation-side metric
+#
+# Reranking finds nothing new. It reorders what dense retrieval already found,
+# so recall @k must NOT change -- the candidate pool is identical. If it does,
+# something other than the reranker moved and the run is not measuring what it
+# claims to.
+
+name: rerank
+description: "Dense retrieval + Xenova/ms-marco-MiniLM-L-6-v2 cross-encoder reranking."
+
+retrieval:
+  use_hybrid: false
+  use_reranker: true
+  use_decomposition: false
+
+corrective:
+  enabled: false
+
+guardrails:
+  check_user_input: false
+  check_retrieved_context: false

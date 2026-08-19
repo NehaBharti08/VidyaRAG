@@ -21,6 +21,7 @@ from vidyarag.generate.citations import Citation
 from vidyarag.llm.provider import get_gemini_client
 from vidyarag.observe.trace import QueryTrace
 from vidyarag.retrieve.dense import RetrievedChunk, retrieve_dense
+from vidyarag.retrieve.rerank import rank_movement, rerank
 from vidyarag.settings import PipelineConfig, Settings
 from vidyarag.store.client import build_client
 
@@ -76,7 +77,12 @@ class Pipeline:
         return self._llm
 
     def retrieve(self, question: str, trace: QueryTrace) -> list[RetrievedChunk]:
-        """Fetch candidates and narrow them to the context budget."""
+        """Fetch candidates and narrow them to the context budget.
+
+        Every stage after the first is switched on by a profile flag rather than
+        by a different code path, so an ablation changes exactly one thing and
+        the measurement can be attributed to it.
+        """
         with trace.stage("retrieve"):
             candidates = retrieve_dense(
                 self.client,
@@ -85,7 +91,22 @@ class Pipeline:
                 embedding_model=self.config.embedding_model,
                 limit=self.config.retrieval.top_k_retrieve,
             )
+        # Recorded before narrowing: retrieval metrics score the whole candidate
+        # pool, and the gap between that and what reaches the prompt is the
+        # thing reranking exists to close.
         trace.retrieved_chunk_ids = [c.chunk_id for c in candidates]
+
+        if self.config.retrieval.use_reranker and candidates:
+            with trace.stage("rerank"):
+                reordered = rerank(
+                    question,
+                    candidates,
+                    model_name=self.config.retrieval.reranker_model,
+                )
+            trace.rerank = rank_movement(candidates, reordered)
+            candidates = reordered
+
+        trace.ranked_chunk_ids = [c.chunk_id for c in candidates]
         return candidates[: self.config.retrieval.top_k_context]
 
     def answer(self, question: str) -> Answer:

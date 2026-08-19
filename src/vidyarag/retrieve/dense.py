@@ -38,6 +38,13 @@ class RetrievedChunk:
     license_name: str
     source_url: str
 
+    prior_score: float | None = None
+    """Score from the previous stage, when a later stage rescored this chunk.
+
+    Set by reranking so a rank change can be attributed to the reranker rather
+    than inferred. ``None`` means ``score`` is the only score there has been.
+    """
+
     @classmethod
     def from_payload(cls, payload: dict[str, object], score: float) -> RetrievedChunk:
         """Build from a Qdrant payload, tolerating absent optional fields."""

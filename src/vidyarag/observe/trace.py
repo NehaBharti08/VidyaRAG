@@ -84,9 +84,24 @@ class QueryTrace(BaseModel):
     stages: list[StageTiming] = Field(default_factory=list)
     usage: list[Usage] = Field(default_factory=list)
     retrieved_chunk_ids: list[str] = Field(default_factory=list)
+    """First-stage candidates, before any reordering."""
+
+    ranked_chunk_ids: list[str] = Field(default_factory=list)
+    """Final ordering after reranking. Equal to the above when none ran.
+
+    Kept separate because MRR is a statement about rank: computing it from the
+    pre-rerank list makes a reranker structurally unable to move it."""
+
     cited_chunk_ids: list[str] = Field(default_factory=list)
     attempts: int = 1
     abstained: bool = False
+
+    rerank: dict[str, object] = Field(default_factory=dict)
+    """What reranking changed, when it ran. Empty when it did not.
+
+    Kept per query so an ablation can report *how* a score moved rather than
+    only that it did -- a reranker that improves a metric while never altering
+    the top 5 has not earned the credit."""
 
     @property
     def total_ms(self) -> float:

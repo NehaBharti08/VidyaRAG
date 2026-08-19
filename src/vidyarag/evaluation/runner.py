@@ -120,6 +120,18 @@ class SampleResult(BaseModel):
     """Whether the answer was reused from a previous run rather than generated.
     Recorded so a report can never imply a fresh measurement it did not make."""
 
+    ranked_chunk_ids: list[str] = Field(default_factory=list)
+    """Final ordering after reranking; equal to ``retrieved_chunk_ids`` when
+    none ran. Stored separately so MRR is computed from the ranking that
+    actually decided what reached the prompt."""
+
+    rerank: dict[str, Any] = Field(default_factory=dict)
+    """What reranking changed for this question, when it ran.
+
+    Persisted because a metric moving is not evidence that the component
+    credited for it did anything. A reranker that never alters the top 5 cannot
+    be the reason context precision improved, and only this would show it."""
+
 
 class EvalRun(BaseModel):
     """One complete evaluation, with enough context to reproduce it."""
@@ -196,9 +208,7 @@ def _digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
 
 
-def _answer_one(
-    pipeline: Pipeline, question: GoldQuestion, config: PipelineConfig
-) -> tuple[SampleResult, list[str]]:
+def _answer_one(pipeline: Pipeline, question: GoldQuestion) -> tuple[SampleResult, list[str]]:
     """Answer one gold question.
 
     Returns:
@@ -227,16 +237,34 @@ def _answer_one(
     result.output_tokens = trace.output_tokens
     result.list_price_usd = trace.list_price_usd
     result.abstained = is_structural_abstention(answer.text, trace_abstained=trace.abstained)
-
-    if question.gold_chunk_ids:
-        result.retrieval = score_retrieval(
-            result.retrieved_chunk_ids,
-            question.gold_chunk_ids,
-            k=config.retrieval.top_k_retrieve,
-            context_k=config.retrieval.top_k_context,
-        ).as_dict()
+    result.rerank = dict(trace.rerank)
+    result.ranked_chunk_ids = list(trace.ranked_chunk_ids or trace.retrieved_chunk_ids)
 
     return result, [c.text for c in answer.retrieved]
+
+
+def _apply_retrieval_scores(
+    result: SampleResult, question: GoldQuestion, config: PipelineConfig
+) -> None:
+    """Score retrieval from the chunk ids already recorded on the result.
+
+    Deliberately outside the answer cache. These metrics are pure functions of
+    ids the result already carries, so computing them here means a bug in them
+    is fixed by re-running the report rather than by regenerating every answer
+    -- which is exactly what went wrong once: a wrong context-recall formula was
+    baked into cached results and could only be corrected by paying the whole
+    generation cost again.
+    """
+    if not question.gold_chunk_ids:
+        return
+    result.retrieval = score_retrieval(
+        result.retrieved_chunk_ids,
+        question.gold_chunk_ids,
+        k=config.retrieval.top_k_retrieve,
+        context_k=config.retrieval.top_k_context,
+        ranked_ids=result.ranked_chunk_ids or None,
+        context_ids=result.context_chunk_ids or None,
+    ).as_dict()
 
 
 async def _grade_all(
@@ -384,7 +412,7 @@ def run_evaluation(
                 if answered_live:
                     time.sleep(ANSWER_GAP_SECONDS)
                 answered_live += 1
-                result, passages = _answer_one(pipeline, question, config)
+                result, passages = _answer_one(pipeline, question)
                 # Only successful answers are cached. Caching a quota failure
                 # would make the failure permanent and silently shrink every
                 # later run to the same truncated subset.
@@ -393,6 +421,9 @@ def run_evaluation(
                         key,
                         {"result": result.model_dump(mode="json"), "contexts": passages},
                     )
+            # Scored here, outside the cache, so a metric fix does not require
+            # regenerating answers that were already paid for.
+            _apply_retrieval_scores(result, question, config)
             contexts[result.id] = passages
             run.samples.append(result)
             if on_answered is not None:
