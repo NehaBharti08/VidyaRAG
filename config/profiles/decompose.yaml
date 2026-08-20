@@ -1,0 +1,34 @@
+# Phase 4 ablation: dense retrieval + query decomposition.
+#
+# One flag differs from `baseline`. Reranking stays OFF here on purpose: this
+# ablation exists to answer whether decomposition fixes the multi-hop weakness
+# reranking exposed, and running both would leave that unattributable.
+#
+# What the rerank ablation showed, split by question type (recall @context):
+#
+#   factual     0.893 -> 0.964   +0.071
+#   multi-hop   0.861 -> 0.833   -0.028
+#
+# A cross-encoder scores each passage independently, so it promotes
+# near-duplicates of the strongest match and crowds out the second passage a
+# hop needs. Decomposition attacks that from the other side: two narrower
+# queries, each with its own full candidate budget, fused by rank.
+#
+# Expected to move the multi-hop slice and to do little or nothing for factual
+# questions -- decomposition should decline to split those, and the split rate
+# is itself reported.
+
+name: decompose
+description: "Dense retrieval + LLM query decomposition with reciprocal rank fusion."
+
+retrieval:
+  use_hybrid: false
+  use_reranker: false
+  use_decomposition: true
+
+corrective:
+  enabled: false
+
+guardrails:
+  check_user_input: false
+  check_retrieved_context: false

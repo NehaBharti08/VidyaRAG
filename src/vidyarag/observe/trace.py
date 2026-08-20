@@ -96,6 +96,13 @@ class QueryTrace(BaseModel):
     attempts: int = 1
     abstained: bool = False
 
+    sub_questions: list[str] = Field(default_factory=list)
+    """How a multi-hop question was split, when decomposition ran.
+
+    Empty both when decomposition is off and when it judged the question
+    atomic -- the report distinguishes those by profile, and the split rate
+    is itself a result worth seeing."""
+
     rerank: dict[str, object] = Field(default_factory=dict)
     """What reranking changed, when it ran. Empty when it did not.
 

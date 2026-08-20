@@ -125,6 +125,9 @@ class SampleResult(BaseModel):
     none ran. Stored separately so MRR is computed from the ranking that
     actually decided what reached the prompt."""
 
+    sub_questions: list[str] = Field(default_factory=list)
+    """Sub-questions decomposition produced, if any."""
+
     rerank: dict[str, Any] = Field(default_factory=dict)
     """What reranking changed for this question, when it ran.
 
@@ -239,6 +242,7 @@ def _answer_one(pipeline: Pipeline, question: GoldQuestion) -> tuple[SampleResul
     result.abstained = is_structural_abstention(answer.text, trace_abstained=trace.abstained)
     result.rerank = dict(trace.rerank)
     result.ranked_chunk_ids = list(trace.ranked_chunk_ids or trace.retrieved_chunk_ids)
+    result.sub_questions = list(trace.sub_questions)
 
     return result, [c.text for c in answer.retrieved]
 

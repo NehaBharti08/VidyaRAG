@@ -20,6 +20,7 @@ from vidyarag.generate.answer import GeneratedAnswer, generate_answer
 from vidyarag.generate.citations import Citation
 from vidyarag.llm.provider import get_gemini_client
 from vidyarag.observe.trace import QueryTrace
+from vidyarag.retrieve.decompose import decompose, retrieve_decomposed
 from vidyarag.retrieve.dense import RetrievedChunk, retrieve_dense
 from vidyarag.retrieve.rerank import rank_movement, rerank
 from vidyarag.settings import PipelineConfig, Settings
@@ -83,14 +84,30 @@ class Pipeline:
         by a different code path, so an ablation changes exactly one thing and
         the measurement can be attributed to it.
         """
+        sub_questions: list[str] = []
+        if self.config.retrieval.use_decomposition:
+            with trace.stage("decompose"):
+                split = decompose(self.llm, question, model=self.config.generation_model)
+            sub_questions = split.sub_questions
+            trace.sub_questions = list(sub_questions)
+
         with trace.stage("retrieve"):
-            candidates = retrieve_dense(
-                self.client,
-                question,
-                collection=self.settings.qdrant_collection,
-                embedding_model=self.config.embedding_model,
-                limit=self.config.retrieval.top_k_retrieve,
-            )
+            if sub_questions:
+                candidates = retrieve_decomposed(
+                    self.client,
+                    sub_questions,
+                    collection=self.settings.qdrant_collection,
+                    embedding_model=self.config.embedding_model,
+                    limit=self.config.retrieval.top_k_retrieve,
+                )[: self.config.retrieval.top_k_retrieve]
+            else:
+                candidates = retrieve_dense(
+                    self.client,
+                    question,
+                    collection=self.settings.qdrant_collection,
+                    embedding_model=self.config.embedding_model,
+                    limit=self.config.retrieval.top_k_retrieve,
+                )
         # Recorded before narrowing: retrieval metrics score the whole candidate
         # pool, and the gap between that and what reaches the prompt is the
         # thing reranking exists to close.
