@@ -387,6 +387,82 @@ before Phase 4 starts. Improvements will have to show up in context precision,
 the recall gap, and abstention — not in faithfulness, where there is barely a
 twentieth of the scale left to win.
 
+### Phase 4a — cross-encoder reranking
+
+`Xenova/ms-marco-MiniLM-L-6-v2` via fastembed, over the same 20-candidate pool.
+One flag differs from `baseline`. 58 questions, 0 failures, both runs.
+
+| Metric | Baseline | Rerank | Δ | |
+|---|---:|---:|---:|---|
+| Recall @k | 0.967 | 0.967 | 0.000 | *sanity check* |
+| Hit rate @k | 0.978 | 0.978 | 0.000 | *sanity check* |
+| **MRR** | 0.770 | 0.830 | **+0.060** | real |
+| **Recall @context** | 0.880 | 0.913 | **+0.033** | real |
+| **Context precision** | 0.732 | 0.792 | **+0.060** | real |
+| Context recall | 0.938 | 0.946 | +0.008 | real, small |
+| Faithfulness | 0.948 | 0.950 | +0.002 | within noise |
+| Answer relevancy | 0.755 | 0.770 | +0.015 | within noise |
+| Mean latency | 1,091 ms | 6,856 ms | **+5,765 ms** | |
+
+The first two rows are the ablation's own control. Reranking reorders the pool
+without changing it, so pool-level recall and hit rate **must not move**. They
+did not, to three decimals. If they had, something other than the reranker had
+changed and nothing below would be attributable.
+
+**The reranker demonstrably did work**, which is a separate question from
+whether the metric moved:
+
+| | |
+|---|---:|
+| Chunks reordered per query (of 20) | 17.7 |
+| Queries where the top result changed | 55% |
+| Queries where ≥1 chunk was promoted into the prompt | 95% |
+
+Recorded because a metric moving is not evidence that the component credited for
+it did anything. A reranker that never altered the top 5 could not be the reason
+context precision improved, and only this table would show that.
+
+**The gap it was built to close narrowed but did not shut.** Recall @k 0.967
+against recall @context 0.880 was an 8.7-point gap; it is now 5.4 points. About
+38% of the loss recovered.
+
+#### Where it fails, and why that is the interesting part
+
+Split by question type, the aggregate hides a reversal:
+
+| Question type | Baseline | Rerank | Δ |
+|---|---:|---:|---:|
+| Factual | 0.893 | 0.964 | **+0.071** |
+| Multi-hop | 0.861 | 0.833 | **−0.028** |
+
+**Reranking helps factual questions substantially and makes multi-hop questions
+slightly worse.** The aggregate improvement is entirely carried by the factual
+slice, which is 28 of the 46 answerable questions.
+
+The mechanism is not mysterious. A cross-encoder scores each passage
+independently against the query and has no notion of what the other selected
+passages contain. For a factual question there is one right passage and pushing
+it up is exactly correct. A multi-hop question needs two *complementary*
+passages, and independent scoring promotes whatever most resembles the query —
+which tends to be several near-duplicates of the strongest match, crowding out
+the second passage the hop actually requires. Precision improves; coverage does
+not.
+
+This is the argument for query decomposition rather than a bigger reranker: the
+failure is a diversity problem, and a better pointwise scorer cannot fix a
+pointwise objective.
+
+#### The cost, stated plainly
+
+Mean latency goes from 1.1 s to 6.9 s — a **6.3× regression**, about 5.8 s of
+CPU cross-encoder work over 20 passages. Token cost is unchanged
+($0.00026 → $0.00027) because reranking is local.
+
+That is a real price for +0.06 MRR, and it is the number that decides whether
+this ships in the deployed demo. Options not yet measured: rerank a shorter pool
+(top 10 rather than 20), or a smaller ONNX model. Both are cheaper than
+accepting seven-second answers.
+
 ## What did not work
 
 _Pending. This section is expected to be non-empty._
