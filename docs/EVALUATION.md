@@ -263,6 +263,65 @@ Two changes followed:
   recomputing them — which on a free tier is the difference between a benchmark
   completable across two days and one not completable at all.
 
+## Measurement noise, and which deltas are claimable
+
+Running the **same profile twice on the same gold set** produced this:
+
+| Metric | Run 1 | Run 2 | Δ |
+|---|---:|---:|---:|
+| Faithfulness | 0.954 | 0.948 | −0.006 |
+| Answer relevancy | 0.798 | 0.755 | **−0.043** |
+| Context precision | 0.732 | 0.732 | 0.000 |
+| Context recall | 0.938 | 0.938 | 0.000 |
+| Recall @k | 0.967 | 0.967 | 0.000 |
+| Recall @context | 0.880 | 0.880 | 0.000 |
+| MRR | 0.770 | 0.770 | 0.000 |
+
+The split is not random, and it is the useful part. **Every metric whose inputs
+exclude the generated answer is bit-identical. Every metric that reads the
+answer moved.**
+
+- Retrieval metrics are pure functions of chunk ids. Embedding and search are
+  deterministic, so these cannot drift.
+- Context precision and context recall are judged against the question,
+  the retrieved passages, and the reference answer — never the generated one.
+  Same inputs, cached grading, identical scores.
+- Faithfulness and answer relevancy read the generated answer, and the
+  generated answer is not stable.
+
+### `temperature: 0.0` is not determinism
+
+Verified directly rather than assumed: three identical calls to
+`gemini-3.5-flash-lite` at temperature 0.0 with the same prompt returned three
+different texts (315, 300 and 307 characters). Temperature zero makes sampling
+greedy; it does not make a served model reproducible.
+
+### What this means for every delta reported below
+
+**A change smaller than the noise floor is not a result.** On this setup the
+observed floor is roughly ±0.006 on faithfulness and ±0.04 on answer relevancy,
+from two samples — enough to bound the order of magnitude, not enough to call a
+confidence interval.
+
+The concrete consequence: the first rerank ablation showed answer relevancy
+−0.013 against baseline, and that was nearly written up as "reranking slightly
+hurts relevancy". It is three times *smaller* than the baseline's own run-to-run
+spread. It says nothing.
+
+So the ablations below distinguish two kinds of claim:
+
+- **Deterministic metrics** — retrieval, context precision, context recall.
+  A delta here is real, because a re-run reproduces it exactly.
+- **Answer-dependent metrics** — faithfulness, answer relevancy. Only
+  differences comfortably above ±0.05 are treated as signal; smaller ones are
+  reported as "within noise" rather than as small effects.
+
+Answers are cached per profile, so a *given* result file is exactly
+reproducible. The noise is irreducible only *between* profiles, which is
+precisely where the comparisons live.
+
+---
+
 ## Results
 
 ### Baseline — `20260818T075845Z`
