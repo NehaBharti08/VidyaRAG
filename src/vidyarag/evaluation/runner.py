@@ -76,6 +76,21 @@ error. Pacing the cheaper half costs a few minutes and removes that failure.
 Cache hits skip the wait entirely, so a resumed run is not slowed by questions
 it already answered."""
 
+ANSWER_ATTEMPTS = 3
+ANSWER_RETRY_SECONDS = 45.0
+TRANSIENT_MARKERS = ("429", "500", "502", "503", "504", "unavailable", "timeout", "deadline")
+"""Errors worth retrying: rate limits, server faults, and timeouts.
+
+A decompose run lost 11 of 58 questions and was correctly ruled invalid -- 8 to
+429 and 3 to 503. Every one was transient, and none was retried, because the
+answering loop caught the exception and recorded a failure immediately. A single
+blip anywhere in an hour-long run discarded the whole measurement.
+
+Matched on the message rather than an exception type: the SDK wraps HTTP status
+in ClientError and ServerError, and the distinction that matters here is
+"will this succeed if tried again", which the status code answers and the class
+does not."""
+
 MAX_FAILURE_RATE = 0.10
 """Above this share of failed questions, a run reports no aggregate metrics.
 
@@ -127,6 +142,12 @@ class SampleResult(BaseModel):
 
     sub_questions: list[str] = Field(default_factory=list)
     """Sub-questions decomposition produced, if any."""
+
+    retries: int = 0
+    """Transient failures survived before this answer succeeded.
+
+    Recorded rather than swallowed: a run that needed many retries was fighting
+    the quota, and that is worth seeing next to its latency figures."""
 
     rerank: dict[str, Any] = Field(default_factory=dict)
     """What reranking changed for this question, when it ran.
@@ -224,11 +245,22 @@ def _answer_one(pipeline: Pipeline, question: GoldQuestion) -> tuple[SampleResul
         type=question.type,
         gold_chunk_ids=list(question.gold_chunk_ids),
     )
-    try:
-        answer = pipeline.answer(question.question)
-    except Exception as exc:  # noqa: BLE001 - one bad question must not end the run
-        result.error = f"{type(exc).__name__}: {exc}"
+    answer = None
+    for attempt in range(1, ANSWER_ATTEMPTS + 1):
+        try:
+            answer = pipeline.answer(question.question)
+            break
+        except Exception as exc:  # noqa: BLE001 - one bad question must not end the run
+            result.error = f"{type(exc).__name__}: {exc}"
+            message = str(exc).lower()
+            retryable = any(marker in message for marker in TRANSIENT_MARKERS)
+            if not retryable or attempt == ANSWER_ATTEMPTS:
+                return result, []
+            result.retries = attempt
+            time.sleep(ANSWER_RETRY_SECONDS * attempt)
+    if answer is None:  # pragma: no cover - defensive
         return result, []
+    result.error = None
 
     trace = answer.trace
     result.answer = answer.text
