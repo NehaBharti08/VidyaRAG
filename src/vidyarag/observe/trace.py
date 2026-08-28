@@ -103,6 +103,14 @@ class QueryTrace(BaseModel):
     atomic -- the report distinguishes those by profile, and the split rate
     is itself a result worth seeing."""
 
+    corrective: dict[str, object] = Field(default_factory=dict)
+    """What the self-check loop did: attempts, decisions, scores per attempt.
+
+    Empty when the loop is off. Recorded per query because how often the loop
+    fires, and what it changed when it did, is the result -- a loop that never
+    fires has not been shown to work, and one that fires constantly is
+    papering over bad retrieval rather than correcting it."""
+
     rerank: dict[str, object] = Field(default_factory=dict)
     """What reranking changed, when it ran. Empty when it did not.
 

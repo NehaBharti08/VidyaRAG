@@ -1,0 +1,34 @@
+# Phase 5: reranking + the corrective self-check loop.
+#
+# Built on `rerank` rather than `baseline`, because rerank is what Phase 4
+# concluded should ship. The delta to read here is corrective-vs-rerank; the
+# comparison against baseline additionally carries reranking's contribution.
+#
+# The number this profile exists to move:
+#
+#   abstention recall   0.000   in baseline, rerank and decompose alike
+#
+# No profile before this one can decline to answer, so all twelve unanswerable
+# questions get an answer. This is the project's headline claim, and it is
+# either demonstrated here or it is not true.
+#
+# Thresholds are Phase 5 starting points, swept against the gold set and
+# reported in docs/EVALUATION.md. They are not asserted constants.
+
+name: corrective
+description: "Reranking + claim-level groundedness check with bounded retry and abstention."
+
+retrieval:
+  use_hybrid: false
+  use_reranker: true
+  use_decomposition: false
+
+corrective:
+  enabled: true
+  accept_threshold: 0.8
+  abstain_threshold: 0.5
+  max_attempts: 2
+
+guardrails:
+  check_user_input: false
+  check_retrieved_context: false

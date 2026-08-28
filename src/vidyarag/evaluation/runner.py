@@ -149,6 +149,9 @@ class SampleResult(BaseModel):
     Recorded rather than swallowed: a run that needed many retries was fighting
     the quota, and that is worth seeing next to its latency figures."""
 
+    corrective: dict[str, Any] = Field(default_factory=dict)
+    """What the self-check loop did for this question, when it ran."""
+
     rerank: dict[str, Any] = Field(default_factory=dict)
     """What reranking changed for this question, when it ran.
 
@@ -275,6 +278,7 @@ def _answer_one(pipeline: Pipeline, question: GoldQuestion) -> tuple[SampleResul
     result.rerank = dict(trace.rerank)
     result.ranked_chunk_ids = list(trace.ranked_chunk_ids or trace.retrieved_chunk_ids)
     result.sub_questions = list(trace.sub_questions)
+    result.corrective = dict(trace.corrective)
 
     return result, [c.text for c in answer.retrieved]
 

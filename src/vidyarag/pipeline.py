@@ -16,6 +16,8 @@ from typing import Any
 
 from qdrant_client import QdrantClient
 
+from vidyarag.correct.loop import run_corrective_loop
+from vidyarag.correct.policy import CorrectivePolicy
 from vidyarag.generate.answer import GeneratedAnswer, generate_answer
 from vidyarag.generate.citations import Citation
 from vidyarag.llm.provider import get_gemini_client
@@ -136,6 +138,8 @@ class Pipeline:
             An :class:`Answer` with validated citations and a full trace.
         """
         trace = QueryTrace(query=question, profile=self.config.name)
+        if self.config.corrective.enabled:
+            return self._answer_corrective(question, trace)
 
         context = self.retrieve(question, trace)
         generated: GeneratedAnswer = generate_answer(
@@ -154,6 +158,80 @@ class Pipeline:
             retrieved=context,
             trace=trace,
             grounded=generated.grounded,
+        )
+
+    def _answer_corrective(self, question: str, trace: QueryTrace) -> Answer:
+        """Answer through the bounded self-check loop.
+
+        The loop owns control flow; this method supplies the two operations it
+        needs and keeps hold of the artefacts it does not care about -- the
+        retrieved chunks and the resolved citations belonging to whichever
+        attempt was finally accepted.
+        """
+        cfg = self.config.corrective
+        policy = CorrectivePolicy(
+            accept_threshold=cfg.accept_threshold,
+            abstain_threshold=cfg.abstain_threshold,
+            max_attempts=cfg.max_attempts,
+        )
+        # Populated by the closures below; the loop returns text and a verdict,
+        # not the objects needed to build an Answer.
+        last: dict[str, Any] = {"context": [], "generated": None}
+
+        def retrieve(query: str) -> list[RetrievedChunk]:
+            context = self.retrieve(query, trace)
+            last["context"] = context
+            return context
+
+        def generate(_question: str, context: list[RetrievedChunk]) -> tuple[str, list[str]]:
+            generated = generate_answer(
+                self.llm,
+                question,
+                context,
+                model=self.config.generation_model,
+                temperature=self.config.temperature,
+                trace=trace,
+            )
+            last["generated"] = generated
+            return generated.text, [c.text for c in context]
+
+        with trace.stage("corrective"):
+            outcome = run_corrective_loop(
+                question=question,
+                generate=generate,
+                retrieve=retrieve,
+                llm=self.llm,
+                grader_model=self.config.grader_model,
+                policy=policy,
+            )
+
+        trace.attempts = outcome.attempt_count
+        trace.abstained = outcome.abstained
+        trace.corrective = outcome.as_dict()
+
+        generated_answer: GeneratedAnswer | None = last["generated"]
+        context_used: list[RetrievedChunk] = last["context"]
+
+        # An abstention cites nothing. Carrying the rejected draft's citations
+        # would attach page references to a refusal, implying the corpus
+        # supports something the system just said it does not.
+        if outcome.abstained:
+            return Answer(
+                question=question,
+                text=outcome.answer,
+                citations=[],
+                retrieved=context_used,
+                trace=trace,
+                grounded=False,
+            )
+
+        return Answer(
+            question=question,
+            text=outcome.answer,
+            citations=generated_answer.citations if generated_answer else [],
+            retrieved=context_used,
+            trace=trace,
+            grounded=generated_answer.grounded if generated_answer else False,
         )
 
     def close(self) -> None:
