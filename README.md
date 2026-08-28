@@ -15,9 +15,11 @@ harness that measures whether any of it actually helped.
 
 </div>
 
-> **Status: Phase 0 — foundation.** This README is built up phase by phase.
-> Sections marked _pending_ are filled in as the work that backs them lands.
-> No number appears here before it has been measured.
+> **Status: Phase 4 — retrieval quality.** Ingestion, baseline pipeline,
+> evaluation harness and the retrieval ablations are done and measured. The
+> corrective self-check (Phase 5) is next, and it is the one that has to move
+> abstention off 0.000. Sections marked _pending_ are filled in as the work
+> behind them lands; no number appears here before it has been measured.
 
 ---
 
@@ -39,8 +41,9 @@ answer is in the source, and abstain when it isn't.**
   re-retrieval; if the evidence still isn't there, the system says so instead of
   inventing it.
 - **Numbers, not adjectives.** Every enhancement is ablated independently
-  against a frozen baseline on a 60-question gold set. Results that didn't help
-  are reported too.
+  against a frozen baseline on a 58-question gold set. Results that didn't help
+  are reported too — query decomposition is in the table below because it made
+  things worse.
 
 ---
 
@@ -62,31 +65,37 @@ Every configuration is measured against the same 58-question gold set. `baseline
 is a frozen dense-retrieval control, never edited after Phase 2, so all deltas
 are directly comparable.
 
-**Baseline** — 58 questions, 0 failures. Run `20260818T075845Z`.
+**58 questions, 0 failures.** Each component ablated separately against the
+frozen baseline.
 
-| | Baseline | Final |
-|---|---:|---:|
-| Faithfulness | 0.954 | _pending_ |
-| Answer relevancy | 0.798 | _pending_ |
-| Context precision | 0.732 | _pending_ |
-| Context recall | 0.938 | _pending_ |
-| Recall @k / @context | 0.967 / 0.880 | _pending_ |
-| MRR | 0.770 | _pending_ |
-| **Abstention recall** | **0.000** | _pending_ |
-| Latency (mean) | 2,485 ms | _pending_ |
-| Cost per query (list price) | $0.00027 | _pending_ |
+| | baseline | + rerank | + decompose |
+|---|---:|---:|---:|
+| Faithfulness | 0.948 | 0.950 | 0.951 |
+| Answer relevancy | 0.755 | 0.770 | 0.709 |
+| Context precision | 0.732 | **0.792** | 0.690 |
+| Context recall | 0.938 | 0.946 | 0.873 |
+| Recall @k | 0.967 | 0.967 | 0.957 |
+| Recall @context | 0.880 | **0.913** | 0.826 |
+| MRR | 0.770 | **0.830** | 0.769 |
+| Abstention recall | 0.000 | 0.000 | 0.000 |
+| Mean latency | 1,091 ms | 6,856 ms | 2,635 ms |
+| Cost/query (list price) | $0.00026 | $0.00027 | $0.00026 |
 
-Three things this baseline establishes, before any improvement is claimed:
+**Reranking ships.** MRR +0.060 and recall @context +0.033, at 6.3× latency. Recall @k
+and hit rate are unchanged to three decimals — that is the ablation's own control,
+since reordering a pool must not change what is in it.
 
-- **It never refuses.** All twelve unanswerable questions got an answer —
-  abstention recall 0.000. That is the correct behaviour for a pipeline with no
-  corrective loop, and it is what makes the project's headline claim testable
-  rather than rhetorical.
-- **Retrieval finds the passage; the prompt often loses it.** Recall @k 0.967 vs
-  @context 0.880. The gold chunk is nearly always retrieved and then ranked out
-  of the top 5 about one question in eight. That gap is reranking's target.
-- **Faithfulness has almost no headroom left** at 0.954. Gains have to appear in
-  context precision, the recall gap, and abstention — not here.
+**Decomposition does not.** It was built to fix multi-hop retrieval and made it
+worse: recall @context on split multi-hop questions fell from 0.864 to 0.727. The
+cause is not what I expected — only *one* gold passage was lost from the candidate
+pool, so fusion is not failing to retrieve. Reciprocal Rank Fusion ranks by
+agreement between sub-questions, and for a genuine two-hop question the passage
+each hop needs is retrieved by that hop alone, while generic passages both hops
+surface score twice and win. **Consensus selects for the unspecific.** Full
+analysis in [docs/EVALUATION.md](docs/EVALUATION.md).
+
+**Abstention recall is 0.000 everywhere.** No component in Phase 4 can decline to
+answer; that is Phase 5's job, and this is the number it has to move.
 
 Full methodology, gold-set provenance, and the failures that shaped the harness
 are in [docs/EVALUATION.md](docs/EVALUATION.md). Every run is a committed JSON
@@ -148,7 +157,10 @@ uv run vidyarag config --profile baseline   # inspect a pipeline variant
 uv run pytest                                # run the test suite
 ```
 
-_Ingestion, serving, and evaluation commands are added in Phases 1–3._
+```bash
+uv run vidyarag eval --profile rerank        # run an ablation against the gold set
+uv run vidyarag report                       # compare committed runs
+```
 
 ---
 

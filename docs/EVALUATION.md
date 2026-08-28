@@ -463,6 +463,79 @@ this ships in the deployed demo. Options not yet measured: rerank a shorter pool
 (top 10 rather than 20), or a smaller ONNX model. Both are cheaper than
 accepting seven-second answers.
 
+### Phase 4b — query decomposition
+
+Built to fix the multi-hop weakness Phase 4a exposed. It made it worse.
+
+| Metric | baseline | decompose | Δ |
+|---|---:|---:|---:|
+| Recall @k | 0.967 | 0.957 | −0.011 |
+| Hit rate @k | 0.978 | 0.957 | −0.022 |
+| **Recall @context** | 0.880 | 0.826 | **−0.054** |
+| Context precision | 0.732 | 0.690 | −0.042 |
+| Context recall | 0.938 | 0.873 | −0.065 |
+| MRR | 0.770 | 0.769 | −0.001 |
+| Answer relevancy | 0.755 | 0.709 | −0.046 |
+| Mean latency | 1,091 ms | 2,635 ms | +1,544 ms |
+
+Split by question type, on the metric it was built to move:
+
+| Recall @context | baseline | decompose |
+|---|---:|---:|
+| Factual | 0.893 | 0.857 |
+| Multi-hop | 0.861 | **0.778** |
+| Multi-hop, split only | 0.864 | **0.727** (−0.136) |
+
+#### The ablation has a built-in control
+
+Decomposition declines to split questions it judges atomic, so each run contains
+its own control group. Fire rates: **61% of multi-hop, 75% of unanswerable, 21%
+of factual**.
+
+The questions it declined scored **bit-identically to baseline** — +0.000 on
+every metric, n=29. Every point of damage is attributable to the 17 questions
+that were actually split, and none of it to noise or drift.
+
+#### The mechanism is not the obvious one
+
+The natural hypothesis is that fusion drops gold passages out of the candidate
+pool. **It does not.** Across all split questions, exactly **one** gold chunk was
+lost from the pool and 26 were kept. Recall @k on split questions fell 0.029
+while recall @context fell 0.147.
+
+The passage is still retrieved. Reciprocal Rank Fusion ranks it out of the prompt.
+
+RRF combines lists by rank agreement: a chunk that several sub-questions retrieve
+outranks one that only a single sub-question found. `decompose.py` argued for
+that in as many words — *"a chunk both hops agree on is more likely to be the
+bridge between them."*
+
+**The data says the opposite.** For a genuine two-hop question, the passage each
+hop needs is by construction retrieved by *that hop only*, so it earns one RRF
+contribution. Generic passages that both sub-questions surface earn two, and win.
+Consensus selects for the unspecific, and fusion systematically demotes exactly
+the passages decomposition exists to find.
+
+That is not a tuning problem. Raising *k*, splitting differently, or retrieving
+more per hop all leave the ranking rule that causes it untouched. A fix would
+have to abandon rank agreement — reserving prompt slots per sub-question, so each
+hop is guaranteed representation regardless of consensus.
+
+**Rejected.** Worse on every deterministic metric including its target, for 2.4×
+latency and an extra LLM call per query.
+
+### What Phase 4 ships
+
+`baseline + rerank`.
+
+**Hybrid retrieval was planned for this phase and is not built.** It needs the
+corpus re-indexed with sparse vectors, and the rerank ablation already shows
+first-stage recall is not the bottleneck: the gold passage is in the pool for
+96.7% of questions, and hit rate is 0.978. Spending an index migration to raise a
+number already near ceiling — while recall @context sits at 0.913 — would be
+optimising the wrong stage. That is a decision from the measurements, not a
+shortcut around them.
+
 ## What did not work
 
 _Pending. This section is expected to be non-empty._
