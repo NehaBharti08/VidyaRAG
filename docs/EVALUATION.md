@@ -263,6 +263,65 @@ Two changes followed:
   recomputing them — which on a free tier is the difference between a benchmark
   completable across two days and one not completable at all.
 
+## Measurement noise, and which deltas are claimable
+
+Running the **same profile twice on the same gold set** produced this:
+
+| Metric | Run 1 | Run 2 | Δ |
+|---|---:|---:|---:|
+| Faithfulness | 0.954 | 0.948 | −0.006 |
+| Answer relevancy | 0.798 | 0.755 | **−0.043** |
+| Context precision | 0.732 | 0.732 | 0.000 |
+| Context recall | 0.938 | 0.938 | 0.000 |
+| Recall @k | 0.967 | 0.967 | 0.000 |
+| Recall @context | 0.880 | 0.880 | 0.000 |
+| MRR | 0.770 | 0.770 | 0.000 |
+
+The split is not random, and it is the useful part. **Every metric whose inputs
+exclude the generated answer is bit-identical. Every metric that reads the
+answer moved.**
+
+- Retrieval metrics are pure functions of chunk ids. Embedding and search are
+  deterministic, so these cannot drift.
+- Context precision and context recall are judged against the question,
+  the retrieved passages, and the reference answer — never the generated one.
+  Same inputs, cached grading, identical scores.
+- Faithfulness and answer relevancy read the generated answer, and the
+  generated answer is not stable.
+
+### `temperature: 0.0` is not determinism
+
+Verified directly rather than assumed: three identical calls to
+`gemini-3.5-flash-lite` at temperature 0.0 with the same prompt returned three
+different texts (315, 300 and 307 characters). Temperature zero makes sampling
+greedy; it does not make a served model reproducible.
+
+### What this means for every delta reported below
+
+**A change smaller than the noise floor is not a result.** On this setup the
+observed floor is roughly ±0.006 on faithfulness and ±0.04 on answer relevancy,
+from two samples — enough to bound the order of magnitude, not enough to call a
+confidence interval.
+
+The concrete consequence: the first rerank ablation showed answer relevancy
+−0.013 against baseline, and that was nearly written up as "reranking slightly
+hurts relevancy". It is three times *smaller* than the baseline's own run-to-run
+spread. It says nothing.
+
+So the ablations below distinguish two kinds of claim:
+
+- **Deterministic metrics** — retrieval, context precision, context recall.
+  A delta here is real, because a re-run reproduces it exactly.
+- **Answer-dependent metrics** — faithfulness, answer relevancy. Only
+  differences comfortably above ±0.05 are treated as signal; smaller ones are
+  reported as "within noise" rather than as small effects.
+
+Answers are cached per profile, so a *given* result file is exactly
+reproducible. The noise is irreducible only *between* profiles, which is
+precisely where the comparisons live.
+
+---
+
 ## Results
 
 ### Baseline — `20260818T075845Z`
@@ -327,6 +386,155 @@ the recall gap above: the context window is being padded with near-misses.
 before Phase 4 starts. Improvements will have to show up in context precision,
 the recall gap, and abstention — not in faithfulness, where there is barely a
 twentieth of the scale left to win.
+
+### Phase 4a — cross-encoder reranking
+
+`Xenova/ms-marco-MiniLM-L-6-v2` via fastembed, over the same 20-candidate pool.
+One flag differs from `baseline`. 58 questions, 0 failures, both runs.
+
+| Metric | Baseline | Rerank | Δ | |
+|---|---:|---:|---:|---|
+| Recall @k | 0.967 | 0.967 | 0.000 | *sanity check* |
+| Hit rate @k | 0.978 | 0.978 | 0.000 | *sanity check* |
+| **MRR** | 0.770 | 0.830 | **+0.060** | real |
+| **Recall @context** | 0.880 | 0.913 | **+0.033** | real |
+| **Context precision** | 0.732 | 0.792 | **+0.060** | real |
+| Context recall | 0.938 | 0.946 | +0.008 | real, small |
+| Faithfulness | 0.948 | 0.950 | +0.002 | within noise |
+| Answer relevancy | 0.755 | 0.770 | +0.015 | within noise |
+| Mean latency | 1,091 ms | 6,856 ms | **+5,765 ms** | |
+
+The first two rows are the ablation's own control. Reranking reorders the pool
+without changing it, so pool-level recall and hit rate **must not move**. They
+did not, to three decimals. If they had, something other than the reranker had
+changed and nothing below would be attributable.
+
+**The reranker demonstrably did work**, which is a separate question from
+whether the metric moved:
+
+| | |
+|---|---:|
+| Chunks reordered per query (of 20) | 17.7 |
+| Queries where the top result changed | 55% |
+| Queries where ≥1 chunk was promoted into the prompt | 95% |
+
+Recorded because a metric moving is not evidence that the component credited for
+it did anything. A reranker that never altered the top 5 could not be the reason
+context precision improved, and only this table would show that.
+
+**The gap it was built to close narrowed but did not shut.** Recall @k 0.967
+against recall @context 0.880 was an 8.7-point gap; it is now 5.4 points. About
+38% of the loss recovered.
+
+#### Where it fails, and why that is the interesting part
+
+Split by question type, the aggregate hides a reversal:
+
+| Question type | Baseline | Rerank | Δ |
+|---|---:|---:|---:|
+| Factual | 0.893 | 0.964 | **+0.071** |
+| Multi-hop | 0.861 | 0.833 | **−0.028** |
+
+**Reranking helps factual questions substantially and makes multi-hop questions
+slightly worse.** The aggregate improvement is entirely carried by the factual
+slice, which is 28 of the 46 answerable questions.
+
+The mechanism is not mysterious. A cross-encoder scores each passage
+independently against the query and has no notion of what the other selected
+passages contain. For a factual question there is one right passage and pushing
+it up is exactly correct. A multi-hop question needs two *complementary*
+passages, and independent scoring promotes whatever most resembles the query —
+which tends to be several near-duplicates of the strongest match, crowding out
+the second passage the hop actually requires. Precision improves; coverage does
+not.
+
+This is the argument for query decomposition rather than a bigger reranker: the
+failure is a diversity problem, and a better pointwise scorer cannot fix a
+pointwise objective.
+
+#### The cost, stated plainly
+
+Mean latency goes from 1.1 s to 6.9 s — a **6.3× regression**, about 5.8 s of
+CPU cross-encoder work over 20 passages. Token cost is unchanged
+($0.00026 → $0.00027) because reranking is local.
+
+That is a real price for +0.06 MRR, and it is the number that decides whether
+this ships in the deployed demo. Options not yet measured: rerank a shorter pool
+(top 10 rather than 20), or a smaller ONNX model. Both are cheaper than
+accepting seven-second answers.
+
+### Phase 4b — query decomposition
+
+Built to fix the multi-hop weakness Phase 4a exposed. It made it worse.
+
+| Metric | baseline | decompose | Δ |
+|---|---:|---:|---:|
+| Recall @k | 0.967 | 0.957 | −0.011 |
+| Hit rate @k | 0.978 | 0.957 | −0.022 |
+| **Recall @context** | 0.880 | 0.826 | **−0.054** |
+| Context precision | 0.732 | 0.690 | −0.042 |
+| Context recall | 0.938 | 0.873 | −0.065 |
+| MRR | 0.770 | 0.769 | −0.001 |
+| Answer relevancy | 0.755 | 0.709 | −0.046 |
+| Mean latency | 1,091 ms | 2,635 ms | +1,544 ms |
+
+Split by question type, on the metric it was built to move:
+
+| Recall @context | baseline | decompose |
+|---|---:|---:|
+| Factual | 0.893 | 0.857 |
+| Multi-hop | 0.861 | **0.778** |
+| Multi-hop, split only | 0.864 | **0.727** (−0.136) |
+
+#### The ablation has a built-in control
+
+Decomposition declines to split questions it judges atomic, so each run contains
+its own control group. Fire rates: **61% of multi-hop, 75% of unanswerable, 21%
+of factual**.
+
+The questions it declined scored **bit-identically to baseline** — +0.000 on
+every metric, n=29. Every point of damage is attributable to the 17 questions
+that were actually split, and none of it to noise or drift.
+
+#### The mechanism is not the obvious one
+
+The natural hypothesis is that fusion drops gold passages out of the candidate
+pool. **It does not.** Across all split questions, exactly **one** gold chunk was
+lost from the pool and 26 were kept. Recall @k on split questions fell 0.029
+while recall @context fell 0.147.
+
+The passage is still retrieved. Reciprocal Rank Fusion ranks it out of the prompt.
+
+RRF combines lists by rank agreement: a chunk that several sub-questions retrieve
+outranks one that only a single sub-question found. `decompose.py` argued for
+that in as many words — *"a chunk both hops agree on is more likely to be the
+bridge between them."*
+
+**The data says the opposite.** For a genuine two-hop question, the passage each
+hop needs is by construction retrieved by *that hop only*, so it earns one RRF
+contribution. Generic passages that both sub-questions surface earn two, and win.
+Consensus selects for the unspecific, and fusion systematically demotes exactly
+the passages decomposition exists to find.
+
+That is not a tuning problem. Raising *k*, splitting differently, or retrieving
+more per hop all leave the ranking rule that causes it untouched. A fix would
+have to abandon rank agreement — reserving prompt slots per sub-question, so each
+hop is guaranteed representation regardless of consensus.
+
+**Rejected.** Worse on every deterministic metric including its target, for 2.4×
+latency and an extra LLM call per query.
+
+### What Phase 4 ships
+
+`baseline + rerank`.
+
+**Hybrid retrieval was planned for this phase and is not built.** It needs the
+corpus re-indexed with sparse vectors, and the rerank ablation already shows
+first-stage recall is not the bottleneck: the gold passage is in the pool for
+96.7% of questions, and hit rate is 0.978. Spending an index migration to raise a
+number already near ceiling — while recall @context sits at 0.913 — would be
+optimising the wrong stage. That is a decision from the measurements, not a
+shortcut around them.
 
 ## What did not work
 
