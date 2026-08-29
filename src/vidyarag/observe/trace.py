@@ -111,6 +111,13 @@ class QueryTrace(BaseModel):
     fires has not been shown to work, and one that fires constantly is
     papering over bad retrieval rather than correcting it."""
 
+    guard_input: dict[str, object] = Field(default_factory=dict)
+    """Set when the input guard blocked a question. Empty otherwise."""
+
+    guard_context: dict[str, object] = Field(default_factory=dict)
+    """Set when retrieved passages were quarantined. Empty otherwise, so a
+    clean query carries no guard noise through the logs."""
+
     rerank: dict[str, object] = Field(default_factory=dict)
     """What reranking changed, when it ran. Empty when it did not.
 

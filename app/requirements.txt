@@ -1,0 +1,27 @@
+# Runtime dependencies for the Hugging Face Space.
+#
+# Deliberately NOT the eval group: ragas pulls langchain, which would add
+# ~200MB to a container that never runs an evaluation.
+#
+# Pinned to majors rather than exact versions. The Space rebuilds on its own
+# schedule and a hard pin that stops resolving turns a working demo into a
+# build failure months later, which is the failure mode this project is most
+# trying to avoid.
+llama-index-core>=0.12,<0.15
+llama-index-llms-openai>=0.3,<0.6
+llama-index-embeddings-openai>=0.3,<0.6
+llama-index-vector-stores-qdrant>=0.4,<0.8
+qdrant-client[fastembed]>=1.12,<2.0
+google-genai>=1.0,<2.0
+pymupdf>=1.24,<2.0
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.32,<1.0
+gradio>=5.0,<6.0
+pydantic>=2.9,<3.0
+pydantic-settings>=2.6,<3.0
+python-dotenv>=1.0,<2.0
+pyyaml>=6.0,<7.0
+tenacity>=9.0,<10.0
+structlog>=24.4,<26.0
+typer>=0.15,<1.0
+rich>=13.9,<15.0

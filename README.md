@@ -15,11 +15,10 @@ harness that measures whether any of it actually helped.
 
 </div>
 
-> **Status: Phase 4 — retrieval quality.** Ingestion, baseline pipeline,
-> evaluation harness and the retrieval ablations are done and measured. The
-> corrective self-check (Phase 5) is next, and it is the one that has to move
-> abstention off 0.000. Sections marked _pending_ are filled in as the work
-> behind them lands; no number appears here before it has been measured.
+> **Status: Phase 6 complete.** Ingestion, baseline, evaluation harness,
+> retrieval ablations, the corrective self-check and the injection guardrails are
+> all built and measured. Phase 7 (packaging and deployment) is in progress.
+> No number here appears before it has been measured.
 
 ---
 
@@ -49,13 +48,55 @@ answer is in the source, and abstain when it isn't.**
 
 ## Live demo
 
-_Pending — deploying to Hugging Face Spaces._
+_Deploying to Hugging Face Spaces on **6 September 2026**._
+
+The deployment is built and verified — `scripts/deploy_space.py` stages 62 files
+and 35 MB cleanly — but blocked by an account policy rather than by code. A free
+personal Hugging Face account cannot create a Gradio Space at all: both ZeroGPU
+and plain CPU return `402 Payment Required`, with ZeroGPU available only to
+accounts older than 30 days. This one was created on 7 August.
+
+Until then, the [Quickstart](#quickstart) below runs the whole system locally,
+and every number in the table is reproducible from the committed run files.
 
 ---
 
 ## Architecture
 
-_Pending (Phase 7) — Mermaid diagram of the ingestion and query paths._
+```mermaid
+flowchart TB
+    Q([Student question]) --> IG{Input guard}
+    IG -->|injection| REFUSE[/"Refused — 0 ms<br/>no retrieval, no quota spent"/]
+    IG -->|clean| EMB[Embed locally<br/>bge-base-en-v1.5 · ONNX · no key]
+
+    EMB --> SEARCH[(Qdrant<br/>3,608 chunks<br/>embedded, ships with the demo)]
+    SEARCH --> POOL[Top-20 candidates]
+    POOL --> RR[Cross-encoder rerank<br/>ms-marco-MiniLM-L-6-v2]
+    RR --> CTX[Top-5 context]
+    CTX --> CG{Context guard}
+    CG -->|directive found| DROP[Quarantine that chunk<br/>keep the rest]
+    DROP --> GEN
+    CG -->|clean| GEN[Generate with citations<br/>gemini-3.5-flash-lite]
+
+    GEN --> GRADE{Claim-level self-check<br/>gemini-3.1-flash-lite}
+    GRADE -->|grounded| OUT([Answer + page citations<br/>+ latency, tokens, cost])
+    GRADE -.->|unsupported claims| RETRY[Reformulate and re-retrieve<br/>max 2 attempts]
+    RETRY -.-> GEN
+    GRADE -.->|still ungrounded| ABSTAIN[/"I couldn't find this<br/>in the source material"/]
+
+    classDef refusal fill:#fff4e6,stroke:#d97706,stroke-width:2px
+    classDef store fill:#eef2ff,stroke:#4f46e5
+    class REFUSE,ABSTAIN refusal
+    class SEARCH store
+```
+
+The dashed paths are the ones the project exists to demonstrate. Everything
+else is ordinary RAG.
+
+**Ingestion runs separately and needs no API key** — PDFs are fetched and
+checksummed, chunked with the embedding model's own tokeniser, embedded
+locally on CPU, and written to an on-disk Qdrant index that ships with the
+demo. See [docs/EVALUATION.md](docs/EVALUATION.md) for corpus statistics.
 
 ---
 
@@ -65,37 +106,53 @@ Every configuration is measured against the same 58-question gold set. `baseline
 is a frozen dense-retrieval control, never edited after Phase 2, so all deltas
 are directly comparable.
 
-**58 questions, 0 failures.** Each component ablated separately against the
-frozen baseline.
+**58 questions, 0 failures on every run.** Each component ablated separately
+against the frozen baseline.
 
-| | baseline | + rerank | + decompose |
-|---|---:|---:|---:|
-| Faithfulness | 0.948 | 0.950 | 0.951 |
-| Answer relevancy | 0.755 | 0.770 | 0.709 |
-| Context precision | 0.732 | **0.792** | 0.690 |
-| Context recall | 0.938 | 0.946 | 0.873 |
-| Recall @k | 0.967 | 0.967 | 0.957 |
-| Recall @context | 0.880 | **0.913** | 0.826 |
-| MRR | 0.770 | **0.830** | 0.769 |
-| Abstention recall | 0.000 | 0.000 | 0.000 |
-| Mean latency | 1,091 ms | 6,856 ms | 2,635 ms |
-| Cost/query (list price) | $0.00026 | $0.00027 | $0.00026 |
+| | baseline | + rerank | + decompose | **shipped** |
+|---|---:|---:|---:|---:|
+| **Abstention recall** | 0.000 | 0.000 | 0.000 | **1.000** |
+| Abstention precision | — | — | — | 0.800 |
+| False abstention rate | 0.000 | 0.000 | 0.000 | 0.065 |
+| Faithfulness | 0.948 | 0.950 | 0.951 | 0.959 |
+| Answer relevancy | 0.755 | 0.770 | 0.709 | 0.844 |
+| Context precision | 0.732 | 0.792 | 0.690 | 0.819 |
+| Context recall | 0.938 | 0.946 | 0.873 | 0.981 |
+| Recall @k | 0.967 | 0.967 | 0.957 | 0.967 |
+| Recall @context | 0.880 | **0.913** | 0.826 | **0.913** |
+| MRR | 0.770 | **0.830** | 0.769 | **0.830** |
+| Mean latency | 1,091 ms | 6,856 ms | 2,635 ms | 22,031 ms |
+| Cost/query (list price) | $0.00026 | $0.00027 | $0.00026 | $0.00027 |
 
-**Reranking ships.** MRR +0.060 and recall @context +0.033, at 6.3× latency. Recall @k
-and hit rate are unchanged to three decimals — that is the ablation's own control,
-since reordering a pool must not change what is in it.
+**Abstention went 0.000 → 1.000.** All twelve unanswerable questions are now
+refused. Precision and the false abstention rate are reported beside recall
+because a system that refused *everything* would score 1.000 on recall alone.
 
-**Decomposition does not.** It was built to fix multi-hop retrieval and made it
-worse: recall @context on split multi-hop questions fell from 0.864 to 0.727. The
-cause is not what I expected — only *one* gold passage was lost from the candidate
-pool, so fusion is not failing to retrieve. Reciprocal Rank Fusion ranks by
-agreement between sub-questions, and for a genuine two-hop question the passage
-each hop needs is retrieved by that hop alone, while generic passages both hops
-surface score twice and win. **Consensus selects for the unspecific.** Full
-analysis in [docs/EVALUATION.md](docs/EVALUATION.md).
+**The quality gains in that last column are mostly not real, and the repo says
+so.** Abstentions are excluded from RAGAS grading, so the denominator drops from
+46 to 43 and the removed questions are among the worst-answered. Compared only
+on the 43 questions both profiles answered, relevancy moves +0.037 — half the
+apparent figure, and inside the measured ±0.04 noise floor. **The self-check
+does not make answers better; it removes answers that should not have been
+given.**
 
-**Abstention recall is 0.000 everywhere.** No component in Phase 4 can decline to
-answer; that is Phase 5's job, and this is the number it has to move.
+**The three "false" abstentions are not false alarms.** Those multi-hop
+questions had context recall 0.444 against 0.981 across the run — retrieval
+genuinely failed. Under `rerank` they produced faithfulness 0.952 on that broken
+context: *well-grounded answers to the wrong material*. That failure mode is
+invisible to faithfulness alone, and it is what abstention is for.
+
+**Decomposition was built, measured, and rejected.** It was meant to fix
+multi-hop retrieval and made it worse — recall @context on split multi-hop
+questions fell 0.864 → 0.727. Only *one* gold passage was lost from the pool, so
+fusion is not failing to retrieve; Reciprocal Rank Fusion ranks by agreement
+between sub-questions, and for a real two-hop question the passage each hop needs
+is retrieved by that hop alone while generic passages both hops surface score
+twice and win. **Consensus selects for the unspecific.**
+
+**Guardrails, measured rather than asserted:** 0 false positives across all 3,608
+corpus chunks, 8/8 input injections blocked, 0/8 legitimate questions blocked,
+5/5 context injections quarantined.
 
 Full methodology, gold-set provenance, and the failures that shaped the harness
 are in [docs/EVALUATION.md](docs/EVALUATION.md). Every run is a committed JSON

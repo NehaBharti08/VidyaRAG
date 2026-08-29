@@ -1,0 +1,28 @@
+# Phase 6: the shipped configuration.
+#
+# corrective + both guardrails. This is what the deployed demo runs, and the
+# only profile with every capability the project claims switched on.
+#
+# Guardrails are measured, not assumed:
+#   - 0 false positives across all 3,608 real corpus chunks
+#   - 8/8 input injections blocked, 0/8 legitimate questions blocked
+#   - 5/5 context injections quarantined
+#
+# The context guard protects a corpus nobody can currently write to -- two
+# checksummed OpenStax PDFs. It is defence in depth for the day that stops
+# being true, not mitigation of a live hole, and docs/EVALUATION.md says so.
+
+name: guarded
+description: "Rerank + corrective self-check + injection guardrails. The shipped configuration."
+
+retrieval:
+  use_hybrid: false
+  use_reranker: true
+  use_decomposition: false
+
+corrective:
+  enabled: true
+
+guardrails:
+  check_user_input: true
+  check_retrieved_context: true
