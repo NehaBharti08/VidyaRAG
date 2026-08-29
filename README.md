@@ -202,6 +202,13 @@ selective carrier proteins [1, 3, 5]...
 10437ms [retrieve=3163ms generate=7274ms] 2553+227 tok
 ```
 
+> **This quickstart is verified, not assumed.** Cloned into a clean directory
+> and run verbatim on 2026-08-29: `uv sync`, `cp .env.example .env`,
+> `uv run vidyarag health` (exit 0, correctly reporting no index yet),
+> `uv run vidyarag config`, and `uv run pytest` — 356 passed. The two expensive
+> steps, `download` (~415 MB) and `ingest` (~1 hr), were not re-run in the clean
+> clone; they are exercised by the committed corpus manifest and index instead.
+
 Page numbers are the **printed** ones, so they can be checked against a paper
 copy — not the PDF page index, which differs by 12 in Biology.
 

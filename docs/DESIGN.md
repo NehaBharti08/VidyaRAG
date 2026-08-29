@@ -242,9 +242,146 @@ disagree on edge cases and would rewrite each other's output on every commit.
 
 ---
 
-## Pending
+### Corrective loop: claim-level grading, and one job not two
 
-Recorded as each phase lands: chunking strategy and the structure extraction
-approach (Phase 1), prompt and citation format (Phase 2), retrieval ablations
-(Phase 4), grader prompt design and abstention threshold tuning (Phase 5),
-injection threat model (Phase 6).
+The grader decomposes a draft answer into atomic claims and scores each against
+the retrieved passages, rather than asking "is this answer grounded?" once.
+
+*Why claim level.* An answer-level verdict is unactionable. "Not grounded" tells
+the loop nothing about *what* to re-retrieve, so the only available retry is
+running the same query again and hoping. Claim-level scoring names the
+unsupported claim, and that claim becomes the reformulated query. The retry has
+a target.
+
+*Trade-off, and it is real:* an extra call and roughly double the grader tokens
+per attempt, and a large part of why the shipped configuration runs at 22 s per
+query against the baseline's 1.1 s. Grading is on the free tier, so the cost is
+time rather than money — acceptable for a study assistant answering one question
+at a time, and not acceptable for anything interactive.
+
+*What the measurement then showed.* The retry path fired **once in 58 queries**.
+57 questions finished in a single attempt. In practice the loop is an abstention
+gate, not a corrective loop, and `max_attempts=2` is not currently earning its
+complexity.
+
+Claim decomposition still pays for itself — it is what produces a defensible
+groundedness score and what makes the refusal decision principled. But it is
+being used for one of its two jobs. Left in rather than removed, because one
+observation is not enough to conclude the retry never helps and an unused branch
+costs latency on a single query; recorded so the next reader does not assume it
+is load-bearing.
+
+### Abstention: thresholds, and why they were not swept
+
+Accept at a groundedness score >= 0.8, abstain below 0.5, retry between.
+
+These are the values the plan proposed, and they are **not tuned**. A sweep would
+mean several full evaluation runs, each around 50 minutes against a rate-limited
+free tier, to choose between thresholds on a 58-question set where the twelve
+unanswerable questions are the only ones that discriminate. Fitting two decision
+boundaries to twelve examples produces a number that looks tuned and generalises
+no better than the untuned one — and it would consume the gold set as a
+development set, leaving nothing held out.
+
+Measured at the default: abstention recall 1.000, precision 0.800, F1 0.889,
+false abstention 0.065. **Recall is at ceiling, so the only direction tuning
+could move is precision** — and the three imprecise refusals turn out not to be
+threshold errors at all. Those questions had context recall 0.444 against 0.981
+across the run: retrieval genuinely failed and the system declined rather than
+answering from passages that did not contain the answer. No threshold fixes a
+retrieval failure; raising the bar would have produced a confident wrong answer
+instead of a refusal.
+
+Documented as untuned rather than presented as chosen. "Default value, measured,
+and here is why the obvious tuning would not help" is a defensible position;
+implying a sweep that never happened is not.
+
+### Guardrails: two surfaces, one of them not actually under threat
+
+*User input* is genuinely untrusted and is **blocked**, before retrieval. A
+question containing "ignore your previous instructions" is not a biology question
+with an unfortunate phrase in it, so sanitising it would mean doing an attacker's
+editing for them. Screening first also means a blocked question costs nothing —
+no embedding, no search, no generation — which matters on a quota an attacker
+could otherwise burn for free. Measured: `guard_input=0ms`, and no retrieve stage
+in the trace at all.
+
+*Retrieved context* is the attack most RAG demos miss, and **not a live threat to
+this system**. The corpus is two OpenStax PDFs fetched over HTTPS and verified by
+SHA-256 at ingest; nothing user-supplied reaches the index. The guard exists
+because that is a fact about today's configuration rather than a guarantee, and
+one added after the first bad document is added too late.
+
+Poisoned passages are **quarantined, not refused**. A bad chunk is a property of
+one document, not of the student's question, and the other four passages usually
+still answer it. Refusing would let anyone able to write one document deny
+service to every question that retrieves it.
+
+*The design constraint was false positives, not recall.* A textbook is full of
+imperative prose, and a guard that fires on ordinary pedagogy suppresses correct
+answers and trains its maintainer to ignore the alarm. An earlier revision
+matched three real chunks — the chapter headings "THE CARDIOVASCULAR SYSTEM:
+BLOOD", "...THE HEART" and "...BLOOD VESSELS AND CIRCULATION", where PDF
+line-wrapping put `SYSTEM:` at a line start.
+
+So a bare role marker is no longer the signal: it must be followed by directive
+language on the same line. An injection that merely asserts a fact under a
+`SYSTEM:` label is not caught; one that issues an order is, and the order is what
+makes it dangerous. Measured after the change: **0 false positives across all
+3,608 chunks**, 5/5 context injections caught, 8/8 input attacks blocked, 0/8
+legitimate questions blocked.
+
+### Deployment: an embedded index, and why the demo ships its own data
+
+The published Space carries the built 35 MB index rather than talking to a hosted
+vector store.
+
+Free Qdrant Cloud clusters are suspended after roughly a week of inactivity and
+deleted after four. A portfolio demo is idle most of the time and is clicked
+months after it was last touched — precisely the access pattern that guarantees
+the backing store is gone by the time anyone looks. An embedded index has no such
+failure mode, no network hop, and no account to expire.
+
+*Trade-off:* embedded mode uses a linear scan and warns past ~20,000 points. At
+3,608 chunks this is comfortable, but adding titles is not free, and crossing
+that threshold means moving the demo to a server-backed target.
+
+*Rejected:* keeping Qdrant Cloud in the deployed path with a scheduled job
+pinging it to prevent idle suspension. It works, and it makes the demo's liveness
+depend on a cron job continuing to run correctly and indefinitely — more moving
+parts defending a weaker guarantee.
+
+### Docker: no torch, and CI proves it
+
+The image is built without torch. Embeddings and reranking both run through
+fastembed on ONNX Runtime, keeping it near 400 MB rather than the ~2.5 GB a torch
+stack needs — the difference between something that deploys on a free tier and
+something that does not.
+
+The `docker` workflow **fails the build above 900 MB**. That decision is
+load-bearing enough to be defended by CI rather than by whoever remembers it,
+since the natural way to lose it is a dependency quietly pulling torch back in.
+
+Building in CI is not optional here: Docker Desktop is not installed on the
+development machine, and two Dockerfile bugs surfaced only there — a missing
+`LICENSE` at build time, and an editable install pointing at a path that does not
+exist in the runtime stage. Neither could reproduce locally, where both are
+always present.
+
+---
+
+## Known gaps
+
+Stated rather than left for a reader to notice.
+
+- **Hybrid retrieval was planned and is not built.** It needs the corpus
+  re-indexed with sparse vectors, and the rerank ablation showed first-stage
+  recall is not the bottleneck: the gold passage is in the pool for 96.7% of
+  questions. Optimising it would raise a number already near ceiling.
+- **Abstention thresholds are untuned defaults**, for the reason above.
+- **The retry path is effectively unexercised** — one firing in 58 queries.
+- **The noise floor rests on two samples.** Enough to bound the order of
+  magnitude, not enough for a confidence interval, and the text says so wherever
+  a delta is called noise.
+- **58 questions is a small gold set.** Every per-type figure rests on 12–28
+  questions, so the deltas are indicative rather than statistically significant.
