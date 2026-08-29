@@ -22,7 +22,11 @@ WORKDIR /build
 
 # Dependencies resolve from the lockfile before the source is copied, so a code
 # change does not invalidate the dependency layer.
-COPY pyproject.toml uv.lock README.md ./
+# LICENSE is required at build time, not just at runtime: pyproject declares
+# license = { file = "LICENSE" } and hatchling reads it while building the
+# project's own wheel. Omitting it fails the build with an error that never
+# reproduces locally, where the file is always present.
+COPY pyproject.toml uv.lock README.md LICENSE ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 COPY src/ ./src/
