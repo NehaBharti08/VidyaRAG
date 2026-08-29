@@ -20,6 +20,8 @@ from vidyarag.correct.loop import run_corrective_loop
 from vidyarag.correct.policy import CorrectivePolicy
 from vidyarag.generate.answer import GeneratedAnswer, generate_answer
 from vidyarag.generate.citations import Citation
+from vidyarag.guard import screen_context, screen_input
+from vidyarag.guard.input_guard import REFUSAL as INPUT_REFUSAL
 from vidyarag.llm.provider import get_gemini_client
 from vidyarag.observe.trace import QueryTrace
 from vidyarag.retrieve.decompose import decompose, retrieve_decomposed
@@ -126,7 +128,18 @@ class Pipeline:
             candidates = reordered
 
         trace.ranked_chunk_ids = [c.chunk_id for c in candidates]
-        return candidates[: self.config.retrieval.top_k_context]
+        context = candidates[: self.config.retrieval.top_k_context]
+
+        # Screened after narrowing rather than over the whole pool: only what
+        # reaches the prompt can influence the model, and scanning 20 passages
+        # to protect 5 is work spent on chunks that were never going to be read.
+        if self.config.guardrails.check_retrieved_context and context:
+            with trace.stage("guard_context"):
+                screened = screen_context(context)
+            trace.guard_context = screened.as_dict()
+            context = screened.kept
+
+        return context
 
     def answer(self, question: str) -> Answer:
         """Answer one question end to end.
@@ -138,6 +151,25 @@ class Pipeline:
             An :class:`Answer` with validated citations and a full trace.
         """
         trace = QueryTrace(query=question, profile=self.config.name)
+
+        # Screened before retrieval on purpose: a blocked question should cost
+        # nothing. Embedding and searching first would spend the work anyway,
+        # and on a rate-limited free tier that is quota an attacker burns for
+        # free.
+        if self.config.guardrails.check_user_input:
+            with trace.stage("guard_input"):
+                verdict = screen_input(question)
+            if verdict.blocked:
+                trace.guard_input = {"blocked": True, "categories": verdict.categories}
+                return Answer(
+                    question=question,
+                    text=INPUT_REFUSAL,
+                    citations=[],
+                    retrieved=[],
+                    trace=trace,
+                    grounded=True,
+                )
+
         if self.config.corrective.enabled:
             return self._answer_corrective(question, trace)
 
