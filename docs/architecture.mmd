@@ -1,0 +1,27 @@
+%% VidyaRAG query path. Rendered in README.md.
+%% Dashed edges are the paths that make the project's claim: refusing rather
+%% than answering.
+flowchart TB
+    Q([Student question]) --> IG{Input guard}
+    IG -->|injection| REFUSE[/"Refused — 0 ms<br/>no retrieval, no quota spent"/]
+    IG -->|clean| EMB[Embed locally<br/>bge-base-en-v1.5 · ONNX · no key]
+
+    EMB --> SEARCH[(Qdrant<br/>3,608 chunks<br/>embedded, ships with the demo)]
+    SEARCH --> POOL[Top-20 candidates]
+    POOL --> RR[Cross-encoder rerank<br/>ms-marco-MiniLM-L-6-v2]
+    RR --> CTX[Top-5 context]
+    CTX --> CG{Context guard}
+    CG -->|directive found| DROP[Quarantine that chunk<br/>keep the rest]
+    DROP --> GEN
+    CG -->|clean| GEN[Generate with citations<br/>gemini-3.5-flash-lite]
+
+    GEN --> GRADE{Claim-level self-check<br/>gemini-3.1-flash-lite}
+    GRADE -->|grounded| OUT([Answer + page citations<br/>+ latency, tokens, cost])
+    GRADE -.->|unsupported claims| RETRY[Reformulate and re-retrieve<br/>max 2 attempts]
+    RETRY -.-> GEN
+    GRADE -.->|still ungrounded| ABSTAIN[/"I couldn't find this<br/>in the source material"/]
+
+    classDef refusal fill:#fff4e6,stroke:#d97706,stroke-width:2px
+    classDef store fill:#eef2ff,stroke:#4f46e5
+    class REFUSE,ABSTAIN refusal
+    class SEARCH store

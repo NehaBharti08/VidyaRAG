@@ -1,0 +1,60 @@
+name: Evaluation
+
+# Never on push. A full run is ~58 questions through generation and grading
+# against a rate-limited free tier, so wiring it to every commit would exhaust
+# the daily quota and block the work it exists to measure.
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "Profile to evaluate"
+        required: true
+        default: "guarded"
+        type: choice
+        options: [baseline, rerank, decompose, corrective, guarded]
+      rate:
+        description: "Graded metrics per minute (lower if you see 429s)"
+        required: false
+        default: "5"
+
+jobs:
+  evaluate:
+    name: run gold set
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - run: uv python install 3.11
+      - run: uv sync --frozen --group eval
+
+      # The index is derived data and is not committed. Rebuilding it here is
+      # offline and needs no key -- embeddings run locally -- but it does take
+      # roughly an hour, which is why this workflow is manual.
+      - name: Build the index
+        run: |
+          uv run vidyarag download
+          uv run vidyarag ingest
+
+      - name: Evaluate
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          QDRANT_MODE: embedded
+          QDRANT_PATH: data/index
+        run: uv run vidyarag eval --profile "${{ inputs.profile }}" --rate "${{ inputs.rate }}"
+
+      # Uploaded rather than committed. A run from CI has not been reviewed, and
+      # eval/results/ is the evidence directory -- a number lands there only
+      # once a person has looked at it.
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-${{ inputs.profile }}
+          path: eval/results/
+          retention-days: 30

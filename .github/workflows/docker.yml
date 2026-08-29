@@ -1,0 +1,51 @@
+name: Docker
+
+on:
+  push:
+    branches: [main]
+    paths: ["Dockerfile", ".dockerignore", "pyproject.toml", "uv.lock", "src/**"]
+  pull_request:
+    paths: ["Dockerfile", ".dockerignore", "pyproject.toml", "uv.lock", "src/**"]
+  workflow_dispatch:
+
+# Docker Desktop is not installed on the development machine, so CI is where the
+# image is actually proven to build. A Dockerfile nobody has built is a claim,
+# not a deliverable.
+jobs:
+  build:
+    name: build image
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: vidyarag:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Report image size
+        run: |
+          size=$(docker image inspect vidyarag:ci --format='{{.Size}}')
+          mb=$((size / 1024 / 1024))
+          echo "image size: ${mb} MB" >> "$GITHUB_STEP_SUMMARY"
+          # The no-torch decision is worth defending automatically. A stack that
+          # quietly reintroduces torch would roughly sextuple this.
+          if [ "$mb" -gt 900 ]; then
+            echo "::error::image is ${mb} MB, over the 900 MB budget - has torch crept in?"
+            exit 1
+          fi
+
+      - name: Package imports inside the image
+        run: |
+          docker run --rm vidyarag:ci python -c "import vidyarag; print(vidyarag.__version__)"
+
+      - name: CLI responds
+        run: docker run --rm vidyarag:ci python -m vidyarag.cli version
