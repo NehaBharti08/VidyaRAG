@@ -30,7 +30,12 @@ COPY pyproject.toml uv.lock README.md LICENSE ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 COPY src/ ./src/
-RUN uv sync --frozen --no-dev
+# --no-editable matters. The default editable install writes a path pointing
+# at /build/src, which does not exist in the runtime stage, so the copied venv
+# resolves to nothing and `import vidyarag` fails with ModuleNotFoundError.
+# Installing a real wheel puts the package inside site-packages, where it
+# travels with the venv.
+RUN uv sync --frozen --no-dev --no-editable
 
 # --- runtime ---------------------------------------------------------------
 FROM python:3.11-slim AS runtime
@@ -50,7 +55,8 @@ ENV PATH="/app/.venv/bin:$PATH" \
 WORKDIR /app
 
 COPY --from=builder --chown=vidyarag:vidyarag /build/.venv /app/.venv
-COPY --chown=vidyarag:vidyarag src/ /app/src/
+# No src/ here: --no-editable put the package inside the venv, so shipping
+# the sources again would only add a second, shadowing copy.
 COPY --chown=vidyarag:vidyarag config/ /app/config/
 
 # The index is NOT baked in. It is ~35 MB of derived data, rebuildable offline
