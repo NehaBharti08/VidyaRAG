@@ -8,6 +8,13 @@
 *.key
 secrets.json
 .secrets/
+# Token files. The HF CLI stores credentials under the user profile rather than
+# the repo, but a token pasted into a scratch file here would otherwise be one
+# `git add -A` away from history, and a leaked token survives `git rm`.
+.hf_token
+.huggingface
+*.token
+hf_token*
 
 # ---------------------------------------------------------------------------
 # Corpus and derived artifacts.
