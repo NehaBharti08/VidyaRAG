@@ -536,6 +536,111 @@ number already near ceiling — while recall @context sits at 0.913 — would be
 optimising the wrong stage. That is a decision from the measurements, not a
 shortcut around them.
 
+### Phase 5 — the corrective self-check loop
+
+The number this phase existed to move:
+
+| Abstention | baseline | rerank | corrective |
+|---|---:|---:|---:|
+| Unanswerable questions | 12 | 12 | 12 |
+| …correctly refused | 0 | 0 | **12** |
+| **Recall** | 0.000 | 0.000 | **1.000** |
+| Precision | — | — | 0.800 |
+| F1 | — | — | 0.889 |
+| False abstention rate | 0.000 | 0.000 | 0.065 |
+
+**Every unanswerable question is now refused, and none was refused by accident
+of a keyword.** Recall alone would be trivial to fake — a system that refused
+everything scores 1.000 — so precision and the false abstention rate are
+reported beside it. Fifteen questions were refused: the twelve that should have
+been, and three that should not.
+
+#### The quality gains are not real, and saying so matters
+
+Read naively, the headline table looks like the loop improved answers:
+
+| | rerank | corrective | apparent Δ |
+|---|---:|---:|---:|
+| Answer relevancy | 0.770 | 0.844 | +0.074 |
+| Faithfulness | 0.950 | 0.959 | +0.009 |
+
+It did not. Abstentions are excluded from RAGAS grading — a refusal has no
+faithfulness to measure — so `graded_samples` falls from 46 to 43, and the
+three questions removed are among the worst-answered in the set. Comparing the
+two profiles on **only the 43 questions both actually answered**:
+
+| | rerank | corrective | real Δ |
+|---|---:|---:|---:|
+| Answer relevancy | 0.807 | 0.844 | +0.037 |
+| Faithfulness | 0.950 | 0.959 | +0.010 |
+| Context precision | 0.825 | 0.819 | −0.006 |
+| Context recall | 0.981 | 0.981 | 0.000 |
+
+**Half the apparent relevancy gain is the denominator shrinking, and what
+remains sits inside the ±0.04 noise floor.** The corrective loop does not make
+answers better. It removes answers that should not have been given.
+
+That is worth stating plainly because the naive comparison was available, it
+flattered the work, and nothing in the harness would have objected to it.
+
+#### The three "false" abstentions are not false alarms
+
+The three answerable questions it refused — all multi-hop — scored like this
+under `rerank`, which answered them:
+
+| | score on those 3 |
+|---|---:|
+| Faithfulness | 0.952 |
+| **Answer relevancy** | **0.238** |
+| Context precision | 0.317 |
+| **Context recall** | **0.444** |
+
+Against 0.981 context recall across the run. **Retrieval genuinely failed on
+those three questions**, and the generator — looking at passages that did not
+contain the answer — said so. The loop converted that into an explicit
+abstention.
+
+So the 6.5% false abstention rate is not a trigger-happy guard. It is three
+retrieval failures the system declined to paper over. Under `rerank` those same
+questions produced *well-grounded answers to the wrong material*: faithfulness
+0.952 on context that had 0.444 recall. Faithful to the passages, useless to
+the student. That failure mode is invisible to faithfulness alone, and it is
+exactly what abstention is for.
+
+#### The retry path barely runs
+
+| | |
+|---|---:|
+| Loop fired | 16 / 58 |
+| Abstained | 15 / 58 |
+| Needed a second attempt | **1 / 58** |
+
+Of 58 questions, 57 finished in one attempt. **The retry mechanism — query
+reformulation from failed claims, re-retrieval, regeneration — fired exactly
+once.** In practice this is an abstention gate, not a corrective loop.
+
+The honest reading is that `max_attempts=2` is not currently earning its
+complexity, and the claim-level grading that justifies it is being used almost
+entirely for its refusal signal rather than its retry signal. Claim decomposition
+still pays for itself — it is what produces a defensible groundedness score —
+but the loop that consumes it is doing one job, not two.
+
+Left in rather than removed, because one sample is not enough to conclude the
+retry never helps, and the cost of an unused branch is latency on a single
+query. Recorded here so the next person does not assume it is load-bearing.
+
+#### What it costs
+
+| | baseline | rerank | corrective |
+|---|---:|---:|---:|
+| Mean latency | 1,091 ms | 6,856 ms | **22,031 ms** |
+| Cost per query (list price) | $0.00026 | $0.00027 | $0.00027 |
+
+**20× baseline latency**, driven by the grading call on every query plus
+reranking. Actual spend is unchanged because grading runs on the free tier; the
+price is entirely time. For a study assistant answering one question at a time
+that is defensible. For anything interactive it would not be.
+
 ## What did not work
 
 _Pending. This section is expected to be non-empty._
