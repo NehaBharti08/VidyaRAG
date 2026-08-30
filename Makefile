@@ -26,6 +26,10 @@ download: ## Fetch the OpenStax PDFs (resumable, ~415MB)
 ingest: ## Parse, chunk, embed and index the corpus (offline, no API key)
 	$(UV) run vidyarag ingest
 
+.PHONY: ui
+ui: ## Run the Gradio demo on http://localhost:7860
+	$(UV) run python app/app.py
+
 .PHONY: serve
 serve: ## Run the HTTP API on :8000
 	$(UV) run uvicorn vidyarag.api.main:app --reload

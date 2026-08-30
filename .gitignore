@@ -75,6 +75,10 @@ htmlcov/
 coverage.xml
 .hypothesis/
 
+# Personal preparation notes. Useful locally, but a defence brief sitting in a
+# public portfolio repo reads oddly to the audience it is preparing for.
+NOTES-*.md
+
 # ---------------------------------------------------------------------------
 # Editors / OS
 # ---------------------------------------------------------------------------
