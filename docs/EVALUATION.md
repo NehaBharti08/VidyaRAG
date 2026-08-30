@@ -2,9 +2,10 @@
 
 Methodology, gold set provenance, and per-phase results.
 
-> **Status: pending.** The harness lands in Phase 3. This file is deliberately
-> created empty of results rather than pre-populated — no number appears here
-> before it has been measured.
+> Every number below is traceable to a committed run file under
+> [`eval/results/`](../eval/results/). All four ablations share one gold-set
+> digest (`258cb6f9b1a2ab04`), so the comparisons are between pipelines rather
+> than between moving targets.
 
 ---
 
@@ -643,4 +644,55 @@ that is defensible. For anything interactive it would not be.
 
 ## What did not work
 
-_Pending. This section is expected to be non-empty._
+Kept as a list because the failures are more informative than the successes,
+and because a project whose "what went wrong" section is empty has either been
+extraordinarily lucky or is not looking.
+
+**Query decomposition — built, measured, rejected.** Intended to fix multi-hop
+retrieval; made it worse, 0.864 → 0.727 recall @context on the questions it
+split. The cause was not the obvious one: fusion was not losing passages, it was
+*ranking* them out. RRF scores by agreement between sub-questions, and the
+passage a hop uniquely needs earns one vote while generic passages both hops
+surface earn two. Not tunable — it is the ranking rule. Full analysis above.
+
+**The retrieval metrics could not see reranking.** `score_retrieval` was fed
+only the pre-rerank candidate pool, so context recall and MRR came back
+*bit-identical* between baseline and rerank while context precision moved six
+points. Two frozen metrics across a run that demonstrably changed the context is
+not a result. Caught by asking why they were identical rather than accepting it.
+
+**A run lost 39 of 58 questions and reported metrics anyway.** Quota exhaustion,
+and the gold set is ordered by type, so the survivors were 17 factual, 0
+multi-hop, 2 unanswerable. It printed faithfulness 0.949 — high *because* the
+hard questions were missing. The harness now withholds metrics entirely above a
+10% failure rate rather than flagging them, since a table is easier to copy than
+a warning is to heed.
+
+**The first unanswerable question set was unusable.** All twelve passed both
+verification checks legitimately, and eleven contained the word "exact" with
+nine opening "What is the exact...". A system could have learned the phrasing
+and refused on style alone, scoring perfect abstention with no groundedness
+reasoning — the exact failure the verification existed to prevent, arriving
+through a door nobody was watching.
+
+**The injection guard fired on real textbook content.** Three chunks matched
+`^SYSTEM:` — the chapter headings "THE CARDIOVASCULAR SYSTEM: BLOOD" and
+siblings, wrapped so `SYSTEM` landed at a line start. Quarantining the
+cardiovascular chapters to catch a hypothetical injection is a bad trade. Now 0
+false positives across all 3,608 chunks.
+
+**LlamaIndex was declared, documented, and never used.** The README named it as
+the orchestration layer and justified the choice. `git grep llama_index` across
+the repository returned nothing. Nothing failed — an unused dependency installs
+quietly and a false README line reads fine. It would have failed at the first
+"show me where this is used".
+
+**The retry half of the corrective loop is effectively dead.** It fires once in
+58 queries. Claim-level grading earns its place through the refusal decision;
+the reformulate-and-retry path it was built to enable does not currently earn
+its complexity.
+
+**`temperature: 0.0` is not determinism.** Three identical calls returned three
+different texts. Everything answer-dependent therefore carries a noise floor,
+and one nearly-reported "regression" (relevancy −0.013 under reranking) turned
+out to be three times smaller than the baseline's own run-to-run spread.

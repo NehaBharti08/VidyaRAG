@@ -15,10 +15,13 @@ harness that measures whether any of it actually helped.
 
 </div>
 
-> **Status: Phase 6 complete.** Ingestion, baseline, evaluation harness,
-> retrieval ablations, the corrective self-check and the injection guardrails are
-> all built and measured. Phase 7 (packaging and deployment) is in progress.
-> No number here appears before it has been measured.
+> **Status: Phase 7 — packaging complete, deployment pending.** Everything is
+> built and measured: ingestion, baseline, evaluation harness, retrieval
+> ablations, the corrective self-check, injection guardrails, Docker and CI. The
+> live demo goes up on **6 September 2026**, when the hosting account clears the
+> 30-day age requirement — see [Live demo](#live-demo). No number here appears
+> before it has been measured, and
+> [docs/EVALUATION.md](docs/EVALUATION.md#what-did-not-work) lists what failed.
 
 ---
 
