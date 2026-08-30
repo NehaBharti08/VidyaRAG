@@ -11,9 +11,11 @@ requires-python = ">=3.11,<3.13"
 # Evaluation tooling (ragas -> langchain) is deliberately NOT here: it would
 # add ~200MB to the deployed image for code that never runs in production.
 dependencies = [
-    # Orchestration
-    "llama-index-core>=0.12,<0.15",
-    "llama-index-vector-stores-qdrant>=0.4,<0.8",
+    # No orchestration framework. LlamaIndex was in the original plan and was
+    # never imported once: the pipeline is a few hundred lines over
+    # qdrant-client, fastembed and google-genai, and a framework on top would
+    # have added indirection without removing any of it. The dependency sat
+    # unused until a check for what the README claimed turned it up.
     # Vector store. [fastembed] provides ONNX dense embeddings, sparse (BM25),
     # and cross-encoder reranking -- all on CPU, without dragging in torch.
     "qdrant-client[fastembed]>=1.12,<2.0",
@@ -150,7 +152,6 @@ plugins = ["pydantic.mypy"]
 module = [
     "fastembed.*",
     "qdrant_client.*",
-    "llama_index.*",
     "fitz",
     "gradio.*",
     # `eval` dependency group -- not installed in the default dev sync, and

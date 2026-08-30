@@ -232,7 +232,7 @@ uv run vidyarag report                       # compare committed runs
 
 | Concern | Choice | Why |
 |---|---|---|
-| Orchestration | LlamaIndex | Structure-aware node metadata survives retrieval, which is what makes citations real rather than decorative. |
+| Orchestration | None — wired directly | LlamaIndex was in the original plan and was never used. The pipeline is a few hundred lines over `qdrant-client`, `fastembed` and `google-genai`; a framework on top would have added indirection without removing any. |
 | Vector store | Qdrant | One `QdrantClient` API covers in-process, local server, and cloud — see [`store/client.py`](src/vidyarag/store/client.py). |
 | Embeddings | `BAAI/bge-base-en-v1.5` via fastembed | ONNX on CPU, **no torch, no API key**. Retrieval therefore has no external dependency at all — the published demo cannot be broken by an expired account. |
 | Generation | `gemini-3.5-flash-lite` (grading: `gemini-3.1-flash-lite`) | Pinned, never aliased: `-latest` would change model underneath a benchmark and make every reported delta incomparable. Generator and grader are deliberately different models — a model grading its own output rates it favourably. |
