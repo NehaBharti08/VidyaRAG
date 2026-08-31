@@ -12,10 +12,18 @@ before the first token.
 from __future__ import annotations
 
 import builtins
+import importlib.util
 
 import pytest
 
 from vidyarag.evaluation.metrics import check_grading_dependencies
+
+# The eval group is not installed by a default `uv sync`, which is the whole
+# reason this check exists -- and it is what CI runs. A test asserting the
+# check *passes* is therefore conditional on those packages being present;
+# without this guard it encodes whichever environment happened to run it, and
+# fails in CI while passing on a developer machine that once ran --group eval.
+HAS_EVAL_DEPS = all(importlib.util.find_spec(name) is not None for name in ("ragas", "openai"))
 
 
 def _hide(monkeypatch: pytest.MonkeyPatch, *names: str) -> None:
@@ -31,8 +39,15 @@ def _hide(monkeypatch: pytest.MonkeyPatch, *names: str) -> None:
 
 
 class TestPreflight:
+    @pytest.mark.skipif(not HAS_EVAL_DEPS, reason="eval group not installed")
     def test_passes_when_dependencies_are_present(self) -> None:
         check_grading_dependencies()
+
+    @pytest.mark.skipif(HAS_EVAL_DEPS, reason="eval group is installed")
+    def test_reports_them_missing_when_they_are(self) -> None:
+        """The other half of the same property, for the environment CI runs in."""
+        with pytest.raises(RuntimeError, match=r"--group eval"):
+            check_grading_dependencies()
 
     def test_names_the_missing_package(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _hide(monkeypatch, "openai")
