@@ -75,6 +75,38 @@ CACHE_HIT_SECONDS = 0.25
 from RAGAS's disk cache. Used to decide whether pacing is needed at all."""
 
 
+def check_grading_dependencies() -> None:
+    """Fail now if grading cannot run later.
+
+    RAGAS and the OpenAI client live in the ``eval`` dependency group, which a
+    default ``uv sync`` does not install, and they are imported lazily inside
+    :class:`MetricSuite` so the runtime package works without them.
+
+    That laziness has a sharp edge. A run invoked without the group generates
+    every answer first -- twenty minutes of paced, quota-consuming calls -- and
+    only then dies on ``ModuleNotFoundError: No module named 'openai'`` at the
+    first grading call. Measured, on a real run.
+
+    Nothing about that failure needs the answers to exist. It is knowable before
+    the first token, so it is checked before the first token.
+
+    Raises:
+        RuntimeError: Naming the missing package and the command that installs
+            it, rather than an import error from four frames deep.
+    """
+    missing: list[str] = []
+    for module, package in (("ragas", "ragas"), ("openai", "openai")):
+        try:
+            __import__(module)
+        except ImportError:
+            missing.append(package)
+    if missing:
+        raise RuntimeError(
+            f"grading needs the 'eval' dependency group ({', '.join(missing)} missing). "
+            "Re-run as: uv run --group eval vidyarag eval ..."
+        )
+
+
 class RateLimiter:
     """Paces async operations to a fixed rate, skipping the wait when it buys nothing.
 

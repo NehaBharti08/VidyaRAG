@@ -53,6 +53,7 @@ from vidyarag.evaluation.metrics import (
     DEFAULT_SCORES_PER_MINUTE,
     METRIC_NAMES,
     MetricSuite,
+    check_grading_dependencies,
 )
 from vidyarag.evaluation.retrieval import score_retrieval
 from vidyarag.generate.prompts import ANSWER_PROMPT_VERSION
@@ -394,6 +395,12 @@ def run_evaluation(
     Returns:
         The completed run, not yet written to disk.
     """
+    # Before anything expensive. Grading imports live in the `eval` dependency
+    # group and are loaded lazily, so a run without them generates every
+    # answer -- twenty minutes of quota -- and dies at the first grading
+    # call. That failure is knowable now, so it happens now.
+    check_grading_dependencies()
+
     resolved_settings = settings or Settings()
     resolved_profile = profile or resolved_settings.profile
     config = load_pipeline_config(resolved_profile)
