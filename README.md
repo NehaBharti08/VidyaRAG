@@ -114,36 +114,44 @@ against the frozen baseline.
 
 | | baseline | + rerank | + decompose | **shipped** |
 |---|---:|---:|---:|---:|
-| **Abstention recall** | 0.000 | 0.000 | 0.000 | **1.000** |
-| Abstention precision | — | — | — | 0.800 |
-| False abstention rate | 0.000 | 0.000 | 0.000 | 0.065 |
+| **Abstention recall** | 0.000 | 0.000 | 0.000 | **0.917 – 1.000** |
+| Abstention precision | — | — | — | 0.80 – 0.85 |
+| False abstention rate | 0.000 | 0.000 | 0.000 | 0.043 – 0.065 |
 | Faithfulness | 0.948 | 0.950 | 0.951 | 0.959 |
-| Answer relevancy | 0.755 | 0.770 | 0.709 | 0.844 |
+| Answer relevancy | 0.755 | 0.770 | 0.709 | 0.820 – 0.844 |
 | Context precision | 0.732 | 0.792 | 0.690 | 0.819 |
-| Context recall | 0.938 | 0.946 | 0.873 | 0.981 |
 | Recall @k | 0.967 | 0.967 | 0.957 | 0.967 |
 | Recall @context | 0.880 | **0.913** | 0.826 | **0.913** |
 | MRR | 0.770 | **0.830** | 0.769 | **0.830** |
-| Mean latency | 1,091 ms | 6,856 ms | 2,635 ms | 22,031 ms |
+| Mean latency | 1,091 ms | 6,856 ms | 2,635 ms | 21,738 ms |
 | Cost/query (list price) | $0.00026 | $0.00027 | $0.00026 | $0.00027 |
 
-**Abstention went 0.000 → 1.000.** All twelve unanswerable questions are now
-refused. Precision and the false abstention rate are reported beside recall
-because a system that refused *everything* would score 1.000 on recall alone.
+**Abstention went from never refusing to refusing 11–12 of 12.** The range is
+deliberate. Two runs of the shipped pipeline — differing only in two boolean
+flags that provably never fired — returned recall 1.000 and 0.917. That spread
+is generation non-determinism, not a configuration difference, and quoting the
+better number as though it were fixed would misrepresent it.
 
-**The quality gains in that last column are mostly not real, and the repo says
-so.** Abstentions are excluded from RAGAS grading, so the denominator drops from
-46 to 43 and the removed questions are among the worst-answered. Compared only
-on the 43 questions both profiles answered, relevancy moves +0.037 — half the
-apparent figure, and inside the measured ±0.04 noise floor. **The self-check
-does not make answers better; it removes answers that should not have been
-given.**
+Recall is reported beside precision and a false abstention rate because a system
+that refused *everything* would score 1.000 on recall alone.
 
-**The three "false" abstentions are not false alarms.** Those multi-hop
-questions had context recall 0.444 against 0.981 across the run — retrieval
-genuinely failed. Under `rerank` they produced faithfulness 0.952 on that broken
-context: *well-grounded answers to the wrong material*. That failure mode is
-invisible to faithfulness alone, and it is what abstention is for.
+**The guardrails are a verified no-op on normal traffic.** Across all 58 gold
+questions the input guard blocked nothing and the context guard quarantined
+nothing, while every deterministic retrieval metric came back bit-identical to
+the unguarded run. They cost latency only when there is something to catch.
+
+**The quality gains are mostly not real, and this repo says so.** Abstentions are
+excluded from RAGAS grading, so the denominator drops from 46 to 43 and the
+removed questions are the worst-answered. Compared only on the questions both
+profiles answered, relevancy moves +0.037 — inside the measured noise floor.
+**The self-check does not make answers better; it removes answers that should
+not have been given.**
+
+**The three "false" abstentions are not false alarms.** Those multi-hop questions
+had context recall 0.444 against 0.981 across the run — retrieval genuinely
+failed. Under `rerank` they produced faithfulness 0.952 on that broken context:
+*well-grounded answers to the wrong material*. That failure mode is invisible to
+faithfulness alone, and it is what abstention is for.
 
 **Decomposition was built, measured, and rejected.** It was meant to fix
 multi-hop retrieval and made it worse — recall @context on split multi-hop

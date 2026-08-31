@@ -3,9 +3,9 @@
 Methodology, gold set provenance, and per-phase results.
 
 > Every number below is traceable to a committed run file under
-> [`eval/results/`](../eval/results/). All four ablations share one gold-set
-> digest (`258cb6f9b1a2ab04`), so the comparisons are between pipelines rather
-> than between moving targets.
+> [`eval/results/`](../eval/results/). All five runs share one gold-set digest
+> (`258cb6f9b1a2ab04`), so the comparisons are between pipelines rather than
+> between moving targets.
 
 ---
 
@@ -641,6 +641,61 @@ query. Recorded here so the next person does not assume it is load-bearing.
 reranking. Actual spend is unchanged because grading runs on the free tier; the
 price is entirely time. For a study assistant answering one question at a time
 that is defensible. For anything interactive it would not be.
+
+### The shipped profile, and what a second run of it revealed
+
+`guarded` is what the demo, the container and the deploy script actually run:
+reranking, the corrective loop, and both injection guards. It had not been
+evaluated. The README reported a column labelled "shipped" using `corrective`
+numbers — a different configuration — which is precisely the misattribution the
+rest of this document exists to prevent, sitting in the summary table.
+
+Measured, 58 questions, 0 failures:
+
+| | corrective | guarded (shipped) | Δ |
+|---|---:|---:|---:|
+| **Abstention recall** | 1.000 | **0.917** | −0.083 |
+| Abstention precision | 0.800 | 0.846 | +0.046 |
+| Abstention F1 | 0.889 | 0.880 | −0.009 |
+| False abstention rate | 0.065 | 0.043 | −0.022 |
+| Answer relevancy | 0.844 | 0.820 | −0.024 |
+| Context recall | 0.981 | 0.955 | −0.026 |
+| Recall @k | 0.967 | 0.967 | **0.000** |
+| Hit rate @k | 0.978 | 0.978 | **0.000** |
+| Recall @context | 0.913 | 0.913 | **0.000** |
+| MRR | 0.830 | 0.830 | **0.000** |
+
+#### The guards are a verified no-op on clean traffic
+
+Across all 58 questions the input guard blocked **nothing** and the context guard
+quarantined **nothing**. Every deterministic retrieval metric is bit-identical.
+The two configurations are functionally the same pipeline on this gold set,
+differing only in two booleans that never fired.
+
+That is the result the run was for: the guardrails cost latency only when there
+is something to catch, and do not degrade normal operation.
+
+#### Which makes every other delta in that table noise
+
+And that is the uncomfortable part. **Abstention recall moved 1.000 → 0.917
+between two runs of what is provably the same pipeline.** One unanswerable
+question refused in the first run was answered in the second — 15 abstentions
+against 13.
+
+The headline claim was being reported as a fixed 1.000. It is not fixed. On two
+samples the shipped pipeline refuses **11 or 12 of 12**, and the honest summary
+is a range rather than the better endpoint.
+
+This also extends the noise floor established earlier. That measurement covered
+faithfulness (±0.006) and answer relevancy (±0.04) and did not cover abstention,
+because until now abstention had been measured exactly once per configuration.
+It is now known to move by **0.083** on a 12-question slice, which is what a
+single flipped question is worth when the denominator is twelve — an arithmetic
+consequence of a small gold set as much as of model variance.
+
+**The general lesson repeats:** a number measured once is not a measurement, it
+is an observation. Everything deterministic here reproduced exactly. Everything
+that passed through a model moved.
 
 ## What did not work
 
