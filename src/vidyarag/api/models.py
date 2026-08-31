@@ -7,7 +7,7 @@ citations it validated, and where the time and tokens went lets a caller check.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class QueryRequest(BaseModel):
@@ -109,3 +109,53 @@ class ConfigResponse(BaseModel):
     use_reranker: bool
     use_decomposition: bool
     corrective_enabled: bool
+
+
+class SearchRequest(BaseModel):
+    """Retrieval only -- no generation.
+
+    Distinct from QueryRequest on purpose. /query runs the whole pipeline and
+    returns an answer this service composed; /search returns the passages and
+    nothing else, so a caller can do its own reasoning over the evidence.
+
+    The agent in the sibling project is that caller: handing it a finished
+    answer would spend a second model's quota and move the reasoning out of the
+    system being evaluated.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(min_length=1, max_length=2000)
+    top_k: int = Field(default=5, ge=1, le=20)
+    book_slug: str | None = Field(
+        default=None,
+        description="Restrict to one book: 'biology' or 'anatomy-and-physiology'.",
+    )
+
+
+class SearchHit(BaseModel):
+    """One retrieved passage.
+
+    Field names match the Qdrant payload written at ingest, so this is a
+    projection of what is already stored rather than a translation layer that
+    can drift from it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    chunk_id: str
+    text: str
+    citation: str
+    book_slug: str
+    book_title: str
+    chapter: str | None
+    section: str | None
+    printed_page: str | None
+    source_url: str
+    score: float
+
+
+class SearchResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    results: list[SearchHit]

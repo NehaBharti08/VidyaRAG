@@ -160,3 +160,90 @@ class TestConfig:
         assert body["use_hybrid"] is False
         assert body["corrective_enabled"] is False
         assert body["top_k_retrieve"] > body["top_k_context"]
+
+
+class TestSearch:
+    """Retrieval only.
+
+    /search exists so a caller can reason over the evidence itself. The
+    contract it satisfies is consumed by the agent in the sibling project, so
+    these tests pin the field names -- a rename here breaks a separate
+    repository silently, and nothing in this one would notice.
+    """
+
+    def test_returns_passages(self, api: TestClient) -> None:
+        response = api.post("/v1/search", json={"query": "glucose bilayer", "top_k": 3})
+
+        assert response.status_code == 200
+        hits = response.json()["results"]
+        assert hits
+        assert "Glucose" in hits[0]["text"]
+
+    def test_carries_everything_a_citation_needs(self, api: TestClient) -> None:
+        """A passage without a checkable locator is unusable for a grounded
+        answer, which is the whole point of retrieving it."""
+        hit = api.post("/v1/search", json={"query": "glucose"}).json()["results"][0]
+
+        for field in (
+            "chunk_id",
+            "text",
+            "citation",
+            "book_slug",
+            "book_title",
+            "chapter",
+            "section",
+            "printed_page",
+            "source_url",
+            "score",
+        ):
+            assert field in hit, field
+        assert hit["printed_page"] == "121"
+        assert "5.2. Passive Transport" in hit["citation"]
+
+    def test_makes_no_llm_call(self, api: TestClient, pipeline: Pipeline) -> None:
+        """Retrieval must cost nothing and never be rate limited.
+
+        /query spends generation quota; /search must not, or a caller polling
+        it would exhaust the same budget the answer path needs.
+        """
+        calls = []
+        pipeline._llm = None
+        api.post("/v1/search", json={"query": "glucose"})
+
+        assert pipeline._llm is None
+        assert calls == []
+
+    def test_top_k_is_respected(self, api: TestClient) -> None:
+        hits = api.post("/v1/search", json={"query": "glucose", "top_k": 1}).json()["results"]
+
+        assert len(hits) <= 1
+
+    def test_book_filter(self, api: TestClient) -> None:
+        present = api.post("/v1/search", json={"query": "glucose", "book_slug": "biology"}).json()[
+            "results"
+        ]
+        absent = api.post(
+            "/v1/search", json={"query": "glucose", "book_slug": "anatomy-and-physiology"}
+        ).json()["results"]
+
+        assert present
+        assert absent == []
+
+    def test_no_match_is_an_empty_result_not_an_error(self, api: TestClient) -> None:
+        """'The corpus does not cover this' is the finding a caller needs in
+        order to say so rather than guess. A 404 would read as this service
+        being broken."""
+        response = api.post("/v1/search", json={"query": "glucose", "book_slug": "does-not-exist"})
+
+        assert response.status_code == 200
+        assert response.json()["results"] == []
+
+    def test_rejects_unknown_fields(self, api: TestClient) -> None:
+        """extra=forbid: a caller sending `topk` should be told, not silently
+        served the default."""
+        response = api.post("/v1/search", json={"query": "glucose", "topk": 3})
+
+        assert response.status_code == 422
+
+    def test_rejects_an_empty_query(self, api: TestClient) -> None:
+        assert api.post("/v1/search", json={"query": ""}).status_code == 422

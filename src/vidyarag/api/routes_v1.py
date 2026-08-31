@@ -19,10 +19,14 @@ from vidyarag.api.models import (
     QueryRequest,
     QueryResponse,
     RetrievedOut,
+    SearchHit,
+    SearchRequest,
+    SearchResponse,
     StageOut,
     TraceOut,
 )
 from vidyarag.pipeline import Pipeline
+from vidyarag.retrieve.dense import retrieve_dense
 from vidyarag.store.collection import count_points
 
 router = APIRouter(prefix="/v1", tags=["v1"])
@@ -94,6 +98,58 @@ def query(payload: QueryRequest, pipeline: PipelineDep) -> QueryResponse:
             retrieved=len(trace.retrieved_chunk_ids),
             cited=len(result.citations),
         ),
+    )
+
+
+@router.post("/search", response_model=SearchResponse)
+def search(payload: SearchRequest, pipeline: PipelineDep) -> SearchResponse:
+    """Retrieve passages. No generation, no LLM, no cost.
+
+    /query answers a question; this returns the evidence and stops. The
+    distinction matters for the agent in the sibling project: handing it a
+    finished answer would spend a second model's quota and move the reasoning
+    out of the system being evaluated. It wants passages to reason over.
+
+    Dense retrieval only -- no decomposition, no reranking. Those stages exist
+    to improve *this* service's answers, and a caller doing its own reasoning
+    should get the raw ranking rather than one tuned for someone else's
+    generator. It also keeps the endpoint free of LLM calls, so it costs
+    nothing per request and cannot be rate limited.
+    """
+    try:
+        chunks = retrieve_dense(
+            pipeline.client,
+            payload.query,
+            collection=pipeline.settings.qdrant_collection,
+            embedding_model=pipeline.config.embedding_model,
+            limit=payload.top_k,
+            book_slug=payload.book_slug,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Retrieval failed: {type(exc).__name__}",
+        ) from exc
+
+    # An empty list is a result, not an error. "The corpus does not cover
+    # this" is exactly the finding a caller needs in order to say so rather
+    # than guess, and a 404 here would read as the service being broken.
+    return SearchResponse(
+        results=[
+            SearchHit(
+                chunk_id=c.chunk_id,
+                text=c.text,
+                citation=c.citation,
+                book_slug=c.book_slug,
+                book_title=c.book_title,
+                chapter=c.chapter,
+                section=c.section,
+                printed_page=c.printed_page,
+                source_url=c.source_url,
+                score=c.score,
+            )
+            for c in chunks
+        ]
     )
 
 
