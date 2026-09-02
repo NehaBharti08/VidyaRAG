@@ -62,7 +62,11 @@ def stage(destination: Path) -> None:
                 source,
                 target,
                 dirs_exist_ok=True,
-                ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+                # .lock is Qdrant's exclusive-access marker for the embedded index. It
+                # must not travel: copying it fails outright while a local process
+                # holds it, and a stale one shipped into the Space could stop the
+                # deployed app opening the very index it just downloaded.
+                ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".lock"),
             )
         else:
             shutil.copy2(source, target)
