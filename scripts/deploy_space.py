@@ -86,6 +86,15 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="Stage only; do not push.")
     args = parser.parse_args()
 
+    # Load .env before authenticating, not after. huggingface_hub reads
+    # HF_TOKEN from the environment and never looks at .env itself, so a token
+    # stored there is invisible unless it is promoted first -- which fails as
+    # "not authenticated" and sends you looking for a login problem that is
+    # actually a loading problem.
+    from dotenv import load_dotenv
+
+    load_dotenv(REPO_ROOT / ".env")
+
     from huggingface_hub import HfApi
 
     api = HfApi()
@@ -125,9 +134,6 @@ def main() -> int:
         )
         print("uploaded")
 
-    from dotenv import load_dotenv
-
-    load_dotenv(REPO_ROOT / ".env")
     key = os.environ.get("GOOGLE_API_KEY", "")
     if not key:
         print("WARNING: GOOGLE_API_KEY not found locally; set it in Space settings")
