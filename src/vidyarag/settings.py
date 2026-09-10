@@ -77,7 +77,17 @@ class Settings(BaseSettings):
         default="vidyarag_biology_v1", validation_alias="QDRANT_COLLECTION"
     )
 
-    profile: str = Field(default="baseline", validation_alias="VIDYARAG_PROFILE")
+    profile: str = Field(default="guarded", validation_alias="VIDYARAG_PROFILE")
+    """Which pipeline configuration to run.
+
+    The default is the shipped profile, not the frozen `baseline` control.
+    `baseline` exists to be a fixed comparison point for the ablations and has
+    reranking, the corrective self-check, abstention and both injection guards
+    switched off -- so defaulting to it meant a fresh clone, the HTTP API and
+    the CLI all ran with the guardrails down and none of the behaviour this
+    project is about. Evaluation is unaffected: every ablation names its
+    profile explicitly, and each committed run file records the one it used.
+    """
 
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
     log_format: Literal["json", "console"] = Field(default="json", validation_alias="LOG_FORMAT")
@@ -130,6 +140,25 @@ class RetrievalConfig(BaseModel):
     use_decomposition: bool = False
     reranker_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
     sparse_model: str = "Qdrant/bm25"
+
+    @model_validator(mode="after")
+    def _reject_unimplemented_hybrid(self) -> RetrievalConfig:
+        """Refuse `use_hybrid: true` rather than accept it and do nothing.
+
+        Sparse retrieval was planned and never built; the key and `sparse_model`
+        are kept because the collection's dense vector is already named to leave
+        room for it. But a boolean that can be set, is read by the API and the
+        CLI, and changes nothing is the worst version of an unfinished feature:
+        it invites someone to turn it on and quietly returns dense-only results
+        that look fine. Fail at config load, where the cause is obvious.
+        """
+        if self.use_hybrid:
+            raise ValueError(
+                "retrieval.use_hybrid is reserved but not implemented -- sparse "
+                "retrieval would need the corpus re-indexed with sparse vectors. "
+                "Leave it false; see docs/DESIGN.md for why it was not built."
+            )
+        return self
 
 
 class CorrectiveConfig(BaseModel):

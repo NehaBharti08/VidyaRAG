@@ -43,9 +43,11 @@ def hit_at_k(retrieved_ids: list[str], gold_ids: list[str], k: int) -> bool | No
 def reciprocal_rank(retrieved_ids: list[str], gold_ids: list[str]) -> float | None:
     """Reciprocal of the rank of the first gold chunk; 0.0 if none was found.
 
-    Sensitive to ordering in a way recall is not, which is what makes it the
-    metric to watch when reranking is added in Phase 4: a reranker that changes
-    nothing else should still move this.
+    Sensitive to ordering in a way recall is not, which is what made it the
+    metric to watch when reranking was added: a reranker that changes nothing
+    else should still move this. It did -- 0.770 to 0.830 against an unchanged
+    recall @k of 0.967, which is exactly the signature of reordering the same
+    candidate pool rather than retrieving a better one.
     """
     if not gold_ids:
         return None

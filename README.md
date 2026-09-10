@@ -134,20 +134,30 @@ against the frozen baseline.
 | **Abstention recall** | 0.000 | 0.000 | 0.000 | **0.917 – 1.000** |
 | Abstention precision | — | — | — | 0.80 – 0.85 |
 | False abstention rate | 0.000 | 0.000 | 0.000 | 0.043 – 0.065 |
-| Faithfulness | 0.948 | 0.950 | 0.951 | 0.959 |
+| Faithfulness | 0.948 | 0.950 | 0.951 | 0.959 – 0.962 |
 | Answer relevancy | 0.755 | 0.770 | 0.709 | 0.820 – 0.844 |
-| Context precision | 0.732 | 0.792 | 0.690 | 0.819 |
+| Context precision | 0.732 | 0.792 | 0.690 | 0.819 – 0.828 |
 | Recall @k | 0.967 | 0.967 | 0.957 | 0.967 |
 | Recall @context | 0.880 | **0.913** | 0.826 | **0.913** |
 | MRR | 0.770 | **0.830** | 0.769 | **0.830** |
-| Mean latency | 1,091 ms | 6,856 ms | 2,635 ms | 21,738 ms |
+| Mean latency | 1,091 ms | 6,856 ms | 2,635 ms | 21,738 – 22,031 ms |
 | Cost/query (list price) | $0.00026 | $0.00027 | $0.00026 | $0.00027 |
 
-**Abstention went from never refusing to refusing 11–12 of 12.** The range is
-deliberate. Two runs of the shipped pipeline — differing only in two boolean
-flags that provably never fired — returned recall 1.000 and 0.917. That spread
-is generation non-determinism, not a configuration difference, and quoting the
-better number as though it were fixed would misrepresent it.
+**Abstention went from never refusing to refusing 11–12 of 12.** The ranges in
+the shipped column are deliberate. Two runs of that pipeline — differing only in
+two boolean flags that provably never fired — bracket every non-deterministic
+metric. Recall came back 1.000 and 0.917. That spread is generation
+non-determinism, not a configuration difference, and quoting the better number
+as though it were fixed would misrepresent it, so both ends are shown wherever
+the two runs disagree.
+
+Every cell above is read directly from a committed run file — `corrective` from
+[`eval/results/corrective__20260828T154656Z.json`](eval/results/corrective__20260828T154656Z.json)
+and `guarded` from
+[`eval/results/guarded__20260831T064335Z.json`](eval/results/guarded__20260831T064335Z.json).
+All five runs share gold-set digest `258cb6f9b1a2ab04`, which is what makes the
+columns comparable at all. `uv run vidyarag report` regenerates the comparison
+from those files.
 
 Recall is reported beside precision and a false abstention rate because a system
 that refused *everything* would score 1.000 on recall alone.
@@ -231,11 +241,12 @@ selective carrier proteins [1, 3, 5]...
 ```
 
 > **This quickstart is verified, not assumed.** Cloned into a clean directory
-> and run verbatim on 2026-08-29: `uv sync`, `cp .env.example .env`,
+> and run verbatim on 2026-09-10: `uv sync`, `cp .env.example .env`,
 > `uv run vidyarag health` (exit 0, correctly reporting no index yet),
-> `uv run vidyarag config`, and `uv run pytest` — 356 passed. The two expensive
-> steps, `download` (~415 MB) and `ingest` (~1 hr), were not re-run in the clean
-> clone; they are exercised by the committed corpus manifest and index instead.
+> `uv run vidyarag config`, and `uv run pytest` — **384 passed, 1 skipped**.
+> The two expensive steps, `download` (~415 MB) and `ingest` (~1 hr), were not
+> re-run in the clean clone; they are exercised by the committed corpus manifest
+> and index instead.
 
 Page numbers are the **printed** ones, so they can be checked against a paper
 copy — not the PDF page index, which differs by 12 in Biology.
@@ -251,8 +262,32 @@ uv run pytest                                # run the test suite
 
 ```bash
 uv run vidyarag eval --profile rerank        # run an ablation against the gold set
-uv run vidyarag report                       # compare committed runs
+uv run vidyarag report                       # reproduces the results table above
 ```
+
+---
+
+## HTTP API
+
+`uv run uvicorn vidyarag.api.main:app` serves four endpoints. Responses are
+Pydantic-modelled, so the OpenAPI schema at `/docs` is generated from the same
+types the handlers return rather than written separately and left to drift.
+
+| | | |
+|---|---|---|
+| `POST` | `/v1/query` | Full pipeline. Returns the answer, its citations, the context it used, and a trace |
+| `POST` | `/v1/search` | **Retrieval only — no generation, no API key, no cost.** Reranked passages straight back |
+| `GET` | `/v1/health` | Liveness plus what is actually indexed: collection, point count, active models |
+| `GET` | `/v1/config` | The resolved profile, so a caller can tell which pipeline answered it |
+
+`/v1/search` exists because retrieval is the half of a RAG system another agent
+usually wants. It runs the same dense-then-rerank path as `/v1/query` and stops
+before the LLM, so it needs no Gemini key and costs nothing per call — which
+also makes it the endpoint to reach for when debugging whether a bad answer was
+a retrieval failure or a generation one.
+
+`/v1/health` reports the point count deliberately: a service pointed at an empty
+collection is up, returns 200, and is useless. The count is the difference.
 
 ---
 
@@ -292,6 +327,23 @@ _Expanded as the system is measured. Known now:_
   well-grounded. This is a study aid, not a reference.
 - The embedded index mode uses a linear scan and is appropriate for this
   corpus size (~6k chunks), not for arbitrary scale.
+- **Short definitional questions are the weakest case, and it is a chunking
+  problem rather than a retrieval one.** Asked *"what is tissue?"*, the system
+  answers around the definition instead of giving it. Retrieval is not at
+  fault: A&P §4.1 "Types of Tissues" ranks first at both stages (dense 0.685,
+  then cross-encoder 0.455 against 0.074 for the runner-up). But the winning
+  chunk opens mid-sentence — *"Connective tissue, as its name implies, binds…"*
+  — because the sentence that defines the term was split into a neighbouring
+  chunk that is never retrieved. The definition proper survives only inside
+  glossary chunks, which concatenate hundreds of unrelated terms and embed to
+  something too diffuse to rank. Given five passages that genuinely do not
+  define the word, the model said so, which is the designed behaviour working.
+  The fix is re-chunking on section boundaries and splitting glossaries
+  per-term, which means re-ingesting and re-running every ablation.
+- **The gold set under-samples that failure.** Its 58 questions were generated
+  *from passages*, so they are passage-shaped and rarely one-word lookups —
+  which is why recall @k of 0.967 coexists with the weakness above. A
+  dictionary-shaped question class would need to be added to measure it.
 
 ---
 

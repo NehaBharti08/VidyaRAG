@@ -65,8 +65,15 @@ retrieval:
   use_decomposition: false
   # ONNX cross-encoder via fastembed: 80MB and no torch dependency, which
   # keeps the deployed image near 400MB instead of ~2.5GB.
-  # BAAI/bge-reranker-base (1.04GB, MIT) is ablated against this in Phase 4.
+  # BAAI/bge-reranker-base (1.04GB, MIT) was considered and never measured --
+  # it is 13x the size for a stage that already lifted MRR 0.770 -> 0.830, and
+  # it would not fit the free hosting this demo runs on. Recorded as a gap in
+  # docs/DESIGN.md rather than implied to have been tested.
   reranker_model: Xenova/ms-marco-MiniLM-L-6-v2
+  # Reserved, not implemented. `use_hybrid` is false in every profile and no
+  # code path reads either key: sparse retrieval would need the corpus
+  # re-indexed with sparse vectors, and first-stage recall @k is already 0.967.
+  # See src/vidyarag/store/collection.py and docs/DESIGN.md.
   sparse_model: Qdrant/bm25
 
 # --- Corrective self-check --------------------------------------------------

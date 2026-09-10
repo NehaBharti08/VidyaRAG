@@ -9,9 +9,17 @@ survivors were 17 factual, 0 multi-hop and 2 unanswerable: the score was high
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from vidyarag.evaluation.goldset import QuestionType
 from vidyarag.evaluation.report import render_report
-from vidyarag.evaluation.runner import MAX_FAILURE_RATE, EvalRun, SampleResult
+from vidyarag.evaluation.runner import (
+    MAX_FAILURE_RATE,
+    REPORT_ORDER,
+    EvalRun,
+    SampleResult,
+    profiles_with_runs,
+)
 
 
 def _run(*, ok: int, failed_by_type: dict[QuestionType, int]) -> EvalRun:
@@ -88,3 +96,36 @@ class TestInvalidReport:
         report = render_report(_run(ok=58, failed_by_type={}))
         assert "INVALID RUN" not in report
         assert "## RAGAS metrics" in report
+
+
+class TestReportProfileDiscovery:
+    """`vidyarag report` with no arguments must compare, not self-compare.
+
+    It defaulted to ["baseline"], so the headline command for reproducing the
+    README results table rendered a single column of the control group against
+    itself -- the one configuration whose numbers the table exists to contrast.
+    """
+
+    def test_finds_every_profile_that_has_a_run(self, tmp_path: Path) -> None:
+        for name in ("guarded", "baseline", "rerank"):
+            (tmp_path / f"{name}__20260101T000000Z.json").write_text("{}", encoding="utf-8")
+        assert profiles_with_runs(tmp_path) == ["baseline", "rerank", "guarded"]
+
+    def test_orders_the_control_first_not_alphabetically(self, tmp_path: Path) -> None:
+        """Alphabetical order reverses the sequence the ablations were run in."""
+        for name in REPORT_ORDER:
+            (tmp_path / f"{name}__20260101T000000Z.json").write_text("{}", encoding="utf-8")
+        assert profiles_with_runs(tmp_path) == list(REPORT_ORDER)
+
+    def test_unknown_profiles_still_appear(self, tmp_path: Path) -> None:
+        """A profile added later must not silently vanish from the comparison."""
+        (tmp_path / "baseline__20260101T000000Z.json").write_text("{}", encoding="utf-8")
+        (tmp_path / "experimental__20260101T000000Z.json").write_text("{}", encoding="utf-8")
+        assert profiles_with_runs(tmp_path) == ["baseline", "experimental"]
+
+    def test_missing_directory_is_not_an_error(self, tmp_path: Path) -> None:
+        assert profiles_with_runs(tmp_path / "nope") == []
+
+    def test_the_committed_runs_cover_every_column_in_the_readme(self) -> None:
+        """The README table has five columns; all five must be reproducible."""
+        assert profiles_with_runs() == list(REPORT_ORDER)

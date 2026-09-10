@@ -116,10 +116,18 @@ dependency**.
 for ~130 ms per batch on CPU either way. Avoiding it keeps the container near
 400 MB and makes the app deployable on constrained free tiers.
 
-*To be measured (Phase 4):* `BAAI/bge-reranker-base` (1.04 GB, MIT) scores
-better on public benchmarks. The ablation reports the delta **on this corpus**.
-If it is under a point, shipping the small model is the correct call and the
-number justifies it.
+*Not measured — a real gap:* `BAAI/bge-reranker-base` (1.04 GB, MIT) scores
+better on public benchmarks, and the plan was to ablate it here so the choice of
+the small model rested on a number from **this corpus** rather than on general
+reputation. That ablation was never run. Two things overtook it: the MiniLM
+reranker already moved MRR 0.770 → 0.830 and context recall 0.880 → 0.913, and
+the deployment target turned out to be a free tier where a 1 GB model is not
+loadable at all — so the decision was made by the hosting constraint before the
+measurement could inform it.
+
+That is the honest ordering, and it means the claim "the small model is good
+enough" is supported by its absolute numbers, not by a measured comparison
+against the larger one.
 
 *Rejected:* `jinaai/jina-reranker-v2-base-multilingual`. Strong model, but
 CC-BY-NC-4.0 — a non-commercial license is wrong for an MIT-licensed repo that

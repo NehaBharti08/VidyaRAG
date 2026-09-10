@@ -22,6 +22,26 @@ class TestSettings:
         settings = Settings(_env_file=None)  # type: ignore[call-arg]
         assert settings.qdrant_mode is QdrantMode.EMBEDDED
 
+    def test_defaults_to_the_shipped_profile_not_the_control_group(self) -> None:
+        """An unconfigured install must run with the guardrails up.
+
+        `baseline` is the frozen control: no reranking, no self-check, no
+        abstention, no injection guards. It is the right thing to measure
+        against and the wrong thing to serve, and it was the default long
+        enough to ship a demo, an HTTP API and a CLI that all quietly ran it.
+        """
+        settings = Settings(_env_file=None)  # type: ignore[call-arg]
+        assert settings.profile == "guarded"
+
+    def test_the_default_profile_actually_has_its_protections_on(self, config_dir: Path) -> None:
+        """The default naming a profile is not the same as that profile being safe."""
+        settings = Settings(_env_file=None)  # type: ignore[call-arg]
+        cfg = load_pipeline_config(settings.profile, config_dir=config_dir)
+        assert cfg.corrective.enabled is True
+        assert cfg.guardrails.check_user_input is True
+        assert cfg.guardrails.check_retrieved_context is True
+        assert cfg.retrieval.use_reranker is True
+
     def test_server_mode_requires_url(self) -> None:
         with pytest.raises(ValueError, match="QDRANT_URL is required"):
             Settings(_env_file=None, QDRANT_MODE="server")  # type: ignore[call-arg]
@@ -107,6 +127,23 @@ class TestPipelineConfig:
     def test_unknown_profile_lists_available_ones(self, config_dir: Path) -> None:
         with pytest.raises(FileNotFoundError, match="Available: baseline"):
             load_pipeline_config("does-not-exist", config_dir=config_dir)
+
+    def test_enabling_unimplemented_hybrid_retrieval_fails_loudly(self) -> None:
+        """A flag that silently does nothing is worse than no flag.
+
+        `use_hybrid` is read by the HTTP API and printed by the CLI, so setting
+        it looks like it took effect. Sparse retrieval was never built, and
+        dense-only results returned under a `hybrid` label look perfectly fine
+        -- there is nothing to notice. Fail where the cause is visible.
+        """
+        with pytest.raises(ValueError, match="reserved but not implemented"):
+            PipelineConfig.model_validate({"retrieval": {"use_hybrid": True}})
+
+    def test_every_shipped_profile_leaves_hybrid_off(self, config_dir: Path) -> None:
+        profiles = sorted(p.stem for p in (config_dir / "profiles").glob("*.yaml"))
+        for name in profiles:
+            cfg = load_pipeline_config(name, config_dir=config_dir)
+            assert cfg.retrieval.use_hybrid is False, name
 
     def test_unknown_key_is_rejected(self) -> None:
         """A typo in a profile must fail loudly, not silently invalidate a run."""

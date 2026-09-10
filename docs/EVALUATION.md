@@ -751,3 +751,46 @@ its complexity.
 different texts. Everything answer-dependent therefore carries a noise floor,
 and one nearly-reported "regression" (relevancy −0.013 under reranking) turned
 out to be three times smaller than the baseline's own run-to-run spread.
+
+**A basic question exposed a chunk boundary, and the gold set could not see
+it.** Asked *"what is tissue?"* the deployed demo answered *around* the
+definition — describing plant tissue systems rather than defining the term. The
+instinct was to blame retrieval. Retrieval was right: A&P §4.1 "Types of
+Tissues" ranked first at both stages, dense 0.685 and cross-encoder 0.455
+against 0.074 for the runner-up, a wide and correct margin.
+
+The fault was inside the winning chunk. It opens mid-sentence — *"Connective
+tissue, as its name implies, binds the cells and organs…"* — because chunking
+split the sentence that defines the term into a neighbour that is never
+retrieved. Scanning all 3,608 chunks, the literal definition survives in exactly
+two places, both glossaries:
+
+```
+A&P Glossary p.172     "tissue  group of cells that are similar in form
+                        and perform related functions"
+Biology Glossary p.29  "tissue  group of similar cells carrying out
+                        related functions"
+```
+
+Glossary chunks concatenate hundreds of unrelated terms — *transitional
+epithelium*, *vasodilation*, *totipotent* — so their embedding is too diffuse to
+rank for any single one. They appear at ranks 5 and 10 and never carry weight.
+
+Given five passages that genuinely did not define the word, the model said so
+and worked with what it had. That is the abstention machinery behaving
+correctly; it simply chose the less useful of two honest options.
+
+The obvious fix was tested and rejected. BGE-v1.5 is trained with a query
+instruction prefix that is supposed to help short queries, and this pipeline
+does not use one. Adding it left the top three results bit-identical
+(0.4546 / 0.0741 / −0.6589 either way), so it was not the cause — and adopting
+it would have invalidated every number in the results table for nothing.
+
+**The more useful finding is why the gold set never caught this.** Its 58
+questions were generated *from passages*, making them passage-shaped: several
+sentences of context, rarely a bare one-word lookup. Recall @k of 0.967 is
+therefore measured over a question distribution that structurally excludes the
+case that fails. A dictionary-shaped question type would have to be added to
+measure it, and the real repair — re-chunking on section boundaries and
+splitting glossaries per term — means re-ingesting the corpus and re-running all
+five ablations.
