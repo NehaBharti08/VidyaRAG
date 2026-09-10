@@ -15,7 +15,6 @@ Secrets must never end up in one.
 
 from __future__ import annotations
 
-import enum
 from pathlib import Path
 from typing import Any, Literal
 
@@ -23,13 +22,15 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from vidyarag._compat import StrEnum
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = REPO_ROOT / "config"
 
 IN_MEMORY = ":memory:"
 
 
-class QdrantMode(enum.StrEnum):
+class QdrantMode(StrEnum):
     """How to reach Qdrant.
 
     All three resolve to the same ``QdrantClient`` API, so calling code never

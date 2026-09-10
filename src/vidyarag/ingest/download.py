@@ -24,13 +24,14 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 
 import httpx
 import pymupdf
 from pydantic import BaseModel, Field
 
+from vidyarag._compat import UTC
 from vidyarag.ingest.corpus import CORPUS, BookSpec
 from vidyarag.settings import REPO_ROOT
 

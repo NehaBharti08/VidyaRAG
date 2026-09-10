@@ -19,14 +19,15 @@ metric this project claims to measure honestly. Generation runs on
 
 from __future__ import annotations
 
-import enum
 from dataclasses import dataclass
 from typing import Any
 
 from pydantic import BaseModel, Field
 
+from vidyarag._compat import StrEnum
 
-class ClaimVerdict(enum.StrEnum):
+
+class ClaimVerdict(StrEnum):
     """Whether one claim is carried by the retrieved passages."""
 
     SUPPORTED = "supported"

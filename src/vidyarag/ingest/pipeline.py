@@ -19,7 +19,7 @@ An evaluation result whose index cannot be identified is not a result.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
-from datetime import UTC, datetime
+from datetime import datetime
 from itertools import islice
 from pathlib import Path
 from typing import TypeVar
@@ -27,6 +27,7 @@ from typing import TypeVar
 from pydantic import BaseModel, Field
 from qdrant_client import QdrantClient
 
+from vidyarag._compat import UTC
 from vidyarag.ingest.chunk import Chunk, chunk_pages
 from vidyarag.ingest.corpus import CORPUS, BookSpec
 from vidyarag.ingest.download import RAW_DIR

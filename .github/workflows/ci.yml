@@ -20,9 +20,18 @@ env:
 
 jobs:
   check:
-    name: lint · types · tests
+    name: lint · types · tests (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.10 is not optional coverage. The demo runs on a Hugging Face
+        # ZeroGPU Space, whose image is pinned to 3.10 by the platform, so a
+        # 3.11-only construct that only CI on 3.11 sees is a construct that
+        # reaches production and breaks the deployed app on import.
+        python-version: ["3.10", "3.11"]
 
     steps:
       - uses: actions/checkout@v4
@@ -34,10 +43,13 @@ jobs:
           cache-dependency-glob: uv.lock
 
       - name: Set up Python
-        run: uv python install 3.11
+        run: uv python install ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv sync --frozen
+        # --python is load-bearing: without it uv resolves against whatever
+        # interpreter it prefers, and the 3.10 leg of the matrix would quietly
+        # run on 3.11 and prove nothing.
+        run: uv sync --frozen --python ${{ matrix.python-version }}
 
       - name: Lint (ruff)
         run: uv run ruff check .
