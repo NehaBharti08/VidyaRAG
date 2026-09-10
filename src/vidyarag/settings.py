@@ -77,7 +77,17 @@ class Settings(BaseSettings):
         default="vidyarag_biology_v1", validation_alias="QDRANT_COLLECTION"
     )
 
-    profile: str = Field(default="baseline", validation_alias="VIDYARAG_PROFILE")
+    profile: str = Field(default="guarded", validation_alias="VIDYARAG_PROFILE")
+    """Which pipeline configuration to run.
+
+    The default is the shipped profile, not the frozen `baseline` control.
+    `baseline` exists to be a fixed comparison point for the ablations and has
+    reranking, the corrective self-check, abstention and both injection guards
+    switched off -- so defaulting to it meant a fresh clone, the HTTP API and
+    the CLI all ran with the guardrails down and none of the behaviour this
+    project is about. Evaluation is unaffected: every ablation names its
+    profile explicitly, and each committed run file records the one it used.
+    """
 
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
     log_format: Literal["json", "console"] = Field(default="json", validation_alias="LOG_FORMAT")

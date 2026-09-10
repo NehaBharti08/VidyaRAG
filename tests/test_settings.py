@@ -22,6 +22,26 @@ class TestSettings:
         settings = Settings(_env_file=None)  # type: ignore[call-arg]
         assert settings.qdrant_mode is QdrantMode.EMBEDDED
 
+    def test_defaults_to_the_shipped_profile_not_the_control_group(self) -> None:
+        """An unconfigured install must run with the guardrails up.
+
+        `baseline` is the frozen control: no reranking, no self-check, no
+        abstention, no injection guards. It is the right thing to measure
+        against and the wrong thing to serve, and it was the default long
+        enough to ship a demo, an HTTP API and a CLI that all quietly ran it.
+        """
+        settings = Settings(_env_file=None)  # type: ignore[call-arg]
+        assert settings.profile == "guarded"
+
+    def test_the_default_profile_actually_has_its_protections_on(self, config_dir: Path) -> None:
+        """The default naming a profile is not the same as that profile being safe."""
+        settings = Settings(_env_file=None)  # type: ignore[call-arg]
+        cfg = load_pipeline_config(settings.profile, config_dir=config_dir)
+        assert cfg.corrective.enabled is True
+        assert cfg.guardrails.check_user_input is True
+        assert cfg.guardrails.check_retrieved_context is True
+        assert cfg.retrieval.use_reranker is True
+
     def test_server_mode_requires_url(self) -> None:
         with pytest.raises(ValueError, match="QDRANT_URL is required"):
             Settings(_env_file=None, QDRANT_MODE="server")  # type: ignore[call-arg]
