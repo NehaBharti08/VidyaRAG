@@ -4,10 +4,11 @@ emoji: 📚
 colorFrom: green
 colorTo: indigo
 sdk: gradio
+sdk_version: 5.50.0
 app_file: app.py
 pinned: false
 license: mit
-short_description: A study assistant that admits when the textbook lacks the answer
+short_description: Cited textbook answers, and abstention when there are none
 ---
 
 # VidyaRAG
