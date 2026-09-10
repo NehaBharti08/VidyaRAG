@@ -778,9 +778,15 @@ def report(
 ) -> None:
     """Print a comparison table across the latest run of each profile."""
     from vidyarag.evaluation.report import render_comparison
-    from vidyarag.evaluation.runner import latest_run
+    from vidyarag.evaluation.runner import latest_run, profiles_with_runs
 
-    names = profiles or ["baseline"]
+    # Defaulting to ["baseline"] compared the control against itself and printed
+    # a one-column "comparison", which is the opposite of what this command is
+    # for. With no arguments, report on everything that has been measured.
+    names = profiles or profiles_with_runs()
+    if not names:
+        console.print("[red]FAIL[/red]  no committed runs - run `vidyarag eval` first")
+        raise typer.Exit(code=1)
     runs = []
     for name in names:
         run = latest_run(name)

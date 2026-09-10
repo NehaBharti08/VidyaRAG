@@ -568,3 +568,27 @@ def latest_run(profile: str, directory: Path | None = None) -> EvalRun | None:
         return None
     candidates = sorted(folder.glob(f"{profile}__*.json"))
     return load_run(candidates[-1]) if candidates else None
+
+
+REPORT_ORDER = ("baseline", "rerank", "decompose", "corrective", "guarded")
+"""Reading order for a comparison: control first, then each enhancement.
+
+Sorting alphabetically would put `corrective` before `decompose` before
+`rerank`, which reverses the order the ablations were actually run in and makes
+the deltas read backwards.
+"""
+
+
+def profiles_with_runs(directory: Path | None = None) -> list[str]:
+    """Profiles that have at least one committed run, in reading order.
+
+    Used so `vidyarag report` with no arguments reproduces the README table
+    rather than comparing the baseline against itself. Any profile not named in
+    `REPORT_ORDER` still appears, sorted, after the ones that are.
+    """
+    folder = directory or RESULTS_DIR
+    if not folder.exists():
+        return []
+    found = {path.name.split("__", 1)[0] for path in folder.glob("*__*.json")}
+    known = [name for name in REPORT_ORDER if name in found]
+    return known + sorted(found - set(REPORT_ORDER))

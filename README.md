@@ -134,20 +134,30 @@ against the frozen baseline.
 | **Abstention recall** | 0.000 | 0.000 | 0.000 | **0.917 – 1.000** |
 | Abstention precision | — | — | — | 0.80 – 0.85 |
 | False abstention rate | 0.000 | 0.000 | 0.000 | 0.043 – 0.065 |
-| Faithfulness | 0.948 | 0.950 | 0.951 | 0.959 |
+| Faithfulness | 0.948 | 0.950 | 0.951 | 0.959 – 0.962 |
 | Answer relevancy | 0.755 | 0.770 | 0.709 | 0.820 – 0.844 |
-| Context precision | 0.732 | 0.792 | 0.690 | 0.819 |
+| Context precision | 0.732 | 0.792 | 0.690 | 0.819 – 0.828 |
 | Recall @k | 0.967 | 0.967 | 0.957 | 0.967 |
 | Recall @context | 0.880 | **0.913** | 0.826 | **0.913** |
 | MRR | 0.770 | **0.830** | 0.769 | **0.830** |
-| Mean latency | 1,091 ms | 6,856 ms | 2,635 ms | 21,738 ms |
+| Mean latency | 1,091 ms | 6,856 ms | 2,635 ms | 21,738 – 22,031 ms |
 | Cost/query (list price) | $0.00026 | $0.00027 | $0.00026 | $0.00027 |
 
-**Abstention went from never refusing to refusing 11–12 of 12.** The range is
-deliberate. Two runs of the shipped pipeline — differing only in two boolean
-flags that provably never fired — returned recall 1.000 and 0.917. That spread
-is generation non-determinism, not a configuration difference, and quoting the
-better number as though it were fixed would misrepresent it.
+**Abstention went from never refusing to refusing 11–12 of 12.** The ranges in
+the shipped column are deliberate. Two runs of that pipeline — differing only in
+two boolean flags that provably never fired — bracket every non-deterministic
+metric. Recall came back 1.000 and 0.917. That spread is generation
+non-determinism, not a configuration difference, and quoting the better number
+as though it were fixed would misrepresent it, so both ends are shown wherever
+the two runs disagree.
+
+Every cell above is read directly from a committed run file — `corrective` from
+[`eval/results/corrective__20260828T154656Z.json`](eval/results/corrective__20260828T154656Z.json)
+and `guarded` from
+[`eval/results/guarded__20260831T064335Z.json`](eval/results/guarded__20260831T064335Z.json).
+All five runs share gold-set digest `258cb6f9b1a2ab04`, which is what makes the
+columns comparable at all. `uv run vidyarag report` regenerates the comparison
+from those files.
 
 Recall is reported beside precision and a false abstention rate because a system
 that refused *everything* would score 1.000 on recall alone.
