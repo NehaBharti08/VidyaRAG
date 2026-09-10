@@ -27,6 +27,34 @@ from vidyarag.pipeline import Answer, Pipeline
 from vidyarag.settings import Settings, load_pipeline_config
 from vidyarag.store import build_client
 
+# ---------------------------------------------------------------------------
+# Hugging Face ZeroGPU startup requirement.
+#
+# ZeroGPU refuses to start a Space with "No @spaces.GPU function detected
+# during startup". VidyaRAG has no GPU work to declare: embedding and reranking
+# run on onnxruntime CPU, which is the decision that keeps the image around
+# 400MB instead of 2.5GB and is documented as such in the README.
+#
+# So this declaration is a platform formality, and it is written to cost the
+# shared pool nothing: the function is never called, so no GPU is ever
+# allocated. ZeroGPU is the only Gradio hardware a free account may host -- HF
+# moved free cpu-basic behind PRO -- and the honest alternative is a PRO
+# subscription, not a GPU this app would not use.
+#
+# The import is guarded because `spaces` exists only inside a Space; `make ui`
+# runs the same file locally.
+# ---------------------------------------------------------------------------
+try:
+    import spaces
+except ImportError:  # not running on a Space
+    pass
+else:
+
+    @spaces.GPU
+    def _zerogpu_startup_declaration() -> None:
+        """Never invoked. Present only so ZeroGPU will start the container."""
+
+
 PROFILE = os.environ.get("VIDYARAG_PROFILE", "guarded")
 
 EXAMPLES = [
@@ -159,4 +187,14 @@ def build_ui() -> Any:
 
 
 if __name__ == "__main__":
-    build_ui().queue(max_size=16).launch(server_name="0.0.0.0", server_port=7860)
+    # ssr_mode=False is deliberate, though it was not what broke the first
+    # deployment. Gradio 5 defaults to an experimental server-side-rendering
+    # path that runs a Node process alongside Python. This UI is a form and
+    # three Markdown panes; it gains nothing from SSR and gains a second
+    # runtime that can fail on its own. A demo that has to keep answering
+    # months from now does not need an experimental code path in it.
+    build_ui().queue(max_size=16).launch(
+        server_name="0.0.0.0",
+        server_port=7860,
+        ssr_mode=False,
+    )
