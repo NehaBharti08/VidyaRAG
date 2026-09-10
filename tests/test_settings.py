@@ -128,6 +128,23 @@ class TestPipelineConfig:
         with pytest.raises(FileNotFoundError, match="Available: baseline"):
             load_pipeline_config("does-not-exist", config_dir=config_dir)
 
+    def test_enabling_unimplemented_hybrid_retrieval_fails_loudly(self) -> None:
+        """A flag that silently does nothing is worse than no flag.
+
+        `use_hybrid` is read by the HTTP API and printed by the CLI, so setting
+        it looks like it took effect. Sparse retrieval was never built, and
+        dense-only results returned under a `hybrid` label look perfectly fine
+        -- there is nothing to notice. Fail where the cause is visible.
+        """
+        with pytest.raises(ValueError, match="reserved but not implemented"):
+            PipelineConfig.model_validate({"retrieval": {"use_hybrid": True}})
+
+    def test_every_shipped_profile_leaves_hybrid_off(self, config_dir: Path) -> None:
+        profiles = sorted(p.stem for p in (config_dir / "profiles").glob("*.yaml"))
+        for name in profiles:
+            cfg = load_pipeline_config(name, config_dir=config_dir)
+            assert cfg.retrieval.use_hybrid is False, name
+
     def test_unknown_key_is_rejected(self) -> None:
         """A typo in a profile must fail loudly, not silently invalidate a run."""
         with pytest.raises(ValueError, match=r"extra_inputs_not_permitted|Extra inputs"):

@@ -141,6 +141,25 @@ class RetrievalConfig(BaseModel):
     reranker_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
     sparse_model: str = "Qdrant/bm25"
 
+    @model_validator(mode="after")
+    def _reject_unimplemented_hybrid(self) -> RetrievalConfig:
+        """Refuse `use_hybrid: true` rather than accept it and do nothing.
+
+        Sparse retrieval was planned and never built; the key and `sparse_model`
+        are kept because the collection's dense vector is already named to leave
+        room for it. But a boolean that can be set, is read by the API and the
+        CLI, and changes nothing is the worst version of an unfinished feature:
+        it invites someone to turn it on and quietly returns dense-only results
+        that look fine. Fail at config load, where the cause is obvious.
+        """
+        if self.use_hybrid:
+            raise ValueError(
+                "retrieval.use_hybrid is reserved but not implemented -- sparse "
+                "retrieval would need the corpus re-indexed with sparse vectors. "
+                "Leave it false; see docs/DESIGN.md for why it was not built."
+            )
+        return self
+
 
 class CorrectiveConfig(BaseModel):
     """Self-check loop policy.
