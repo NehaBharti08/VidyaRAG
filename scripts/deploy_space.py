@@ -41,12 +41,31 @@ PAYLOAD = (
 # The Space runs app.py from its root, so the package must import without an
 # install step.
 BOOTSTRAP = (
+    "\n"
     "import sys\n"
     "from pathlib import Path\n"
     "\n"
     "sys.path.insert(0, str(Path(__file__).parent / 'src'))\n"
     "\n"
 )
+
+
+def bootstrapped_app(source: str) -> str:
+    """Splice the sys.path shim into app.py at a position Python accepts.
+
+    `from __future__` imports must be the first statement in a module, so the
+    shim cannot simply be prepended: doing so is a SyntaxError raised at import,
+    which the Space surfaces as a bare RUNTIME_ERROR with the app never
+    starting. Insert it directly after the future import instead -- legal, and
+    still ahead of the first `vidyarag` import that needs the path.
+    """
+    lines = source.splitlines(keepends=True)
+    insert_at = 0
+    for index, line in enumerate(lines):
+        if line.startswith("from __future__ import"):
+            insert_at = index + 1
+            break
+    return "".join(lines[:insert_at]) + BOOTSTRAP + "".join(lines[insert_at:])
 
 
 def stage(destination: Path) -> None:
@@ -72,7 +91,7 @@ def stage(destination: Path) -> None:
             shutil.copy2(source, target)
 
     app_source = (REPO_ROOT / "app" / "app.py").read_text(encoding="utf-8")
-    (destination / "app.py").write_text(BOOTSTRAP + app_source, encoding="utf-8")
+    (destination / "app.py").write_text(bootstrapped_app(app_source), encoding="utf-8")
 
 
 def main() -> int:
