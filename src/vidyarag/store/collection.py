@@ -27,7 +27,15 @@ from vidyarag.ingest.chunk import Chunk
 POINT_NAMESPACE = uuid.UUID("6f3c1e58-9a2b-4d77-9f0e-2c5a8b1d4e63")
 
 DENSE_VECTOR = "dense"
-"""Named vector. Sparse BM25 joins it under its own name in Phase 4."""
+"""Named rather than anonymous, so a sparse vector could join it later.
+
+Sparse BM25 was planned and never built: the rerank ablation showed first-stage
+recall was already 0.967 @k, leaving hybrid retrieval almost nothing to
+recover, and adding it would have required re-indexing the whole corpus. The
+name is kept because it costs nothing and changing it would orphan every
+written point. `retrieval.use_hybrid` is the config flag it would have driven;
+it is false in every profile and nothing reads it. See docs/DESIGN.md.
+"""
 
 
 def point_id(chunk_id: str) -> str:

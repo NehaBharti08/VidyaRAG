@@ -19,17 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-NOTE ON SCOPE
-
-This MIT license covers the SOURCE CODE of VidyaRAG only.
-
-The textbook corpus this project ingests is authored by OpenStax (Rice
-University) and licensed separately under Creative Commons Attribution 4.0
-International (CC BY 4.0). Corpus content -- including text reproduced in
-retrieved passages, citations, and generated answers -- remains subject to
-that license and its attribution requirements.
-
-See ATTRIBUTION.md for per-title licensing and required attribution text.
