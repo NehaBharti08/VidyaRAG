@@ -261,8 +261,32 @@ uv run pytest                                # run the test suite
 
 ```bash
 uv run vidyarag eval --profile rerank        # run an ablation against the gold set
-uv run vidyarag report                       # compare committed runs
+uv run vidyarag report                       # reproduces the results table above
 ```
+
+---
+
+## HTTP API
+
+`uv run uvicorn vidyarag.api.main:app` serves four endpoints. Responses are
+Pydantic-modelled, so the OpenAPI schema at `/docs` is generated from the same
+types the handlers return rather than written separately and left to drift.
+
+| | | |
+|---|---|---|
+| `POST` | `/v1/query` | Full pipeline. Returns the answer, its citations, the context it used, and a trace |
+| `POST` | `/v1/search` | **Retrieval only — no generation, no API key, no cost.** Reranked passages straight back |
+| `GET` | `/v1/health` | Liveness plus what is actually indexed: collection, point count, active models |
+| `GET` | `/v1/config` | The resolved profile, so a caller can tell which pipeline answered it |
+
+`/v1/search` exists because retrieval is the half of a RAG system another agent
+usually wants. It runs the same dense-then-rerank path as `/v1/query` and stops
+before the LLM, so it needs no Gemini key and costs nothing per call — which
+also makes it the endpoint to reach for when debugging whether a bad answer was
+a retrieval failure or a generation one.
+
+`/v1/health` reports the point count deliberately: a service pointed at an empty
+collection is up, returns 200, and is useless. The count is the difference.
 
 ---
 
@@ -302,6 +326,23 @@ _Expanded as the system is measured. Known now:_
   well-grounded. This is a study aid, not a reference.
 - The embedded index mode uses a linear scan and is appropriate for this
   corpus size (~6k chunks), not for arbitrary scale.
+- **Short definitional questions are the weakest case, and it is a chunking
+  problem rather than a retrieval one.** Asked *"what is tissue?"*, the system
+  answers around the definition instead of giving it. Retrieval is not at
+  fault: A&P §4.1 "Types of Tissues" ranks first at both stages (dense 0.685,
+  then cross-encoder 0.455 against 0.074 for the runner-up). But the winning
+  chunk opens mid-sentence — *"Connective tissue, as its name implies, binds…"*
+  — because the sentence that defines the term was split into a neighbouring
+  chunk that is never retrieved. The definition proper survives only inside
+  glossary chunks, which concatenate hundreds of unrelated terms and embed to
+  something too diffuse to rank. Given five passages that genuinely do not
+  define the word, the model said so, which is the designed behaviour working.
+  The fix is re-chunking on section boundaries and splitting glossaries
+  per-term, which means re-ingesting and re-running every ablation.
+- **The gold set under-samples that failure.** Its 58 questions were generated
+  *from passages*, so they are passage-shaped and rarely one-word lookups —
+  which is why recall @k of 0.967 coexists with the weakness above. A
+  dictionary-shaped question class would need to be added to measure it.
 
 ---
 
