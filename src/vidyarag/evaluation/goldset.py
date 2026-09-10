@@ -16,19 +16,19 @@ Two properties matter enough to be enforced at load time rather than trusted:
 
 from __future__ import annotations
 
-import enum
 import json
 from collections import Counter
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from vidyarag._compat import StrEnum
 from vidyarag.settings import REPO_ROOT
 
 DEFAULT_GOLDSET = REPO_ROOT / "eval" / "goldset" / "goldset_v1.jsonl"
 
 
-class QuestionType(enum.StrEnum):
+class QuestionType(StrEnum):
     """What a question is designed to test."""
 
     FACTUAL = "factual"
@@ -51,7 +51,7 @@ class QuestionType(enum.StrEnum):
     """Underspecified, or resting on a false presupposition. Tests graceful degradation."""
 
 
-class Provenance(enum.StrEnum):
+class Provenance(StrEnum):
     """How a question was produced. Reported verbatim in docs/EVALUATION.md.
 
     This field exists so the honest answer to "is this evaluation real?" lives

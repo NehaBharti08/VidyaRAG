@@ -13,13 +13,13 @@ docs/EVALUATION.md.
 
 from __future__ import annotations
 
-import enum
 from dataclasses import dataclass
 
+from vidyarag._compat import StrEnum
 from vidyarag.correct.grader import Groundedness
 
 
-class Decision(enum.StrEnum):
+class Decision(StrEnum):
     """What the loop should do next."""
 
     ACCEPT = "accept"

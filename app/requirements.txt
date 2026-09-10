@@ -12,7 +12,14 @@ google-genai>=1.0,<2.0
 pymupdf>=1.24,<2.0
 fastapi>=0.115,<1.0
 uvicorn[standard]>=0.32,<1.0
-gradio>=5.0,<6.0
+# gradio is deliberately ABSENT.
+#
+# The Space builder appends its own `gradio[oauth,mcp]==<sdk_version>` to this
+# install, taking the version from `sdk_version` in README.md. Declaring a range
+# here too made pip solve for both at once, and `gradio>=5.0,<6.0` against the
+# builder's 6.26.0 was ResolutionImpossible -- the Space failed to build.
+# The version the app is tested against is pinned in README.md instead, in the
+# one place the builder actually reads.
 pydantic>=2.9,<3.0
 pydantic-settings>=2.6,<3.0
 python-dotenv>=1.0,<2.0

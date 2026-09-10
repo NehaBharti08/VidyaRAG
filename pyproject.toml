@@ -5,7 +5,12 @@ description = "Agentic, self-correcting RAG study assistant over open-license Op
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [{ name = "Neha Bharti" }]
-requires-python = ">=3.11,<3.13"
+# The 3.10 floor is set by the deployment target, not by taste. Hugging Face
+# ZeroGPU images are pinned to Python 3.10 and ignore `python_version` in the
+# Space README, so anything the demo imports must run there. See
+# src/vidyarag/_compat.py; CI runs the suite on 3.10 as well as 3.11 so the
+# claim is tested rather than asserted.
+requires-python = ">=3.10,<3.13"
 
 # Runtime dependencies only. Everything needed to serve a query.
 # Evaluation tooling (ragas -> langchain) is deliberately NOT here: it would
@@ -105,7 +110,7 @@ packages = ["src/vidyarag"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py310"
 src = ["src", "tests", "eval", "scripts"]
 
 [tool.ruff.lint]
@@ -136,12 +141,12 @@ ignore = [
 
 [tool.black]
 line-length = 100
-target-version = ["py311"]
+target-version = ["py310"]
 
 # mypy runs strict on the core package only. Tests, eval harness and scripts
 # are exploratory by nature; forcing strict typing there buys noise, not safety.
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.10"
 files = ["src/vidyarag"]
 strict = true
 warn_unreachable = true

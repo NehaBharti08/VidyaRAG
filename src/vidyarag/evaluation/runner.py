@@ -29,12 +29,13 @@ import json
 import platform
 import time
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
 
+from vidyarag._compat import UTC
 from vidyarag.evaluation.abstention import (
     AbstentionStats,
     is_structural_abstention,
