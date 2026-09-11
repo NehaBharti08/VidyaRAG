@@ -23,6 +23,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
+      # Before anything expensive. Building the index takes roughly an hour and
+      # needs no key, so a missing secret would otherwise surface at the very
+      # last step, an hour in, as a generic failure. Check it in five seconds
+      # and say what to do about it.
+      - name: Require the API key up front
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        run: |
+          if [ -z "$GOOGLE_API_KEY" ]; then
+            echo "::error::GOOGLE_API_KEY is not set for this repository."
+            echo "This workflow generates and grades 58 answers, so it needs a key."
+            echo "Add one at Settings -> Secrets and variables -> Actions."
+            echo "Free key, no card: https://aistudio.google.com/apikey"
+            exit 1
+          fi
+          echo "GOOGLE_API_KEY is present."
+
       - uses: actions/checkout@v4
 
       - uses: astral-sh/setup-uv@v5
