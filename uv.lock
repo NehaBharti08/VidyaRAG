@@ -3424,7 +3424,6 @@ dependencies = [
     { name = "qdrant-client", extra = ["fastembed"] },
     { name = "rich" },
     { name = "structlog" },
-    { name = "tenacity" },
     { name = "typer" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -3463,7 +3462,6 @@ requires-dist = [
     { name = "qdrant-client", extras = ["fastembed"], specifier = ">=1.12,<2.0" },
     { name = "rich", specifier = ">=13.9,<15.0" },
     { name = "structlog", specifier = ">=24.4,<26.0" },
-    { name = "tenacity", specifier = ">=9.0,<10.0" },
     { name = "typer", specifier = ">=0.15,<1.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32,<1.0" },
 ]
