@@ -62,6 +62,22 @@ from vidyarag.pipeline import Pipeline, build_pipeline
 from vidyarag.settings import REPO_ROOT, PipelineConfig, Settings, load_pipeline_config
 
 RESULTS_DIR = REPO_ROOT / "eval" / "results"
+
+SCRATCH_DIR = RESULTS_DIR / "scratch"
+"""Where truncated runs go, and where `latest_run` never looks.
+
+`eval/results/` is the evidence directory behind the README table, and
+`latest_run` takes the newest file for a profile. A `--limit 4` smoke run
+therefore used to become "the latest guarded run" the moment it was written, so
+`vidyarag report` would print four questions' worth of numbers under the same
+heading as the real fifty-eight.
+
+That is the exact shape of the incident this harness already guards elsewhere: a
+partial run reporting a tidy table that is high *because* of what is missing.
+Truncated runs are still worth keeping -- they are how you check the pipeline
+works before spending an hour -- so they are written here instead, which is
+gitignored and invisible to run discovery.
+"""
 CACHE_DIR = REPO_ROOT / ".eval_cache"
 ANSWER_CACHE_DIR = REPO_ROOT / ".eval_cache" / "answers"
 ABSTENTION_CACHE_DIR = REPO_ROOT / ".eval_cache" / "abstention"

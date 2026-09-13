@@ -262,6 +262,20 @@ uv run vidyarag config --profile baseline   # inspect a pipeline variant
 uv run pytest                                # run the test suite
 ```
 
+The suite is hermetic by default — fake credentials, in-process Qdrant, mocked
+HTTP — which is correct, and leaves one thing unverified: whether the assembled
+system works against the real index and a live model. Three tests marked
+`costly` cover that and are deselected everywhere by default:
+
+```bash
+uv run pytest -m costly      # real corpus, real model, ~$0.0005 at list price
+```
+
+They assert the three behaviours that matter — a grounded answer with citations,
+an abstention on a question the corpus cannot support, and an injection blocked
+before retrieval spends anything. Every bug that reached the deployed Space was
+invisible to the hermetic suite.
+
 ```bash
 uv run vidyarag eval --profile rerank        # run an ablation against the gold set
 uv run vidyarag report                       # reproduces the results table above
