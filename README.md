@@ -221,7 +221,7 @@ cp .env.example .env
 
 uv run vidyarag health          # validate config and store connectivity
 uv run vidyarag download        # fetch the OpenStax PDFs (~415 MB, resumable)
-uv run vidyarag ingest          # parse, chunk, embed, index (~1 hr, offline)
+uv run vidyarag ingest          # parse, chunk, embed, index (~32 min, offline)
 
 # Answering needs a free Gemini key in .env
 uv run vidyarag ask "How does facilitated diffusion move glucose into a cell?"
@@ -243,12 +243,16 @@ selective carrier proteins [1, 3, 5]...
 ```
 
 > **This quickstart is verified, not assumed.** Cloned into a clean directory
-> and run verbatim on 2026-09-10: `uv sync`, `cp .env.example .env`,
+> and run verbatim on 2026-09-13: `uv sync`, `cp .env.example .env`,
 > `uv run vidyarag health` (exit 0, correctly reporting no index yet),
-> `uv run vidyarag config`, and `uv run pytest` — **387 passed, 1 skipped**.
-> The two expensive steps, `download` (~415 MB) and `ingest` (~1 hr), were not
-> re-run in the clean clone; they are exercised by the committed corpus manifest
-> and index instead.
+> `uv run vidyarag config`, and `uv run pytest` — **390 passed, 1 skipped**.
+>
+> **The corpus pipeline is verified too, end to end.** `download` re-validated
+> both PDFs against the committed checksums (2,900 pages, 415 MB). `ingest` then
+> rebuilt the index from scratch into a throwaway directory in **32 minutes**:
+> Biology 1,765 chunks, Anatomy and Physiology 1,843 — **3,608 points, matching
+> the shipped index exactly.** The index is derived data and stays out of git;
+> this is the check that it is genuinely derivable.
 
 Page numbers are the **printed** ones, so they can be checked against a paper
 copy — not the PDF page index, which differs by 12 in Biology.

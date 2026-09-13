@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
-      # Before anything expensive. Building the index takes roughly an hour and
+      # Before anything expensive. Building the index takes ~32 min (measured) and
       # needs no key, so a missing secret would otherwise surface at the very
       # last step, an hour in, as a generic failure. Check it in five seconds
       # and say what to do about it.
@@ -52,7 +52,7 @@ jobs:
 
       # The index is derived data and is not committed. Rebuilding it here is
       # offline and needs no key -- embeddings run locally -- but it does take
-      # roughly an hour, which is why this workflow is manual.
+      # ~32 minutes (measured locally), which is why this workflow is manual.
       - name: Build the index
         run: |
           uv run vidyarag download
