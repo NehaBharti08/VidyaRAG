@@ -16,10 +16,18 @@ from vidyarag.evaluation.report import render_report
 from vidyarag.evaluation.runner import (
     MAX_FAILURE_RATE,
     REPORT_ORDER,
+    RESULTS_DIR,
+    SCRATCH_DIR,
     EvalRun,
     SampleResult,
     profiles_with_runs,
 )
+
+
+def latest_run_path(directory, profile):
+    """Newest run file for a profile, mirroring how `latest_run` selects one."""
+    candidates = sorted(directory.glob(f"{profile}__*.json"))
+    return candidates[-1] if candidates else None
 
 
 def _run(*, ok: int, failed_by_type: dict[QuestionType, int]) -> EvalRun:
@@ -129,3 +137,33 @@ class TestReportProfileDiscovery:
     def test_the_committed_runs_cover_every_column_in_the_readme(self) -> None:
         """The README table has five columns; all five must be reproducible."""
         assert profiles_with_runs() == list(REPORT_ORDER)
+
+
+class TestTruncatedRunsStayOutOfTheEvidence:
+    """A `--limit` smoke run must never become the run the README quotes.
+
+    `latest_run` takes the newest file for a profile, so a four-question smoke
+    run written into eval/results/ became "the latest guarded run" the instant
+    it landed -- and `vidyarag report` would print its numbers under the same
+    heading as the real fifty-eight. That is the same shape as the incident at
+    the top of this file: a tidy table that is high because of what is missing.
+    """
+
+    def test_scratch_is_inside_results_but_not_discovered(self) -> None:
+        assert SCRATCH_DIR.parent == RESULTS_DIR
+        assert SCRATCH_DIR.name == "scratch"
+
+    def test_run_discovery_ignores_the_scratch_directory(self, tmp_path: Path) -> None:
+        (tmp_path / "guarded__20260101T000000Z.json").write_text("{}", encoding="utf-8")
+        scratch = tmp_path / "scratch"
+        scratch.mkdir()
+        (scratch / "guarded__20990101T000000Z.json").write_text("{}", encoding="utf-8")
+
+        assert profiles_with_runs(tmp_path) == ["guarded"]
+        newest = latest_run_path(tmp_path, "guarded")
+        assert newest is not None and "scratch" not in newest.parts
+
+    def test_scratch_is_gitignored(self) -> None:
+        """Otherwise a smoke run is one `git add -A` away from the evidence."""
+        ignore = (RESULTS_DIR.parents[1] / ".gitignore").read_text(encoding="utf-8")
+        assert "eval/results/scratch/" in ignore

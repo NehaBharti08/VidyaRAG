@@ -18,7 +18,6 @@ for programmatic use and is exercised by its own tests.
 
 from __future__ import annotations
 
-import os
 from typing import Any
 
 import gradio as gr
@@ -55,8 +54,6 @@ else:
         """Never invoked. Present only so ZeroGPU will start the container."""
 
 
-PROFILE = os.environ.get("VIDYARAG_PROFILE", "guarded")
-
 EXAMPLES = [
     "How does facilitated diffusion move glucose into a cell?",
     "What happens during anaphase of mitosis?",
@@ -76,11 +73,22 @@ def get_pipeline() -> Pipeline:
 
     The embedded Qdrant index holds a lock on its directory and cannot be
     opened twice, so a per-request pipeline would fail on the second caller.
+
+    The profile comes from `Settings`, not from `os.environ`. Reading the
+    environment directly made this a second source of truth for a setting
+    Settings already owns, and os.environ does not see `.env` -- so a local
+    `VIDYARAG_PROFILE=baseline` was honoured by the CLI and the HTTP API and
+    silently ignored here. Settings reads both, with real environment variables
+    taking precedence over `.env`, which is the order the Space relies on.
     """
     global _pipeline
     if _pipeline is None:
         settings = Settings()
-        _pipeline = Pipeline(settings, load_pipeline_config(PROFILE), client=build_client(settings))
+        _pipeline = Pipeline(
+            settings,
+            load_pipeline_config(settings.profile),
+            client=build_client(settings),
+        )
     return _pipeline
 
 

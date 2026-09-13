@@ -693,7 +693,7 @@ def evaluate(
 ) -> None:
     """Run a profile against the gold set and write a versioned result file."""
     from vidyarag.evaluation.report import render_report
-    from vidyarag.evaluation.runner import latest_run, run_evaluation
+    from vidyarag.evaluation.runner import SCRATCH_DIR, latest_run, run_evaluation
 
     settings = Settings()
     name = profile or settings.profile
@@ -721,7 +721,16 @@ def evaluate(
         console.print(f"[red]FAIL[/red]  {exc}")
         raise typer.Exit(code=1) from exc
 
-    written = run.save()
+    # A truncated run must not land in the evidence directory: `latest_run`
+    # takes the newest file for a profile, so a `--limit` smoke run would
+    # silently become the run `vidyarag report` and the README table quote.
+    written = run.save(SCRATCH_DIR if limit else None)
+    if limit:
+        console.print(
+            f"[yellow]NOTE[/yellow]  --limit {limit}: a partial run. Written to "
+            "eval/results/scratch/, which is gitignored and excluded from "
+            "`vidyarag report`."
+        )
     baseline = latest_run(compare) if compare and compare != run.profile else None
     report_path = written.with_suffix(".md")
     report_path.write_text(render_report(run, baseline), encoding="utf-8")
