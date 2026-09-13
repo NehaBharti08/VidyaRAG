@@ -11,9 +11,17 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Tests must never reach a paid API or a live vector store. The suite runs
-  # against in-process Qdrant, and anything that would spend money is marked
-  # `costly` and deselected below.
+  # Tests must never reach a paid API or a live vector store. Two things
+  # enforce that, and it is worth being exact about which does the work:
+  #
+  #   * These credentials are deliberate fakes, so anything attempting a real
+  #     call fails loudly instead of spending money.
+  #   * Qdrant runs in-process against ":memory:" -- no server, no network.
+  #
+  # The `costly` marker is a convention for tests that would knowingly spend
+  # money. No test carries it today, so `-m "not costly"` below currently
+  # deselects nothing; it is kept so the default command is already correct on
+  # the day such a test is added. The fakes above are the actual guard.
   OPENAI_API_KEY: test-key-not-real
   QDRANT_MODE: embedded
   QDRANT_PATH: ":memory:"

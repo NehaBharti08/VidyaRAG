@@ -188,6 +188,13 @@ minversion = "8.0"
 testpaths = ["tests"]
 addopts = "-ra --strict-markers --strict-config"
 asyncio_mode = "auto"
+# Both markers are conventions, and no test currently carries either one:
+# `pytest -m costly` and `pytest -m integration` each select zero of 388. They
+# are registered so that `-m "not costly"` -- the command CI, the Makefile and
+# the README all use -- is already correct the day such a test is written,
+# rather than being retrofitted after one has run up a bill. What actually keeps
+# the suite off paid APIs today is the fake credentials in the CI environment
+# and an in-process Qdrant, not these markers.
 markers = [
     "integration: touches a live external service (deselect with '-m \"not integration\"')",
     "costly: makes real paid API calls (deselect with '-m \"not costly\"')",
@@ -196,3 +203,10 @@ markers = [
 [tool.coverage.run]
 source = ["src/vidyarag"]
 branch = true
+
+[tool.coverage.report]
+# A floor, not a target. Coverage sits at 64% and the point of the number is
+# that it cannot quietly fall: an untested module added in a hurry should fail
+# the build rather than shift an unwatched percentage. Raise it when the real
+# figure rises; never lower it to make a red build green.
+fail_under = 60
