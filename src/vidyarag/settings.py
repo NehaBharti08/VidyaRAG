@@ -184,8 +184,8 @@ class RetrievalConfig(BaseModel):
 class CorrectiveConfig(BaseModel):
     """Self-check loop policy.
 
-    Thresholds are starting points to be tuned against the gold set in Phase 5,
-    not asserted constants. See docs/EVALUATION.md for the sweep.
+    Thresholds are untuned defaults, deliberately. See docs/DESIGN.md,
+    "Abstention: thresholds, and why they were not swept".
     """
 
     model_config = ConfigDict(extra="forbid")

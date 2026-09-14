@@ -77,8 +77,12 @@ retrieval:
   sparse_model: Qdrant/bm25
 
 # --- Corrective self-check --------------------------------------------------
-# Thresholds are Phase 5 starting points, tuned against the gold set and
-# reported in docs/EVALUATION.md. They are not asserted constants.
+# Thresholds are the plan's proposed values and are deliberately untuned.
+# Fitting two decision boundaries to the gold set's twelve unanswerable
+# questions would produce a number that looks tuned, generalises no better, and
+# spends the gold set as a development set. The reasoning, and what these
+# defaults measure, are in docs/DESIGN.md: "Abstention: thresholds, and why they
+# were not swept".
 corrective:
   enabled: false
   accept_threshold: 0.8

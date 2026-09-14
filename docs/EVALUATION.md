@@ -119,14 +119,16 @@ Target composition, 60 questions:
 ### Provenance — stated plainly
 
 Answerable questions are **drafted by the generation model from sampled chunks, then
-verified by hand.** Each is checked for three things: that it reads naturally,
+verified by hand** — recorded as `llm_drafted_human_verified`, 46 of the 58.
+Each is checked for three things: that it reads naturally,
 that the cited chunk genuinely answers it, and that it is *not* answerable from
 a model's parametric knowledge without retrieval. That third check is what stops
 the evaluation from silently measuring nothing.
 
 Unanswerable questions are **machine-proposed, mechanically verified against the
 corpus, then approved by hand** — recorded as `llm_drafted_retrieval_verified`,
-never as `human_written`.
+12 of the 58, and never as `human_written`. No question in the gold set is
+recorded as `human_written`, because none was.
 
 The original plan was to author these by hand, for a good reason: an LLM asked
 plainly for questions a corpus cannot answer produces obviously out-of-domain

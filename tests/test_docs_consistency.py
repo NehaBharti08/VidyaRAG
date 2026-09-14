@@ -55,3 +55,55 @@ def test_the_standalone_diagram_is_referenced_somewhere() -> None:
         if "architecture.mmd" in path.read_text(encoding="utf-8")
     ]
     assert referencing, "docs/architecture.mmd is not linked from README.md or DESIGN.md"
+
+
+def test_no_code_or_config_claims_the_thresholds_were_tuned() -> None:
+    """The abstention thresholds were deliberately left untuned.
+
+    Four places -- two config files, the policy module and the settings model --
+    said they had been tuned or swept against the gold set, and pointed to a
+    sweep in docs/EVALUATION.md. No sweep was run, and DESIGN.md has a section
+    explaining why not. The policy module, which calls these the most
+    consequential numbers in the system, made the false claim in bold.
+    """
+    claim = re.compile(
+        r"(tuned|swept) against the gold set|for the sweep|sweep and its results",
+        re.IGNORECASE,
+    )
+    sources = [*(REPO_ROOT / "src").rglob("*.py"), *(REPO_ROOT / "config").rglob("*.yaml")]
+    offenders = [
+        path.relative_to(REPO_ROOT).as_posix()
+        for path in sources
+        if claim.search(path.read_text(encoding="utf-8"))
+    ]
+    assert not offenders, f"claims a threshold sweep that was never run: {offenders}"
+
+    design = (REPO_ROOT / "docs" / "DESIGN.md").read_text(encoding="utf-8")
+    assert (
+        "Abstention: thresholds, and why they were not swept" in design
+    ), "code and config point readers at this DESIGN.md section"
+
+
+def test_every_provenance_the_gold_set_uses_is_reported_verbatim() -> None:
+    """`Provenance` promises its values are "reported verbatim in docs/EVALUATION.md".
+
+    That promise is the point of the field: the honest answer to "is this
+    evaluation real?" should live in the data, and the document should quote the
+    data rather than paraphrase it. It named the label on 12 questions and only
+    described, in prose, the label on the other 46.
+    """
+    import json
+
+    goldset = REPO_ROOT / "eval" / "goldset" / "goldset_v1.jsonl"
+    used = {
+        json.loads(line)["provenance"]
+        for line in goldset.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    }
+    assert used, "gold set records no provenance"
+
+    evaluation = (REPO_ROOT / "docs" / "EVALUATION.md").read_text(encoding="utf-8")
+    missing = sorted(value for value in used if f"`{value}`" not in evaluation)
+    assert (
+        not missing
+    ), f"provenance used by the gold set but not quoted in EVALUATION.md: {missing}"
