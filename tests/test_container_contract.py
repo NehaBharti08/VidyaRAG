@@ -69,3 +69,36 @@ def test_pyproject_takes_its_version_from_the_package() -> None:
     assert re.search(r'^dynamic\s*=\s*\[[^\]]*"version"', project, re.MULTILINE)
     assert not re.search(r"^version\s*=", project, re.MULTILINE)
     assert 'path = "src/vidyarag/__init__.py"' in pyproject
+
+
+def _stage(name: str) -> str:
+    """Text of one build stage, from its FROM line up to the next FROM."""
+    for part in re.split(r"^FROM\s", DOCKERFILE, flags=re.MULTILINE)[1:]:
+        if re.search(rf"\bAS\s+{name}\b", part.splitlines()[0], re.IGNORECASE):
+            return part
+    raise AssertionError(f"Dockerfile has no build stage named {name!r}")
+
+
+def test_the_venv_is_built_at_the_path_it_runs_from() -> None:
+    """Otherwise every console script's shebang names a missing interpreter.
+
+    The venv was built in /build and copied to /app. `uvicorn` kept the builder's
+    interpreter in its shebang, so CMD died with "exec /app/.venv/bin/uvicorn: no
+    such file or directory" -- the image could never serve a request. The import
+    check in CI kept passing because `python -c` never reads a shebang.
+    """
+    workdirs = re.findall(r"^WORKDIR\s+(\S+)", _stage("builder"), re.MULTILINE)
+    assert workdirs, "builder stage sets no WORKDIR"
+    built = f"{workdirs[-1].rstrip('/')}/.venv"
+
+    copy = re.search(
+        r"^COPY\s+--from=builder\b.*?\s(\S+/\.venv)\s+(\S+)\s*$", DOCKERFILE, re.MULTILINE
+    )
+    assert copy, "runtime stage should copy the venv out of the builder"
+    source, destination = copy.group(1), copy.group(2).rstrip("/")
+
+    assert source == built, f"copies {source} but the venv was built at {built}"
+    assert source == destination, (
+        f"venv built at {source} but run from {destination}: console-script "
+        "shebangs would name an interpreter that does not exist"
+    )

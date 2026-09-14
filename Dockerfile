@@ -18,7 +18,14 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 
 COPY --from=ghcr.io/astral-sh/uv:0.5 /uv /usr/local/bin/uv
 
-WORKDIR /build
+# The venv must be built at the path it runs from. Console scripts get an
+# absolute shebang naming the venv's interpreter, so a venv built in /build and
+# copied to /app left `uvicorn` pointing at /build/.venv/bin/python -- a path
+# that does not exist at runtime. `exec` then fails with "no such file or
+# directory" on a file that is plainly there, and CMD could never start the
+# server. `python -c` does not go through a shebang, which is why importing
+# the package inside the image kept passing. Building in /app makes it true.
+WORKDIR /app
 
 # Dependencies resolve from the lockfile before the source is copied, so a code
 # change does not invalidate the dependency layer.
@@ -31,7 +38,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 COPY src/ ./src/
 # --no-editable matters. The default editable install writes a path pointing
-# at /build/src, which does not exist in the runtime stage, so the copied venv
+# at /app/src, which is not copied into the runtime stage, so the copied venv
 # resolves to nothing and `import vidyarag` fails with ModuleNotFoundError.
 # Installing a real wheel puts the package inside site-packages, where it
 # travels with the venv.
@@ -54,7 +61,7 @@ ENV PATH="/app/.venv/bin:$PATH" \
 
 WORKDIR /app
 
-COPY --from=builder --chown=vidyarag:vidyarag /build/.venv /app/.venv
+COPY --from=builder --chown=vidyarag:vidyarag /app/.venv /app/.venv
 # No src/ here: --no-editable put the package inside the venv, so shipping
 # the sources again would only add a second, shadowing copy.
 COPY --chown=vidyarag:vidyarag config/ /app/config/
