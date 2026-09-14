@@ -51,12 +51,18 @@ FROM python:3.11-slim AS runtime
 # need it should not have it.
 RUN useradd --create-home --uid 1000 vidyarag
 
+# VIDYARAG_CONFIG_DIR is required, not optional. The package locates config/
+# relative to its own file, which is right in a checkout and on the Space --
+# both run from src/ -- and wrong here, where --no-editable installs it into
+# site-packages and "the repo root" becomes /app/.venv/lib/python3.11. The
+# server then refused to start: "Unknown profile 'guarded'. Available: (none)".
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     QDRANT_MODE=embedded \
     QDRANT_PATH=/app/data/index \
     VIDYARAG_PROFILE=guarded \
+    VIDYARAG_CONFIG_DIR=/app/config \
     FASTEMBED_CACHE_PATH=/home/vidyarag/.cache/fastembed
 
 WORKDIR /app

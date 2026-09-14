@@ -165,3 +165,41 @@ class TestPipelineConfig:
         assert profiles
         for name in profiles:
             assert load_pipeline_config(name, config_dir=config_dir).name == name
+
+
+class TestConfigDirectoryResolution:
+    """Where profiles load from when the package is not running from a checkout.
+
+    The default walks up from the package's own file, which is correct in a
+    checkout and on the Space and wrong for an installed package. The Docker
+    image hit exactly that and could not start.
+    """
+
+    def test_environment_override_is_honoured(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (tmp_path / "profiles").mkdir()
+        (tmp_path / "default.yaml").write_text("{}\n", encoding="utf-8")
+        (tmp_path / "profiles" / "probe.yaml").write_text(
+            "description: loaded from the override\n", encoding="utf-8"
+        )
+        monkeypatch.setenv("VIDYARAG_CONFIG_DIR", str(tmp_path))
+
+        cfg = load_pipeline_config("probe")
+        assert cfg.name == "probe"
+        assert cfg.description == "loaded from the override"
+
+    def test_missing_profile_error_names_the_directory_it_searched(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """'Available: (none)' with no path cost a full CI round to diagnose."""
+        monkeypatch.setenv("VIDYARAG_CONFIG_DIR", str(tmp_path))
+        with pytest.raises(FileNotFoundError) as caught:
+            load_pipeline_config("guarded")
+        assert str(tmp_path) in str(caught.value)
+
+    def test_without_the_override_the_checkout_config_is_used(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("VIDYARAG_CONFIG_DIR", raising=False)
+        assert load_pipeline_config("guarded").name == "guarded"

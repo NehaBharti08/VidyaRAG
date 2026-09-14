@@ -102,3 +102,20 @@ def test_the_venv_is_built_at_the_path_it_runs_from() -> None:
         f"venv built at {source} but run from {destination}: console-script "
         "shebangs would name an interpreter that does not exist"
     )
+
+
+def test_the_image_points_config_resolution_at_the_config_it_ships() -> None:
+    """An installed package cannot find config/ by walking up from its own file.
+
+    Installed non-editable, the package lives in site-packages, so the path it
+    derived for the repo root landed inside the venv and the server refused to
+    start with "Unknown profile 'guarded'. Available: (none)".
+    """
+    runtime = _stage("runtime")
+    env = re.search(r"\bVIDYARAG_CONFIG_DIR=(\S+)", runtime)
+    assert env, "runtime stage must set VIDYARAG_CONFIG_DIR"
+    copy = re.search(r"^COPY\b.*\sconfig/\s+(\S+)\s*$", runtime, re.MULTILINE)
+    assert copy, "runtime stage should copy config/ into the image"
+    assert env.group(1).rstrip("/") == copy.group(1).rstrip(
+        "/"
+    ), f"config is copied to {copy.group(1)} but resolved from {env.group(1)}"
