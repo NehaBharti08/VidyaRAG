@@ -1,6 +1,6 @@
 [project]
 name = "vidyarag"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Agentic, self-correcting RAG study assistant over open-license OpenStax textbooks."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -100,6 +100,13 @@ eval = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.version]
+# One version, owned by the package. There were three: pyproject and
+# __version__ said 0.1.0, the OpenAPI schema said 0.3.0, and the releases said
+# v1.2.0 -- so `vidyarag version`, /docs and the GitHub release page all
+# disagreed about what was running.
+path = "src/vidyarag/__init__.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/vidyarag"]
 
@@ -188,13 +195,13 @@ minversion = "8.0"
 testpaths = ["tests"]
 addopts = "-ra --strict-markers --strict-config"
 asyncio_mode = "auto"
-# Both markers are conventions, and no test currently carries either one:
-# `pytest -m costly` and `pytest -m integration` each select zero of 388. They
-# are registered so that `-m "not costly"` -- the command CI, the Makefile and
-# the README all use -- is already correct the day such a test is written,
-# rather than being retrofitted after one has run up a bill. What actually keeps
-# the suite off paid APIs today is the fake credentials in the CI environment
-# and an in-process Qdrant, not these markers.
+# `costly` holds the three live end-to-end tests in tests/test_live_pipeline.py,
+# which call the real model against the real index; `-m "not costly"` -- the
+# command CI, the Makefile and the README all use -- deselects exactly those.
+# `integration` is registered but carries no test yet, so `-m integration`
+# selects nothing. Neither marker is the thing keeping the default suite off
+# paid APIs: that is the fake credentials in the CI environment, an in-process
+# Qdrant, and the live tests skipping themselves when no key is present.
 markers = [
     "integration: touches a live external service (deselect with '-m \"not integration\"')",
     "costly: makes real paid API calls (deselect with '-m \"not costly\"')",

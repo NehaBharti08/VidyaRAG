@@ -15,6 +15,7 @@ Secrets must never end up in one.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Literal
 
@@ -26,6 +27,25 @@ from vidyarag._compat import StrEnum
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = REPO_ROOT / "config"
+"""Where profiles live in a checkout and on the Space, which both run from src/."""
+
+CONFIG_DIR_ENV = "VIDYARAG_CONFIG_DIR"
+
+
+def resolve_config_dir() -> Path:
+    """The directory profiles are loaded from.
+
+    `CONFIG_DIR` is found by walking up from this file, which is only right when
+    the package runs from a checkout. Installed non-editable -- as the Docker
+    image does -- the package sits in site-packages, the walk lands inside the
+    venv, and the server refused to start with "Unknown profile 'guarded'.
+    Available: (none)". An installed package cannot know where its config was
+    put, so the deployment says so explicitly. Read at call time rather than
+    import time, so the value in effect is the one the process actually has.
+    """
+    override = os.environ.get(CONFIG_DIR_ENV)
+    return Path(override) if override else CONFIG_DIR
+
 
 IN_MEMORY = ":memory:"
 
@@ -231,13 +251,16 @@ def load_pipeline_config(profile: str, config_dir: Path | None = None) -> Pipeli
     ``extra="forbid"`` on the models means a typo in a profile key is a startup
     error, not a silently ignored setting that quietly invalidates a benchmark.
     """
-    directory = config_dir or CONFIG_DIR
+    directory = config_dir or resolve_config_dir()
     base = _read_yaml(directory / "default.yaml")
     profile_path = directory / "profiles" / f"{profile}.yaml"
     if not profile_path.exists():
         available = sorted(p.stem for p in (directory / "profiles").glob("*.yaml"))
         raise FileNotFoundError(
-            f"Unknown profile {profile!r}. Available: {', '.join(available) or '(none)'}"
+            # Name the directory. "Available: (none)" alone gave no hint that the
+            # search was looking in the wrong place, which cost a CI round to see.
+            f"Unknown profile {profile!r} in {directory}. "
+            f"Available: {', '.join(available) or '(none)'}"
         )
     merged = _deep_merge(base, _read_yaml(profile_path))
     merged.setdefault("name", profile)

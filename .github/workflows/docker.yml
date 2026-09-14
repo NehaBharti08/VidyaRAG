@@ -3,9 +3,9 @@ name: Docker
 on:
   push:
     branches: [main]
-    paths: ["Dockerfile", ".dockerignore", "pyproject.toml", "uv.lock", "src/**"]
+    paths: ["Dockerfile", ".dockerignore", "pyproject.toml", "uv.lock", "src/**", "config/**", "docker-compose.yml", ".github/workflows/docker.yml"]
   pull_request:
-    paths: ["Dockerfile", ".dockerignore", "pyproject.toml", "uv.lock", "src/**"]
+    paths: ["Dockerfile", ".dockerignore", "pyproject.toml", "uv.lock", "src/**", "config/**", "docker-compose.yml", ".github/workflows/docker.yml"]
   workflow_dispatch:
 
 # Docker Desktop is not installed on the development machine, so CI is where the
@@ -49,3 +49,63 @@ jobs:
 
       - name: CLI responds
         run: docker run --rm vidyarag:ci python -m vidyarag.cli version
+      # A console script whose shebang names an interpreter that does not exist
+      # fails with 'exec ...: no such file or directory' even though the file is
+      # there. That is how CMD was broken: the venv was built at one path and
+      # copied to another, so `uvicorn` still pointed at the builder's python.
+      # `python -c` never goes through a shebang, which is why the import step
+      # above passed on an image that could not start its own server.
+      - name: Console scripts point at an interpreter that exists
+        run: |
+          for script in uvicorn vidyarag; do
+            line=$(docker run --rm --entrypoint head vidyarag:ci -n 1 /app/.venv/bin/$script)
+            echo "$script: $line"
+            interp=${line#\#!}
+            docker run --rm --entrypoint test vidyarag:ci -x "$interp" || { echo "::error::$script shebang names missing interpreter $interp"; exit 1; }
+          done
+          docker run --rm vidyarag:ci vidyarag version
+
+      # Building and importing is not serving. Both the HEALTHCHECK and the
+      # documented volume mount were wrong for the whole life of this file, and
+      # neither step above could see it because neither ever started the server.
+      # This runs the image the way the Dockerfile tells people to.
+      - name: Container serves requests and reports healthy
+        run: |
+          docker volume create vidyarag-index
+          docker run -d --name api -p 8000:8000 -v vidyarag-index:/app/data/index vidyarag:ci
+          for i in $(seq 1 45); do
+            running=$(docker inspect --format='{{.State.Running}}' api)
+            state=$(docker inspect --format='{{.State.Health.Status}}' api)
+            echo "running=$running health=$state"
+            [ "$running" = "true" ] || break
+            [ "$state" = "healthy" ] && break
+            sleep 4
+          done
+          echo "--- container log ---"
+          docker logs api 2>&1 | tail -40
+          test "$(docker inspect --format='{{.State.Health.Status}}' api)" = "healthy"
+          curl -fsS http://127.0.0.1:8000/v1/config | tee /dev/stderr | grep -q '"profile":"guarded"'
+          curl -fsS http://127.0.0.1:8000/v1/health | tee /dev/stderr | grep -q '"status":"ok"'
+
+      - name: Reported versions agree
+        run: |
+          cli=$(docker run --rm vidyarag:ci python -m vidyarag.cli version | awk '{print $2}')
+          api=$(curl -fsS http://127.0.0.1:8000/openapi.json | python3 -c "import json,sys; print(json.load(sys.stdin)['info']['version'])")
+          echo "cli=$cli api=$api"
+          test -n "$cli" && test "$cli" = "$api"
+
+      # The server-backed mode the README advertises had never run against a
+      # real Qdrant server: docker-compose.yml was untested and its healthcheck
+      # comment described a different command from the one it ran. Bring it up,
+      # wait for its own healthcheck, then point the built image at it.
+      - name: Server mode works against docker compose Qdrant
+        run: |
+          docker compose up -d
+          for i in $(seq 1 30); do
+            s=$(docker inspect --format='{{.State.Health.Status}}' vidyarag-qdrant)
+            echo "qdrant health=$s"
+            [ "$s" = "healthy" ] && break
+            sleep 3
+          done
+          test "$(docker inspect --format='{{.State.Health.Status}}' vidyarag-qdrant)" = "healthy"
+          docker run --rm --network host -e QDRANT_MODE=server -e QDRANT_URL=http://127.0.0.1:6333 vidyarag:ci python -m vidyarag.cli health

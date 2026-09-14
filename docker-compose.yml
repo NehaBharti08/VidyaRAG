@@ -22,8 +22,10 @@ services:
       QDRANT__SERVICE__ENABLE_TLS: "false"
       QDRANT__LOG_LEVEL: "INFO"
     healthcheck:
-      # Qdrant images are distroless-ish; use the bundled entrypoint binary
-      # rather than assuming curl exists.
+      # Opens a TCP connection to the REST port using bash's /dev/tcp, so the
+      # check needs no curl or wget in the image -- only bash, which the
+      # Debian-based Qdrant image ships. CI brings this service up and waits for
+      # it to report healthy, so that assumption is tested, not trusted.
       test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
       interval: 10s
       timeout: 5s

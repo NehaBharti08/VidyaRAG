@@ -258,8 +258,11 @@ Page numbers are the **printed** ones, so they can be checked against a paper
 copy — not the PDF page index, which differs by 12 in Biology.
 
 `health` validates configuration, resolves the pipeline profile, and checks
-vector store connectivity. It exits non-zero on failure, so CI and the
-container healthcheck both use it.
+vector store connectivity. It exits non-zero on failure, for scripts and CI.
+It is deliberately *not* the container healthcheck: it opens the embedded index
+itself, and inside a running container the server already holds that index's
+exclusive lock — so it fails against a healthy server. The container probes
+`/v1/health` over HTTP instead.
 
 ```bash
 uv run vidyarag config --profile baseline   # inspect a pipeline variant
