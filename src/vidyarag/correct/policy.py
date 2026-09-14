@@ -6,9 +6,16 @@ decide when it answers, when it tries again, and when it refuses. Burying them
 inside a control-flow function would make them look like implementation detail
 rather than the policy choice they are.
 
-**These are starting points, tuned against the gold set in Phase 5, not
-constants asserted from intuition.** The sweep and its results are in
-docs/EVALUATION.md.
+**These are untuned defaults, and that is a decision rather than an omission.**
+They are the values the plan proposed. Sweeping them would fit two decision
+boundaries to the gold set's twelve unanswerable questions: a number that looks
+tuned, generalises no better, and uses the gold set up as a development set. At
+these values abstention recall is already at ceiling, and the imprecise refusals
+were retrieval failures that no threshold can fix. The reasoning is in
+docs/DESIGN.md, "Abstention: thresholds, and why they were not swept".
+
+This docstring previously said the thresholds had been tuned, and pointed to a
+sweep in docs/EVALUATION.md. No sweep was run.
 """
 
 from __future__ import annotations
