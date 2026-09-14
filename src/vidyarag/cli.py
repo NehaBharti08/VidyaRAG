@@ -275,7 +275,11 @@ def ask(
 def health() -> None:
     """Verify configuration and vector store connectivity.
 
-    Exits non-zero on failure so CI and the container healthcheck can rely on it.
+    Exits non-zero on failure, for scripts and CI. It is deliberately not the
+    container healthcheck: it opens the embedded index itself, and inside a
+    running container uvicorn already holds that index's exclusive lock, so it
+    fails against a perfectly healthy server. The Dockerfile asks the server
+    over HTTP instead.
     """
     try:
         settings = Settings()

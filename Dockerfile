@@ -62,15 +62,29 @@ COPY --chown=vidyarag:vidyarag config/ /app/config/
 # The index is NOT baked in. It is ~35 MB of derived data, rebuildable offline
 # with `vidyarag ingest` and mounted at runtime, so the image stays a build
 # artefact rather than a data artefact:
-#   docker run -v $(pwd)/data/index:/app/data/index:ro vidyarag
+#   docker run -p 8000:8000 -v $(pwd)/data/index:/app/data/index vidyarag
+#
+# The mount must be writable. It was documented as `:ro`, which cannot work:
+# Qdrant's embedded mode takes an exclusive lock by opening `<index>/.lock` with
+# mode "r+", and that needs write access even when the file already exists, so a
+# read-only mount fails at startup before serving a single request. The
+# directory is created and handed to the runtime user so a named volume
+# inherits ownership that user can actually write to.
+RUN mkdir -p /app/data/index && chown -R vidyarag:vidyarag /app/data
 VOLUME ["/app/data/index"]
 
 USER vidyarag
 EXPOSE 8000
 
-# Reuses the same health command CI and the CLI use, so a container that reports
-# healthy has passed exactly the checks a developer would run by hand.
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD ["python", "-m", "vidyarag.cli", "health"]
+# Probes the running server over HTTP. This used to run `vidyarag health`, which
+# opens the embedded index itself -- but uvicorn takes that index's exclusive
+# lock at startup, so the check failed with "already accessed by another
+# instance of Qdrant client" and the container would have reported unhealthy
+# for its entire life while serving correctly. Reproduced outside Docker: exit 1
+# beside a server answering /v1/health with 3,608 points. Asking the server is
+# also the truer check -- it proves the process serving traffic is up, not that
+# a second process could start.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/v1/health', timeout=8)"]
 
 CMD ["uvicorn", "vidyarag.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

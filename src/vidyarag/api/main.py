@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from vidyarag import __version__
 from vidyarag.api.routes_v1 import router as v1_router
 from vidyarag.observe.logging import configure_logging, get_logger
 from vidyarag.pipeline import Pipeline, build_pipeline
@@ -54,7 +55,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="VidyaRAG",
         description=DESCRIPTION,
-        version="0.3.0",
+        version=__version__,
         lifespan=lifespan,
     )
     app.include_router(v1_router)

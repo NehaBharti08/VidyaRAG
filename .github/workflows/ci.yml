@@ -18,10 +18,11 @@ env:
   #     call fails loudly instead of spending money.
   #   * Qdrant runs in-process against ":memory:" -- no server, no network.
   #
-  # The `costly` marker is a convention for tests that would knowingly spend
-  # money. No test carries it today, so `-m "not costly"` below currently
-  # deselects nothing; it is kept so the default command is already correct on
-  # the day such a test is added. The fakes above are the actual guard.
+  # The `costly` marker holds the tests that knowingly spend money: the three
+  # live end-to-end tests in tests/test_live_pipeline.py, which run the real
+  # pipeline against the real index and model. `-m "not costly"` below
+  # deselects exactly those. They also skip themselves without a key, so the
+  # fakes above remain the actual guard if a costly test is ever left unmarked.
   OPENAI_API_KEY: test-key-not-real
   QDRANT_MODE: embedded
   QDRANT_PATH: ":memory:"
