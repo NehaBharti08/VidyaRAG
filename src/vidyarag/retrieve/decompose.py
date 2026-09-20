@@ -157,6 +157,7 @@ def retrieve_decomposed(
     collection: str,
     embedding_model: str,
     limit: int,
+    book_slug: str | None = None,
 ) -> list[RetrievedChunk]:
     """Retrieve for each sub-question and fuse the results.
 
@@ -172,6 +173,7 @@ def retrieve_decomposed(
             collection=collection,
             embedding_model=embedding_model,
             limit=limit,
+            book_slug=book_slug,
         )
         for sub_question in sub_questions
     ]

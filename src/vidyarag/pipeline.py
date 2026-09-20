@@ -117,12 +117,22 @@ class Pipeline:
             self._llm = get_gemini_client(self.settings.google_api_key.get_secret_value())
         return self._llm
 
-    def retrieve(self, question: str, trace: QueryTrace) -> list[RetrievedChunk]:
+    def retrieve(
+        self, question: str, trace: QueryTrace, *, book_slug: str | None = None
+    ) -> list[RetrievedChunk]:
         """Fetch candidates and narrow them to the context budget.
 
         Every stage after the first is switched on by a profile flag rather than
         by a different code path, so an ablation changes exactly one thing and
         the measurement can be attributed to it.
+
+        Args:
+            question: The query to retrieve for.
+            trace: Trace to record stages and candidates into.
+            book_slug: Restrict retrieval to one book. The API accepted this
+                field and silently ignored it, which is worse than not offering
+                it: a caller asking for anatomy passages got biology ones and
+                had nothing to notice it by.
         """
         sub_questions: list[str] = []
         if self.config.retrieval.use_decomposition:
@@ -141,6 +151,7 @@ class Pipeline:
                     collection=self.settings.qdrant_collection,
                     embedding_model=self.config.embedding_model,
                     limit=self.config.retrieval.top_k_retrieve,
+                    book_slug=book_slug,
                 )[: self.config.retrieval.top_k_retrieve]
             else:
                 candidates = retrieve_dense(
@@ -149,6 +160,7 @@ class Pipeline:
                     collection=self.settings.qdrant_collection,
                     embedding_model=self.config.embedding_model,
                     limit=self.config.retrieval.top_k_retrieve,
+                    book_slug=book_slug,
                 )
         # Recorded before narrowing: retrieval metrics score the whole candidate
         # pool, and the gap between that and what reaches the prompt is the
@@ -179,20 +191,21 @@ class Pipeline:
 
         return context
 
-    def answer(self, question: str) -> Answer:
+    def answer(self, question: str, *, book_slug: str | None = None) -> Answer:
         """Answer one question end to end.
 
         Args:
             question: The user's question.
+            book_slug: Restrict retrieval to one book.
 
         Returns:
             An :class:`Answer` with validated citations and a full trace.
         """
         trace = QueryTrace(query=question, profile=self.config.name)
         with trace.measure_wall():
-            return self._answer(question, trace)
+            return self._answer(question, trace, book_slug=book_slug)
 
-    def _answer(self, question: str, trace: QueryTrace) -> Answer:
+    def _answer(self, question: str, trace: QueryTrace, *, book_slug: str | None = None) -> Answer:
         """Answer one question, inside the wall-clock measurement."""
         # Screened before retrieval on purpose: a blocked question should cost
         # nothing. Embedding and searching first would spend the work anyway,
@@ -219,9 +232,9 @@ class Pipeline:
                 )
 
         if self.config.corrective.enabled:
-            return self._answer_corrective(question, trace)
+            return self._answer_corrective(question, trace, book_slug=book_slug)
 
-        context = self.retrieve(question, trace)
+        context = self.retrieve(question, trace, book_slug=book_slug)
         generated: GeneratedAnswer = generate_answer(
             self.llm,
             question,
@@ -241,7 +254,9 @@ class Pipeline:
             self_check=SelfCheck.NOT_RUN,
         )
 
-    def _answer_corrective(self, question: str, trace: QueryTrace) -> Answer:
+    def _answer_corrective(
+        self, question: str, trace: QueryTrace, *, book_slug: str | None = None
+    ) -> Answer:
         """Answer through the bounded self-check loop.
 
         The loop owns control flow; this method supplies the two operations it
@@ -260,7 +275,7 @@ class Pipeline:
         last: dict[str, Any] = {"context": [], "generated": None}
 
         def retrieve(query: str) -> list[RetrievedChunk]:
-            context = self.retrieve(query, trace)
+            context = self.retrieve(query, trace, book_slug=book_slug)
             last["context"] = context
             return context
 

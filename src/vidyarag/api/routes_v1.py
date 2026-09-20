@@ -24,6 +24,7 @@ from vidyarag.api.models import (
     SearchResponse,
     StageOut,
     TraceOut,
+    UsageOut,
 )
 from vidyarag.pipeline import Pipeline
 from vidyarag.retrieve.dense import retrieve_dense
@@ -46,16 +47,34 @@ def get_pipeline(request: Request) -> Pipeline:
 PipelineDep = Annotated[Pipeline, Depends(get_pipeline)]
 
 
+def _provider_status(exc: Exception) -> int:
+    """Map a model-provider failure onto the status code it deserves.
+
+    Everything that was not a missing key used to escape as a 500, which tells
+    a caller to retry a broken service rather than to slow down or wait. The
+    quota case in particular is not an error in this service at all.
+    """
+    text = f"{type(exc).__name__}: {exc}".lower()
+    if "429" in text or "quota" in text or "rate limit" in text or "resource_exhausted" in text:
+        return status.HTTP_429_TOO_MANY_REQUESTS
+    return status.HTTP_503_SERVICE_UNAVAILABLE
+
+
 @router.post("/query", response_model=QueryResponse)
 def query(payload: QueryRequest, pipeline: PipelineDep) -> QueryResponse:
     """Answer a question from the indexed corpus."""
     try:
-        result = pipeline.answer(payload.question)
+        result = pipeline.answer(payload.question, book_slug=payload.book_slug)
     except ValueError as exc:
         # Raised when no Gemini key is configured. A 503 with the cause beats a
         # 500 that makes the caller guess.
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+    except Exception as exc:  # translated into a status code, never swallowed
+        raise HTTPException(
+            status_code=_provider_status(exc),
+            detail=f"Upstream model call failed: {type(exc).__name__}",
         ) from exc
 
     trace = result.trace
@@ -63,6 +82,9 @@ def query(payload: QueryRequest, pipeline: PipelineDep) -> QueryResponse:
         question=result.question,
         answer=result.text,
         grounded=result.grounded,
+        verified=result.verified,
+        self_check=result.self_check.value,
+        blocked=result.blocked,
         citations=[
             CitationOut(
                 marker=c.marker,
@@ -90,11 +112,21 @@ def query(payload: QueryRequest, pipeline: PipelineDep) -> QueryResponse:
             prompt_version=trace.prompt_version,
             total_ms=round(trace.total_ms, 1),
             stages=[
-                StageOut(name=s.name, duration_ms=round(s.duration_ms, 1)) for s in trace.stages
+                StageOut(name=s.name, duration_ms=round(s.duration_ms, 1), depth=s.depth)
+                for s in trace.stages
             ],
             input_tokens=trace.input_tokens,
             output_tokens=trace.output_tokens,
             list_price_usd=round(trace.list_price_usd, 6),
+            usage_by_purpose={
+                purpose: UsageOut(
+                    calls=int(totals["calls"]),
+                    input_tokens=int(totals["input_tokens"]),
+                    output_tokens=int(totals["output_tokens"]),
+                    list_price_usd=round(totals["usd"], 6),
+                )
+                for purpose, totals in trace.tokens_by_purpose().items()
+            },
             retrieved=len(trace.retrieved_chunk_ids),
             cited=len(result.citations),
         ),
