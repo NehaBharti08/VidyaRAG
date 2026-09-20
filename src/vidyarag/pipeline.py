@@ -16,6 +16,7 @@ from typing import Any
 
 from qdrant_client import QdrantClient
 
+from vidyarag._compat import StrEnum
 from vidyarag.correct.loop import run_corrective_loop
 from vidyarag.correct.policy import CorrectivePolicy
 from vidyarag.generate.answer import GeneratedAnswer, generate_answer
@@ -31,6 +32,33 @@ from vidyarag.settings import PipelineConfig, Settings
 from vidyarag.store.client import build_client
 
 
+class SelfCheck(StrEnum):
+    """What the self-check established about this answer.
+
+    A boolean could not carry this. The loop has four outcomes and three of them
+    are not "verified": the check can be switched off, it can fail to run, and
+    it can decline the answer. Collapsing those into "not abstained" is what let
+    the demo report *Self-check passed* for a draft whose grading call returned
+    503 -- the most misleading thing the system could say, because it is the
+    claim a reader trusts most.
+    """
+
+    NOT_RUN = "not_run"
+    """No self-check in this profile. The answer is grounded in retrieved
+    passages and cited, but nothing checked its claims."""
+
+    PASSED = "passed"
+    """Graded, and the score cleared the accept threshold."""
+
+    UNAVAILABLE = "unavailable"
+    """The grader could not be reached or its response could not be read. The
+    draft was returned unverified -- deliberately, since refusing on an API
+    error is a worse failure -- and says so."""
+
+    ABSTAINED = "abstained"
+    """Graded, and the answer was withheld."""
+
+
 @dataclass(frozen=True, slots=True)
 class Answer:
     """The complete result of one query."""
@@ -41,11 +69,19 @@ class Answer:
     retrieved: list[RetrievedChunk]
     trace: QueryTrace
     grounded: bool
+    self_check: SelfCheck = SelfCheck.NOT_RUN
+    blocked: bool = False
+    """Whether a guardrail refused the question before any retrieval ran."""
 
     @property
     def context_used(self) -> list[RetrievedChunk]:
         """The chunks actually placed in the prompt."""
         return self.retrieved
+
+    @property
+    def verified(self) -> bool:
+        """Whether a self-check actually ran and passed on this text."""
+        return self.self_check is SelfCheck.PASSED
 
 
 class Pipeline:
@@ -91,7 +127,9 @@ class Pipeline:
         sub_questions: list[str] = []
         if self.config.retrieval.use_decomposition:
             with trace.stage("decompose"):
-                split = decompose(self.llm, question, model=self.config.generation_model)
+                split = decompose(
+                    self.llm, question, model=self.config.generation_model, trace=trace
+                )
             sub_questions = split.sub_questions
             trace.sub_questions = list(sub_questions)
 
@@ -151,7 +189,11 @@ class Pipeline:
             An :class:`Answer` with validated citations and a full trace.
         """
         trace = QueryTrace(query=question, profile=self.config.name)
+        with trace.measure_wall():
+            return self._answer(question, trace)
 
+    def _answer(self, question: str, trace: QueryTrace) -> Answer:
+        """Answer one question, inside the wall-clock measurement."""
         # Screened before retrieval on purpose: a blocked question should cost
         # nothing. Embedding and searching first would spend the work anyway,
         # and on a rate-limited free tier that is quota an attacker burns for
@@ -161,13 +203,19 @@ class Pipeline:
                 verdict = screen_input(question)
             if verdict.blocked:
                 trace.guard_input = {"blocked": True, "categories": verdict.categories}
+                # Not grounded: nothing was retrieved and nothing was checked.
+                # This previously reported grounded=True, which read through the
+                # API as a verified, sourced answer and was the opposite of what
+                # happened -- the refusal is a fixed string the guard emitted.
                 return Answer(
                     question=question,
                     text=INPUT_REFUSAL,
                     citations=[],
                     retrieved=[],
                     trace=trace,
-                    grounded=True,
+                    grounded=False,
+                    self_check=SelfCheck.NOT_RUN,
+                    blocked=True,
                 )
 
         if self.config.corrective.enabled:
@@ -190,6 +238,7 @@ class Pipeline:
             retrieved=context,
             trace=trace,
             grounded=generated.grounded,
+            self_check=SelfCheck.NOT_RUN,
         )
 
     def _answer_corrective(self, question: str, trace: QueryTrace) -> Answer:
@@ -235,6 +284,7 @@ class Pipeline:
                 llm=self.llm,
                 grader_model=self.config.grader_model,
                 policy=policy,
+                trace=trace,
             )
 
         trace.attempts = outcome.attempt_count
@@ -255,8 +305,14 @@ class Pipeline:
                 retrieved=context_used,
                 trace=trace,
                 grounded=False,
+                self_check=SelfCheck.ABSTAINED,
             )
 
+        # An accepted answer is only *verified* if grading actually happened.
+        # The policy accepts an ungraded draft on purpose -- abstaining because
+        # of an API error would be a worse failure -- but the two outcomes must
+        # not look alike from outside, because one carries evidence and the
+        # other carries an exception.
         return Answer(
             question=question,
             text=outcome.answer,
@@ -264,6 +320,7 @@ class Pipeline:
             retrieved=context_used,
             trace=trace,
             grounded=generated_answer.grounded if generated_answer else False,
+            self_check=SelfCheck.PASSED if outcome.graded else SelfCheck.UNAVAILABLE,
         )
 
     def close(self) -> None:

@@ -20,7 +20,7 @@ from typing import Any
 
 from vidyarag.generate.citations import Citation, resolve_citations, strip_invalid_markers
 from vidyarag.generate.prompts import NO_CONTEXT_ANSWER, build_answer_prompt
-from vidyarag.observe.trace import QueryTrace
+from vidyarag.observe.trace import QueryTrace, record_gemini_usage
 from vidyarag.retrieve.dense import RetrievedChunk
 
 
@@ -61,13 +61,7 @@ def _extract_text(response: Any) -> str:
 
 def _record_usage(response: Any, trace: QueryTrace, model: str) -> None:
     """Attach token usage from a Gemini response to the trace."""
-    usage = getattr(response, "usage_metadata", None)
-    trace.add_usage(
-        model=model,
-        input_tokens=int(getattr(usage, "prompt_token_count", 0) or 0),
-        output_tokens=int(getattr(usage, "candidates_token_count", 0) or 0),
-        purpose="generation",
-    )
+    record_gemini_usage(response, trace, model, purpose="generation")
 
 
 def generate_answer(
