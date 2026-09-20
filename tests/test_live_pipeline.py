@@ -82,7 +82,7 @@ def test_abstains_on_a_question_the_corpus_cannot_support(live: Pipeline) -> Non
     a stubbed model cannot observe.
     """
     answer = live.answer(
-        "What are the exact serum oxytocin thresholds required to trigger " "uterine contractions?"
+        "What are the exact serum oxytocin thresholds required to trigger uterine contractions?"
     )
     assert answer.trace.abstained, f"should have refused, said: {answer.text[:200]!r}"
 
