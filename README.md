@@ -180,20 +180,23 @@ with the ones this table previously showed. Graded samples per profile:
 
 **Latency is not quoted for the self-check profiles here, because the committed
 figure is wrong.** `trace.total_ms` summed every recorded stage, and the
-corrective stage contains the retrieval and generation stages it runs, so those
-were counted twice: the ~22,000 ms in the old table is roughly 11,000 ms of
-work plus part of itself. Wall-clock timing is fixed in code
+corrective stage *contains* the retrieval and generation stages it runs, so
+those were counted twice. Measured on one live `guarded` query after the fix:
+wall clock **14,525 ms**, old accounting **24,588 ms** — a **1.69×**
+overstatement. Wall-clock timing is fixed in code
 (`src/vidyarag/observe/trace.py`), but correcting the committed *figures* needs
 a re-run of those two profiles, which the free-tier quota does not currently
 allow. `baseline` (1,091 ms), `rerank` (6,856 ms) and `decompose` (2,635 ms)
 have no nested stages and are unaffected.
 
-Per-query cost is understated for the same reason on the other axis: only
-generation tokens were recorded, so grading and decomposition calls cost
-nothing in the table above. A grading call is *larger* than the generation it
-checks — measured at 2,497 input and 612 output tokens against roughly 2,400
-and 60 for generation. That is also fixed in code and also needs a re-run to
-restate.
+Per-query cost was understated in the opposite direction, and by more: only
+generation tokens were recorded, so the grading call — the thing the project is
+named for — cost nothing in the table. On that same live query, generation was
+2,367 in / 132 out ($0.000289) and grading was 2,473 in / 488 out ($0.000443).
+The real cost of a self-checked answer is **$0.00073, about 2.5× what was
+reported**. Grading is more expensive than generation because it reads the same
+passages *plus* the draft, and writes a structured verdict. Also fixed in code;
+also needs a re-run to restate in the table.
 
 Two of the 58 `guarded` questions could not be re-judged: the free-tier quota
 returned 429 on both attempts. They are recorded as `unmeasured` in the run
@@ -304,7 +307,8 @@ selective carrier proteins [1, 3, 5]...
 > **This quickstart is verified, not assumed.** Cloned into a clean directory
 > and run verbatim on 2026-09-13: `uv sync`, `cp .env.example .env`,
 > `uv run vidyarag health` (exit 0, correctly reporting no index yet),
-> `uv run vidyarag config`, and `uv run pytest` — **390 passed, 1 skipped**.
+> `uv run vidyarag config`, and `uv run pytest` — 390 passed, 1 skipped at that
+> commit; **469 passed, 1 skipped** on the current one.
 >
 > **The corpus pipeline is verified too, end to end.** `download` re-validated
 > both PDFs against the committed checksums (2,900 pages, 415 MB). `ingest` then
