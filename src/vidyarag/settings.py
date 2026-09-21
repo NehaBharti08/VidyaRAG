@@ -191,9 +191,27 @@ class CorrectiveConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = False
-    accept_threshold: float = 0.8
-    abstain_threshold: float = 0.5
-    max_attempts: int = 2
+    accept_threshold: float = Field(default=0.8, ge=0.0, le=1.0)
+    abstain_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
+    max_attempts: int = Field(default=2, ge=1)
+
+    @model_validator(mode="after")
+    def _thresholds_are_ordered(self) -> CorrectiveConfig:
+        """Reject a profile whose thresholds cannot mean anything.
+
+        The loop's own policy object checked this, but only once a query was
+        answered -- so a profile with abstain above accept loaded cleanly,
+        started an evaluation, and failed partway through it, or worse, ran a
+        whole evaluation under thresholds nobody intended. A configuration
+        error belongs at configuration load, beside the extra="forbid" that
+        catches the misspelled key next to it.
+        """
+        if self.abstain_threshold > self.accept_threshold:
+            raise ValueError(
+                "abstain_threshold must not exceed accept_threshold; got "
+                f"abstain={self.abstain_threshold}, accept={self.accept_threshold}"
+            )
+        return self
 
 
 class GuardrailConfig(BaseModel):

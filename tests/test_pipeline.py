@@ -134,6 +134,20 @@ class TestIngest:
         assert written.exists()
         assert IngestReport.model_validate_json(written.read_text(encoding="utf-8")).total_chunks
 
+    def test_each_collection_gets_its_own_provenance_file(self) -> None:
+        """One fixed filename let a second index erase the first one's record.
+
+        Building a verification index overwrote data/ingest_run.json, so the
+        file described a collection nobody queried while the collection being
+        queried had no record of how it was built -- and nothing said so.
+        """
+        from vidyarag.ingest.pipeline import run_report_path
+
+        first = run_report_path("vidyarag_biology_v1")
+        second = run_report_path("vidyarag_verify_v1")
+        assert first != second
+        assert "vidyarag_biology_v1" in first.name
+
     def test_no_books_produces_an_empty_but_valid_run(
         self, client: QdrantClient, raw_dir: Path
     ) -> None:

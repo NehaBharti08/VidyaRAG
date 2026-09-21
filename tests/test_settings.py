@@ -6,9 +6,11 @@ import re
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from vidyarag.settings import (
     IN_MEMORY,
+    CorrectiveConfig,
     PipelineConfig,
     QdrantMode,
     Settings,
@@ -123,6 +125,36 @@ class TestPipelineConfig:
         """Reranking is pointless unless the candidate pool is wider than the selection."""
         cfg = load_pipeline_config("baseline", config_dir=config_dir)
         assert cfg.retrieval.top_k_retrieve > cfg.retrieval.top_k_context
+
+
+class TestCorrectiveThresholdsAreValidatedAtLoad:
+    """A configuration error belongs at configuration load.
+
+    The loop's policy object checked these, but only when a query was answered
+    -- so an impossible profile started an evaluation and either died partway
+    through it or ran to completion under thresholds nobody intended.
+    """
+
+    def test_abstain_above_accept_is_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="abstain_threshold"):
+            CorrectiveConfig(accept_threshold=0.5, abstain_threshold=0.8)
+
+    @pytest.mark.parametrize("value", [-0.1, 1.1])
+    def test_a_threshold_outside_zero_to_one_is_rejected(self, value: float) -> None:
+        with pytest.raises(ValidationError):
+            CorrectiveConfig(accept_threshold=value)
+
+    def test_zero_attempts_is_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            CorrectiveConfig(max_attempts=0)
+
+    def test_equal_thresholds_are_allowed(self) -> None:
+        """A policy with no retry band is a choice, not an error."""
+        assert CorrectiveConfig(accept_threshold=0.7, abstain_threshold=0.7).max_attempts == 2
+
+    def test_the_shipped_profile_is_valid(self, config_dir: Path) -> None:
+        cfg = load_pipeline_config("guarded", config_dir=config_dir)
+        assert cfg.corrective.abstain_threshold <= cfg.corrective.accept_threshold
 
     def test_unknown_profile_lists_available_ones(self, config_dir: Path) -> None:
         with pytest.raises(FileNotFoundError, match="Available: baseline"):

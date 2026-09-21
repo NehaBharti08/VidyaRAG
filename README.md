@@ -299,15 +299,18 @@ types the handlers return rather than written separately and left to drift.
 | | | |
 |---|---|---|
 | `POST` | `/v1/query` | Full pipeline. Returns the answer, its citations, the context it used, and a trace |
-| `POST` | `/v1/search` | **Retrieval only — no generation, no API key, no cost.** Reranked passages straight back |
+| `POST` | `/v1/search` | **Retrieval only — no generation, no API key, no cost.** Dense passages straight back |
 | `GET` | `/v1/health` | Liveness plus what is actually indexed: collection, point count, active models |
 | `GET` | `/v1/config` | The resolved profile, so a caller can tell which pipeline answered it |
 
 `/v1/search` exists because retrieval is the half of a RAG system another agent
-usually wants. It runs the same dense-then-rerank path as `/v1/query` and stops
-before the LLM, so it needs no Gemini key and costs nothing per call — which
-also makes it the endpoint to reach for when debugging whether a bad answer was
-a retrieval failure or a generation one.
+usually wants. It is **dense retrieval only** — no decomposition, no reranking,
+no LLM — so it needs no Gemini key and costs nothing per call. That is a
+deliberate difference from `/v1/query`, not a shortcut: those stages exist to
+improve *this* service's answers, and a caller reasoning for itself should get
+the raw ranking rather than one shaped for someone else's generator. It is also
+the endpoint to reach for when debugging whether a bad answer was a retrieval
+failure or a generation one.
 
 `/v1/health` reports the point count deliberately: a service pointed at an empty
 collection is up, returns 200, and is useless. The count is the difference.

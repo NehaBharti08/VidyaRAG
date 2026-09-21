@@ -156,8 +156,23 @@ class AbstentionStats:
 
 
 def is_structural_abstention(answer: str, *, trace_abstained: bool = False) -> bool:
-    """Detect a refusal the pipeline signalled explicitly. Free and exact."""
-    return trace_abstained or answer.strip() == NO_CONTEXT_ANSWER.strip()
+    """Detect a refusal the pipeline signalled explicitly. Free and exact.
+
+    Both sentinels count. ``NO_CONTEXT_ANSWER`` is emitted when retrieval
+    returned nothing; ``ABSTENTION_TEXT`` is what the corrective loop returns
+    when it declines. Only the first was recognised here, so re-reading a
+    committed run file -- where the loop's flag lives in the trace rather than
+    in the text -- would send a known, fixed refusal to a model to be
+    classified, paying for a verdict the repository already knows.
+    """
+    from vidyarag.correct.loop import ABSTENTION_TEXT
+
+    stripped = answer.strip()
+    return (
+        trace_abstained
+        or stripped == NO_CONTEXT_ANSWER.strip()
+        or stripped == ABSTENTION_TEXT.strip()
+    )
 
 
 def parse_judge_label(content: str | None, *, finish_reason: str | None = None) -> JudgeVerdict:
