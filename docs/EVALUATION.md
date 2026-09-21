@@ -85,7 +85,9 @@ that would compete in retrieval while answering nothing:
 ### Extraction quality gate
 
 The Phase 1a gate was 20 randomly sampled chunks inspected for clean text and
-correct metadata, plus automated contamination checks across all 3,352 chunks.
+correct metadata, plus automated contamination checks across all chunks (3,352
+at the time of that gate, 3,608 in the index these results were measured on,
+after the first-edition corpus switch).
 All checks returned zero: no non-breaking spaces (the PDF outline is full of
 them), no leaked running heads or footer boilerplate, no control characters, no
 empty chunks.

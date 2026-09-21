@@ -123,6 +123,12 @@ def config(
             f"abstain<{cfg.corrective.abstain_threshold} "
             f"max_attempts={cfg.corrective.max_attempts}",
         )
+    table.add_row("grader_model", cfg.grader_model if cfg.corrective.enabled else "-")
+    # Shown unconditionally. A profile listing that omits the guardrails cannot
+    # distinguish the shipped configuration from the one without them, which is
+    # the only difference between two of the five profiles.
+    table.add_row("guard: user input", str(cfg.guardrails.check_user_input))
+    table.add_row("guard: retrieved context", str(cfg.guardrails.check_retrieved_context))
     console.print(table)
 
 
@@ -747,7 +753,7 @@ def evaluate(
         )
     baseline = latest_run(compare) if compare and compare != run.profile else None
     report_path = written.with_suffix(".md")
-    report_path.write_text(render_report(run, baseline), encoding="utf-8")
+    report_path.write_text(render_report(run, baseline), encoding="utf-8", newline="\n")
 
     if not run.is_valid:
         # Withhold the table entirely. Printing scores beside a warning invites
@@ -888,6 +894,7 @@ def rejudge(
             written.with_suffix(".md").write_text(
                 render_report(run, latest_run("baseline") if name != "baseline" else None),
                 encoding="utf-8",
+                newline="\n",
             )
             console.print(f"[green]OK[/green]    rewrote {written.name} and its report")
 

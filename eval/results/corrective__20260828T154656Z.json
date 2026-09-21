@@ -157,6 +157,13 @@
         "reordered": 19,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -164,7 +171,7 @@
       "question": "What is the term for the process by which tiny bacteria move toward or away from chemicals?",
       "type": "factual",
       "answer": "Based on the provided passages, the text does not contain a specific term for bacteria moving toward or away from chemicals. However, it mentions that leukocytes move toward chemical signals through a phenomenon called **positive chemotaxis** (defined as \"movement in response to chemicals\"), where injured or infected cells and nearby leukocytes emit chemical signals [4]. The passages also mention that some protists can move toward or away from a stimulus in a movement referred to as **taxis** [2], but this is not specifically attributed to bacteria responding to chemicals.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "biology-p0167-00",
         "biology-p0605-00",
@@ -201,13 +208,10 @@
       "gold_chunk_ids": [
         "biology-p0030-02"
       ],
-      "ragas": {
-        "faithfulness": 1.0,
-        "answer_relevancy": 0.9147111037661834,
-        "context_precision": 0.0,
-        "context_recall": 1.0
+      "ragas": {},
+      "ragas_errors": {
+        "abstention": "dropped: re-judged as a refusal"
       },
-      "ragas_errors": {},
       "retrieval": {
         "recall_at_k": 0.0,
         "hit_at_k": false,
@@ -268,6 +272,13 @@
         "reordered": 18,
         "promoted_into_context": 2,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
       }
     },
     {
@@ -379,6 +390,13 @@
         "reordered": 20,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -489,6 +507,13 @@
         "reordered": 15,
         "promoted_into_context": 1,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -599,6 +624,13 @@
         "reordered": 18,
         "promoted_into_context": 1,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -709,6 +741,13 @@
         "reordered": 19,
         "promoted_into_context": 1,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -819,6 +858,13 @@
         "reordered": 18,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -929,6 +975,13 @@
         "reordered": 17,
         "promoted_into_context": 2,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -1040,6 +1093,13 @@
         "reordered": 15,
         "promoted_into_context": 1,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -1151,6 +1211,13 @@
         "reordered": 20,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -1262,6 +1329,13 @@
         "reordered": 17,
         "promoted_into_context": 2,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -1372,6 +1446,13 @@
         "reordered": 13,
         "promoted_into_context": 1,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -1482,6 +1563,13 @@
         "reordered": 19,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -1593,6 +1681,13 @@
         "reordered": 19,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -1705,6 +1800,13 @@
         "reordered": 17,
         "promoted_into_context": 3,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -1816,6 +1918,13 @@
         "reordered": 20,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -1926,6 +2035,13 @@
         "reordered": 19,
         "promoted_into_context": 3,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -2036,6 +2152,13 @@
         "reordered": 17,
         "promoted_into_context": 3,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -2146,6 +2269,13 @@
         "reordered": 15,
         "promoted_into_context": 0,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -2256,6 +2386,13 @@
         "reordered": 17,
         "promoted_into_context": 2,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -2366,6 +2503,13 @@
         "reordered": 17,
         "promoted_into_context": 1,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -2477,6 +2621,13 @@
         "reordered": 17,
         "promoted_into_context": 1,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -2588,6 +2739,13 @@
         "reordered": 18,
         "promoted_into_context": 1,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -2699,6 +2857,13 @@
         "reordered": 19,
         "promoted_into_context": 5,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -2809,6 +2974,13 @@
         "reordered": 17,
         "promoted_into_context": 3,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -2921,6 +3093,13 @@
         "reordered": 16,
         "promoted_into_context": 2,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -3034,6 +3213,13 @@
         "reordered": 16,
         "promoted_into_context": 1,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -3144,6 +3330,13 @@
         "reordered": 19,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -3258,6 +3451,13 @@
         "reordered": 17,
         "promoted_into_context": 1,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -3372,6 +3572,13 @@
         "reordered": 17,
         "promoted_into_context": 1,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -3379,7 +3586,7 @@
       "question": "What specific developmental and structural condition of the ovaries and reproductive anatomy would you expect in an individual with triplo-X syndrome based on the genetic requirement for ovary maturation and typical female developmental pathways?",
       "type": "multi_hop",
       "answer": "Based on the provided passages, individuals with triplo-X syndrome are phenotypically female and experience developmental delays and reduced fertility [1]. \n\nHowever, the provided passages do not contain specific information regarding the exact structural condition of the ovaries or the detailed developmental pathway of reproductive anatomy in individuals with triplo-X syndrome beyond stating that X chromosomes must reactivate for proper ovary maturation and that triplo-X individuals exhibit reduced fertility and developmental delays [1].",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "biology-p0367-06",
         "anatomy-and-physiology-p1319-00",
@@ -3416,13 +3623,10 @@
         "biology-p0367-06",
         "anatomy-and-physiology-p1319-00"
       ],
-      "ragas": {
-        "faithfulness": 1.0,
-        "answer_relevancy": 0.8264079578883226,
-        "context_precision": 0.9999999999,
-        "context_recall": 1.0
+      "ragas": {},
+      "ragas_errors": {
+        "abstention": "dropped: re-judged as a refusal"
       },
-      "ragas_errors": {},
       "retrieval": {
         "recall_at_k": 1.0,
         "hit_at_k": true,
@@ -3483,6 +3687,13 @@
         "reordered": 18,
         "promoted_into_context": 2,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
       }
     },
     {
@@ -3594,6 +3805,13 @@
         "reordered": 16,
         "promoted_into_context": 2,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -3709,6 +3927,13 @@
         "reordered": 19,
         "promoted_into_context": 2,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -3716,7 +3941,7 @@
       "question": "When skeletal muscle cells undergo extensive damage that exceeds the repair capacity of their local stem cells, what specific type of tissue replaces them, and how does this replacement tissue fundamentally differ in its cellular structure regarding myoblast fusion origins?",
       "type": "multi_hop",
       "answer": "When skeletal muscle cells undergo extensive damage that cannot be repaired by satellite cells, the muscle fibers are replaced by scar tissue in a process known as fibrosis [1]. \n\nThe provided passages do not contain information explaining how this replacement tissue fundamentally differs in its cellular structure regarding myoblast fusion origins; the text only notes that scar tissue cannot contract [1].",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "anatomy-and-physiology-p0446-02",
         "anatomy-and-physiology-p0445-01",
@@ -3753,13 +3978,10 @@
         "anatomy-and-physiology-p0446-02",
         "anatomy-and-physiology-p0418-03"
       ],
-      "ragas": {
-        "faithfulness": 0.75,
-        "answer_relevancy": 0.0,
-        "context_precision": 0.9999999999,
-        "context_recall": 0.5
+      "ragas": {},
+      "ragas_errors": {
+        "abstention": "dropped: re-judged as a refusal"
       },
-      "ragas_errors": {},
       "retrieval": {
         "recall_at_k": 1.0,
         "hit_at_k": true,
@@ -3820,6 +4042,13 @@
         "reordered": 18,
         "promoted_into_context": 3,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
       }
     },
     {
@@ -3932,6 +4161,13 @@
         "reordered": 19,
         "promoted_into_context": 3,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -4036,6 +4272,10 @@
         "reordered": 18,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     },
     {
@@ -4148,6 +4388,13 @@
         "reordered": 17,
         "promoted_into_context": 2,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -4252,6 +4499,10 @@
         "reordered": 20,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     },
     {
@@ -4363,6 +4614,13 @@
         "reordered": 18,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -4475,6 +4733,13 @@
         "reordered": 19,
         "promoted_into_context": 0,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -4598,6 +4863,13 @@
         "reordered": 19,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -4702,6 +4974,10 @@
         "reordered": 15,
         "promoted_into_context": 3,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     },
     {
@@ -4813,6 +5089,13 @@
         "reordered": 18,
         "promoted_into_context": 0,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -4925,6 +5208,13 @@
         "reordered": 20,
         "promoted_into_context": 1,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -5037,6 +5327,13 @@
         "reordered": 19,
         "promoted_into_context": 3,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -5149,6 +5446,13 @@
         "reordered": 19,
         "promoted_into_context": 1,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -5245,6 +5549,10 @@
         "reordered": 18,
         "promoted_into_context": 1,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     },
     {
@@ -5341,6 +5649,10 @@
         "reordered": 15,
         "promoted_into_context": 1,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     },
     {
@@ -5437,6 +5749,10 @@
         "reordered": 16,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     },
     {
@@ -5533,6 +5849,10 @@
         "reordered": 20,
         "promoted_into_context": 3,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     },
     {
@@ -5629,6 +5949,10 @@
         "reordered": 18,
         "promoted_into_context": 1,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     },
     {
@@ -5725,6 +6049,10 @@
         "reordered": 18,
         "promoted_into_context": 2,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     },
     {
@@ -5821,6 +6149,10 @@
         "reordered": 17,
         "promoted_into_context": 2,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     },
     {
@@ -5917,6 +6249,10 @@
         "reordered": 17,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     },
     {
@@ -6013,6 +6349,10 @@
         "reordered": 19,
         "promoted_into_context": 3,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     },
     {
@@ -6109,6 +6449,10 @@
         "reordered": 17,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     },
     {
@@ -6205,6 +6549,10 @@
         "reordered": 17,
         "promoted_into_context": 3,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     },
     {
@@ -6301,15 +6649,19 @@
         "reordered": 18,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     }
   ],
   "aggregates": {
-    "faithfulness": 0.9593023255813954,
-    "answer_relevancy": 0.8443414848104933,
-    "context_precision": 0.819089147232423,
-    "context_recall": 0.9806201550387597,
-    "graded_samples": 43.0
+    "faithfulness": 0.9625,
+    "answer_relevancy": 0.8641391196299179,
+    "context_precision": 0.830520833279855,
+    "context_recall": 0.9916666666666666,
+    "graded_samples": 40.0
   },
   "retrieval_aggregates": {
     "recall_at_k": 0.967391304347826,
@@ -6321,11 +6673,12 @@
     "unanswerable_total": 12,
     "unanswerable_abstained": 12,
     "answerable_total": 46,
-    "answerable_abstained": 3,
-    "precision": 0.8,
+    "answerable_abstained": 6,
+    "unmeasured": 0,
+    "precision": 0.6666666666666666,
     "recall": 1.0,
-    "f1": 0.888888888888889,
-    "false_abstention_rate": 0.06521739130434782
+    "f1": 0.8,
+    "false_abstention_rate": 0.13043478260869565
   },
   "totals": {
     "questions": 58.0,

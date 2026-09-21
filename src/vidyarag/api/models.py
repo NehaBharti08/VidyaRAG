@@ -149,6 +149,15 @@ class ConfigResponse(BaseModel):
     use_reranker: bool
     use_decomposition: bool
     corrective_enabled: bool
+    # The flags below decide whether an answer can be refused or a passage
+    # quarantined. Omitting them meant a caller could not tell a guarded
+    # response from an unguarded one, which is the distinction this endpoint
+    # exists to make.
+    accept_threshold: float
+    abstain_threshold: float
+    max_attempts: int
+    check_user_input: bool
+    check_retrieved_context: bool
 
 
 class SearchRequest(BaseModel):

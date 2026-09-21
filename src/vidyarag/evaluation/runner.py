@@ -244,7 +244,11 @@ class EvalRun(BaseModel):
     def save(self, directory: Path | None = None) -> Path:
         target = self.path(directory)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(self.model_dump_json(indent=2) + "\n", encoding="utf-8")
+        # newline="\n" so a run written on Windows is byte-identical to one
+        # written on Linux. Without it these files land with CRLF, every
+        # re-save shows as a whole-file diff, and the commit hook rewrites
+        # them -- which hides the one line that actually changed.
+        target.write_text(self.model_dump_json(indent=2) + "\n", encoding="utf-8", newline="\n")
         return target
 
 
@@ -378,15 +382,18 @@ async def _grade_all(
                     answer=result.answer,
                 )
                 suite.limiter.observe(asyncio.get_running_loop().time() - started)
-                verdicts.put(
-                    key,
-                    {
-                        "abstained": verdict.refused,
-                        "measured": verdict.measured,
-                        "raw": verdict.raw,
-                        "error": verdict.error,
-                    },
-                )
+                # A failed judgement is not cached. Caching it would turn a
+                # transient rate-limit error into a permanent gap that no
+                # later run ever retries.
+                if verdict.measured:
+                    verdicts.put(
+                        key,
+                        {
+                            "abstained": verdict.refused,
+                            "measured": True,
+                            "raw": verdict.raw,
+                        },
+                    )
             # An unmeasured verdict leaves ``abstained`` false so the sample can
             # still be reported, but records that the number is not evidence.
             result.abstained = verdict.refused

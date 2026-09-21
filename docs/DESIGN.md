@@ -30,9 +30,10 @@ cluster that deletes itself is the wrong dependency for that requirement. An
 embedded index has no such failure mode and no network hop.
 
 *Trade-off:* embedded mode uses a linear scan and warns past ~20,000 points.
-The corpus is expected near 6,000 chunks, so this is comfortable — but adding
+The corpus is **3,608 chunks** as built, so this is comfortable — but adding
 titles is not free, and crossing that threshold means moving the demo to a
-server-backed target.
+server-backed target. (This paragraph said "expected near 6,000" while the
+plan was being written; the built index is the number above.)
 
 *Rejected:* keeping Qdrant Cloud in the deployed path with a scheduled job
 pinging it to prevent idle suspension. It works, but it makes the demo's
@@ -88,8 +89,9 @@ honestly. The separation costs nothing and removes the objection.
 *Why the lite tier for generation.* `gemini-3.5-flash` is the stronger model and
 was the original choice, but its free tier allows **20 requests per day** —
 measured, not inferred: three calls spaced 65 seconds apart all returned 429,
-so it is a daily cap rather than a per-minute one. One 60-question evaluation
-needs ~60 generation calls, which is three days of quota for a single run, and
+so it is a daily cap rather than a per-minute one. One evaluation over the
+58-question gold set needs ~58 generation calls, which is three days of quota
+for a single run, and
 Phase 4's ablations need several runs. The lite models served every call in the
 same session. Choosing a slightly weaker model that can actually be *measured*
 beats a stronger one that can only be run once a week; an unmeasured improvement
@@ -113,8 +115,15 @@ one was buying convenience rather than capability.
 dependency**.
 
 *Why:* torch would add roughly 2 GB to the deployed image for a model that runs
-for ~130 ms per batch on CPU either way. Avoiding it keeps the container near
-400 MB and makes the app deployable on constrained free tiers.
+on CPU either way. Avoiding it keeps the container near 400 MB and makes the app
+deployable on constrained free tiers.
+
+*What it actually costs, measured on the development machine:* scoring 20
+candidates takes a median of **2.1 s** (5 candidates: 444 ms), and the first
+call additionally pays ~3.2 s to load the model. The reranker is the most
+expensive local stage by a wide margin — embedding a question is 68 ms and
+searching 3,608 vectors is 33 ms. An earlier note here said "~130 ms per
+batch", which was never measured on this hardware.
 
 *Not measured — a real gap:* `BAAI/bge-reranker-base` (1.04 GB, MIT) scores
 better on public benchmarks, and the plan was to ablate it here so the choice of
@@ -336,8 +345,15 @@ So a bare role marker is no longer the signal: it must be followed by directive
 language on the same line. An injection that merely asserts a fact under a
 `SYSTEM:` label is not caught; one that issues an order is, and the order is what
 makes it dangerous. Measured after the change: **0 false positives across all
-3,608 chunks**, 5/5 context injections caught, 8/8 input attacks blocked, 0/8
-legitimate questions blocked.
+3,608 chunks** — a real measurement over the whole corpus. The other figures
+often quoted beside it (5/5 context injections caught, 8/8 input attacks
+blocked, 0/8 legitimate questions blocked) are the counts of the hand-written
+cases in `tests/test_guard.py`. They are a regression suite, not an adversarial
+benchmark, and they pass because the patterns were written against them.
+Probed with paraphrases the tests do not contain, the input guard misses most
+of them, and some ordinary study phrasings ("show me how...", "pretend you are
+a cell") trip it. Both are inherent to regular expressions, which is why the
+guard is defence in depth rather than the defence.
 
 ### Deployment: an embedded index, and why the demo ships its own data
 

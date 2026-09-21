@@ -223,4 +223,9 @@ def config(pipeline: PipelineDep) -> ConfigResponse:
         use_reranker=cfg.retrieval.use_reranker,
         use_decomposition=cfg.retrieval.use_decomposition,
         corrective_enabled=cfg.corrective.enabled,
+        accept_threshold=cfg.corrective.accept_threshold,
+        abstain_threshold=cfg.corrective.abstain_threshold,
+        max_attempts=cfg.corrective.max_attempts,
+        check_user_input=cfg.guardrails.check_user_input,
+        check_retrieved_context=cfg.guardrails.check_retrieved_context,
     )

@@ -29,24 +29,36 @@ list-price cost, and whether the guardrails or the self-check loop intervened.
 They are the point of the project:
 
 - **A plausible question the books do not cover.** The system refuses instead of
-  inventing an answer. On a held-out set of 12 such questions it refuses 12/12,
-  where the baseline refused 0/12.
+  inventing an answer, and says so explicitly rather than in prose: 11 of the
+  12 such questions in the evaluation set are refused by this configuration.
 - **A prompt-injection attempt.** Blocked before retrieval runs, so it costs
   nothing.
 
 ## What the numbers say
 
-| | baseline | shipped |
+| | baseline | shipped (this Space) |
 |---|---:|---:|
-| Abstention recall | 0.000 | **1.000** |
-| Abstention precision | — | 0.800 |
-| Recall @context | 0.880 | 0.913 |
-| MRR | 0.770 | 0.830 |
+| Abstention recall | 1.000 | 0.917 |
+| Abstention precision | 0.667 | 0.647 |
+| False abstention rate | 0.130 | 0.130 |
+| Recall @context | 0.880 | **0.913** |
+| MRR | 0.770 | **0.830** |
 
-Measured on a 58-question gold set. The full methodology — including a
-documented negative result, a measured noise floor, and an honest statement that
-the self-check does *not* improve answer quality but removes answers that should
-not have been given — is in the
+Measured on a 58-question gold set — the development set, not a held-out one;
+there is no held-out split, and an earlier version of this page implied there
+was.
+
+**The self-check does not make the system refuse more often.** An earlier
+version of this table said abstention recall went from 0.000 to 1.000. That was
+a measurement bug: the model that labels an answer as a refusal had its output
+truncated to five tokens and returned `'REF'`, so every refusal was counted as
+an answer. Re-judged correctly, the baseline was already refusing. What the
+self-check adds is a structured refusal — an explicit flag with no citations
+attached — plus a claim-level groundedness score and a targeted retry.
+
+The retrieval gains (recall @context, MRR) come from cross-encoder reranking
+and are deterministic. The full methodology, the negative result for query
+decomposition, and the correction above are in the
 [repository](https://github.com/NehaBharti08/VidyaRAG).
 
 ## Caveats

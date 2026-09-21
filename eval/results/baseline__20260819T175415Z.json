@@ -131,14 +131,24 @@
         "anatomy-and-physiology-p1373-13",
         "biology-p0362-00"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-002",
       "question": "What is the term for the process by which tiny bacteria move toward or away from chemicals?",
       "type": "factual",
       "answer": "The provided passages do not contain the term for the process by which tiny bacteria move toward or away from chemicals. They only mention positive chemotaxis as a phenomenon where injured or infected cells and nearby leukocytes emit chemical signals that attract leukocytes [5].",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "biology-p0167-00",
         "biology-p0605-00",
@@ -174,13 +184,10 @@
       "gold_chunk_ids": [
         "biology-p0030-02"
       ],
-      "ragas": {
-        "faithfulness": 0.75,
-        "answer_relevancy": 0.0,
-        "context_precision": 0.0,
-        "context_recall": 0.0
+      "ragas": {},
+      "ragas_errors": {
+        "abstention": "dropped: re-judged as a refusal"
       },
-      "ragas_errors": {},
       "retrieval": {
         "recall_at_k": 0.0,
         "hit_at_k": false,
@@ -215,7 +222,17 @@
         "biology-p1148-01",
         "biology-p0759-06"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "fact-003",
@@ -299,7 +316,17 @@
         "anatomy-and-physiology-p0019-00",
         "anatomy-and-physiology-p0190-00"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-004",
@@ -383,7 +410,17 @@
         "anatomy-and-physiology-p0139-05",
         "anatomy-and-physiology-p0138-03"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-005",
@@ -467,7 +504,17 @@
         "biology-p1165-00",
         "anatomy-and-physiology-p1281-04"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-006",
@@ -551,7 +598,17 @@
         "biology-p0303-03",
         "anatomy-and-physiology-p0126-02"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-007",
@@ -635,7 +692,17 @@
         "biology-p0395-03",
         "biology-p0444-04"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-008",
@@ -719,7 +786,17 @@
         "anatomy-and-physiology-p0705-06",
         "anatomy-and-physiology-p0772-00"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-009",
@@ -804,7 +881,17 @@
         "biology-p0389-02",
         "biology-p0390-00"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-010",
@@ -889,7 +976,17 @@
         "anatomy-and-physiology-p0712-13",
         "anatomy-and-physiology-p0708-03"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-011",
@@ -974,7 +1071,17 @@
         "anatomy-and-physiology-p0589-05",
         "anatomy-and-physiology-p0172-00"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-012",
@@ -1058,7 +1165,17 @@
         "biology-p0407-03",
         "biology-p0124-04"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-013",
@@ -1142,7 +1259,17 @@
         "biology-p0415-04",
         "biology-p0425-04"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-014",
@@ -1227,7 +1354,17 @@
         "biology-p0389-03",
         "biology-p0447-03"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-015",
@@ -1312,7 +1449,17 @@
         "anatomy-and-physiology-p0727-01",
         "anatomy-and-physiology-p0660-12"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-016",
@@ -1397,7 +1544,17 @@
         "biology-p0428-01",
         "biology-p0425-04"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-017",
@@ -1482,7 +1639,17 @@
         "anatomy-and-physiology-p0606-15",
         "anatomy-and-physiology-p0719-13"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-018",
@@ -1567,7 +1734,17 @@
         "anatomy-and-physiology-p0922-00",
         "anatomy-and-physiology-p0794-01"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-019",
@@ -1651,7 +1828,17 @@
         "anatomy-and-physiology-p0402-00",
         "anatomy-and-physiology-p0243-03"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-020",
@@ -1735,7 +1922,17 @@
         "biology-p1209-03",
         "anatomy-and-physiology-p1270-03"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-021",
@@ -1819,7 +2016,17 @@
         "anatomy-and-physiology-p1227-06",
         "biology-p1219-00"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-022",
@@ -1903,7 +2110,17 @@
         "anatomy-and-physiology-p0781-02",
         "anatomy-and-physiology-p0239-08"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-023",
@@ -1988,14 +2205,24 @@
         "biology-p0787-08",
         "biology-p0964-02"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-024",
       "question": "Which specific cells in the afferent and efferent arterioles produce renin?",
       "type": "factual",
       "answer": "Based on the provided passages, specialized cells in the kidneys found in the juxtaglomerular apparatus secrete renin [2]. The passages do not specify whether these renin-producing cells are located in the afferent arterioles, the efferent arterioles, or both.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "anatomy-and-physiology-p0925-02",
         "anatomy-and-physiology-p0927-05",
@@ -2031,13 +2258,10 @@
       "gold_chunk_ids": [
         "biology-p1216-01"
       ],
-      "ragas": {
-        "faithfulness": 1.0,
-        "answer_relevancy": 0.0,
-        "context_precision": 0.0,
-        "context_recall": 0.0
+      "ragas": {},
+      "ragas_errors": {
+        "abstention": "dropped: re-judged as a refusal"
       },
-      "ragas_errors": {},
       "retrieval": {
         "recall_at_k": 1.0,
         "hit_at_k": true,
@@ -2072,7 +2296,17 @@
         "anatomy-and-physiology-p1253-10",
         "anatomy-and-physiology-p1252-07"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "fact-025",
@@ -2156,7 +2390,17 @@
         "anatomy-and-physiology-p0580-02",
         "anatomy-and-physiology-p0584-08"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-026",
@@ -2243,7 +2487,17 @@
         "biology-p1226-02",
         "anatomy-and-physiology-p1012-08"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-027",
@@ -2328,7 +2582,17 @@
         "anatomy-and-physiology-p0371-00",
         "anatomy-and-physiology-p0313-19"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-028",
@@ -2414,7 +2678,17 @@
         "anatomy-and-physiology-p0295-09",
         "anatomy-and-physiology-p0309-09"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-001",
@@ -2502,7 +2776,17 @@
         "biology-p0315-11",
         "biology-p0312-09"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-002",
@@ -2589,14 +2873,24 @@
         "anatomy-and-physiology-p0834-00",
         "anatomy-and-physiology-p0852-24"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-003",
       "question": "What specific developmental and structural condition of the ovaries and reproductive anatomy would you expect in an individual with triplo-X syndrome based on the genetic requirement for ovary maturation and typical female developmental pathways?",
       "type": "multi_hop",
       "answer": "Individuals with triplo-X syndrome are phenotypically female, but they experience developmental delays and reduced fertility [1]. Although X chromosomes must reactivate for the proper maturation of female ovaries [1], the provided passages do not contain specific details regarding the exact structural condition of the ovaries in a triplo-X individual beyond noting reduced fertility and developmental delays [1]. Similarly, the text does not describe other specific reproductive anatomy structures for this syndrome, though it notes that without a functional SRY gene (which females lack), an individual will be female [2].",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "biology-p0367-06",
         "anatomy-and-physiology-p1319-00",
@@ -2634,13 +2928,10 @@
         "biology-p0367-06",
         "anatomy-and-physiology-p1319-00"
       ],
-      "ragas": {
-        "faithfulness": 1.0,
-        "answer_relevancy": 0.0,
-        "context_precision": 0.9999999999,
-        "context_recall": 1.0
+      "ragas": {},
+      "ragas_errors": {
+        "abstention": "dropped: re-judged as a refusal"
       },
-      "ragas_errors": {},
       "retrieval": {
         "recall_at_k": 1.0,
         "hit_at_k": true,
@@ -2675,7 +2966,17 @@
         "biology-p1265-02",
         "biology-p0340-16"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "multi-004",
@@ -2761,7 +3062,17 @@
         "anatomy-and-physiology-p0184-08",
         "anatomy-and-physiology-p0150-02"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-005",
@@ -2848,14 +3159,24 @@
         "biology-p0537-04",
         "biology-p0452-01"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-006",
       "question": "When skeletal muscle cells undergo extensive damage that exceeds the repair capacity of their local stem cells, what specific type of tissue replaces them, and how does this replacement tissue fundamentally differ in its cellular structure regarding myoblast fusion origins?",
       "type": "multi_hop",
       "answer": "When skeletal muscle cells sustain damage that is greater than what satellite cells can repair, the muscle fibers are replaced by scar tissue [1]. \n\nThe provided passages do not contain information explaining how this replacement scar tissue fundamentally differs in its cellular structure regarding myoblast fusion origins.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "anatomy-and-physiology-p0446-02",
         "anatomy-and-physiology-p0445-01",
@@ -2892,13 +3213,10 @@
         "anatomy-and-physiology-p0446-02",
         "anatomy-and-physiology-p0418-03"
       ],
-      "ragas": {
-        "faithfulness": 0.5,
-        "answer_relevancy": 0.0,
-        "context_precision": 0.9999999999,
-        "context_recall": 1.0
+      "ragas": {},
+      "ragas_errors": {
+        "abstention": "dropped: re-judged as a refusal"
       },
-      "ragas_errors": {},
       "retrieval": {
         "recall_at_k": 1.0,
         "hit_at_k": true,
@@ -2933,14 +3251,24 @@
         "anatomy-and-physiology-p0419-04",
         "biology-p1131-03"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "multi-007",
       "question": "Which specific type of prokaryotic cell is infected by the lytic bacteriophage T4, and what radioactive isotope would tag this virus's genetic material?",
       "type": "multi_hop",
       "answer": "The provided passages state that phosphorus is found in DNA and that radioactive phosphorus ($^{32}\\text{P}$) is used to tag DNA [1]. However, the passages do not contain information about the specific type of prokaryotic cell infected by the lytic bacteriophage T4.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "biology-p0378-00",
         "biology-p0378-01",
@@ -2977,13 +3305,10 @@
         "biology-p0378-00",
         "biology-p0556-04"
       ],
-      "ragas": {
-        "faithfulness": 1.0,
-        "answer_relevancy": 0.0,
-        "context_precision": 0.0,
-        "context_recall": 0.5
+      "ragas": {},
+      "ragas_errors": {
+        "abstention": "dropped: re-judged as a refusal"
       },
-      "ragas_errors": {},
       "retrieval": {
         "recall_at_k": 1.0,
         "hit_at_k": true,
@@ -3018,7 +3343,17 @@
         "biology-p0557-05",
         "biology-p0555-02"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "multi-008",
@@ -3107,7 +3442,17 @@
         "biology-p0385-00",
         "biology-p0541-09"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-010",
@@ -3192,7 +3537,17 @@
         "biology-p0413-01",
         "biology-p0406-02"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-011",
@@ -3278,7 +3633,17 @@
         "anatomy-and-physiology-p0280-16",
         "biology-p1140-02"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-012",
@@ -3363,14 +3728,24 @@
         "biology-p0388-01",
         "biology-p0407-03"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-013",
       "question": "What is the anatomical term for the large central body of the rectus abdominis muscles, and what connective tissue covering organizes the muscle fibers that form this structure?",
       "type": "multi_hop",
       "answer": "Based on the provided passages, the rectus abdominis muscles are commonly called the \"sit-up\" muscles [1], but the text does not state an anatomical term specifically for a large central body of the rectus abdominis muscles (the passages mention a \"central body\" or \"belly\" in the context of parallel/fusiform muscles like the biceps brachii [3]). Furthermore, the passages do not mention which connective tissue covering organizes the muscle fibers that form the structure of the rectus abdominis muscles.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "anatomy-and-physiology-p0476-02",
         "anatomy-and-physiology-p0474-01",
@@ -3408,13 +3783,10 @@
         "anatomy-and-physiology-p0476-02",
         "anatomy-and-physiology-p0457-03"
       ],
-      "ragas": {
-        "faithfulness": 0.75,
-        "answer_relevancy": 0.0,
-        "context_precision": 0.3333333333,
-        "context_recall": 1.0
+      "ragas": {},
+      "ragas_errors": {
+        "abstention": "dropped: re-judged as a refusal"
       },
-      "ragas_errors": {},
       "retrieval": {
         "recall_at_k": 1.0,
         "hit_at_k": true,
@@ -3449,7 +3821,17 @@
         "anatomy-and-physiology-p0625-23",
         "anatomy-and-physiology-p1102-00"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "multi-014",
@@ -3535,7 +3917,17 @@
         "anatomy-and-physiology-p1343-09",
         "biology-p0379-03"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-015",
@@ -3622,7 +4014,17 @@
         "anatomy-and-physiology-p0266-02",
         "biology-p1141-04"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-016",
@@ -3708,7 +4110,17 @@
         "biology-p0446-00",
         "biology-p0111-06"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-018",
@@ -3795,7 +4207,17 @@
         "biology-p0428-01",
         "biology-p0424-03"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-019",
@@ -3882,7 +4304,17 @@
         "biology-p0956-11",
         "anatomy-and-physiology-p0638-09"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-020",
@@ -3968,14 +4400,24 @@
         "biology-p0423-01",
         "biology-p0429-02"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "unans-001",
       "question": "How does the metabolic rate and ATP turnover in a hummingbird compare to a human on a per-gram tissue basis during peak activity?",
       "type": "unanswerable",
       "answer": "The provided passages do not contain information comparing the ATP turnover in a hummingbird to a human on a per-gram tissue basis during peak activity.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "biology-p0177-00",
         "biology-p0944-04",
@@ -4038,14 +4480,24 @@
         "biology-p0178-00",
         "anatomy-and-physiology-p0429-08"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "unans-002",
       "question": "At what exact hour during embryonic development do the histone proteins first associate with the newly replicated DNA strands to form nucleosomes?",
       "type": "unanswerable",
       "answer": "The provided passages do not contain information about the exact hour during embryonic development when histone proteins first associate with newly replicated DNA strands to form nucleosomes.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "biology-p0384-08",
         "anatomy-and-physiology-p0117-04",
@@ -4108,14 +4560,24 @@
         "biology-p0309-04",
         "biology-p0124-04"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "unans-003",
       "question": "How did shivering and vasoconstriction evolve as mechanisms for temperature regulation in mammals compared to birds?",
       "type": "unanswerable",
       "answer": "The provided passages do not contain information about how shivering and vasoconstriction evolved in mammals compared to birds.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "biology-p0961-05",
         "biology-p0961-06",
@@ -4178,14 +4640,24 @@
         "biology-p0031-03",
         "biology-p0945-06"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "unans-004",
       "question": "How do specific mutations in cyclin-dependent kinase inhibitors lead to the uncontrolled proliferation seen in triple-negative breast cancer?",
       "type": "unanswerable",
       "answer": "The provided passages do not contain information about triple-negative breast cancer or specific mutations in cyclin-dependent kinase inhibitors related to it.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "biology-p0297-00",
         "biology-p0443-01",
@@ -4248,14 +4720,24 @@
         "biology-p0393-00",
         "anatomy-and-physiology-p0129-05"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "unans-005",
       "question": "How do post-translational modifications like phosphorylation cascades specifically regulate the ubiquitin ligase activity that targets p53 for degradation during normal cell cycle progression?",
       "type": "unanswerable",
       "answer": "The provided passages do not contain information about how phosphorylation cascades specifically regulate ubiquitin ligase activity to target p53 for degradation during normal cell cycle progression.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "biology-p0443-00",
         "biology-p0448-05",
@@ -4318,14 +4800,24 @@
         "biology-p0439-00",
         "biology-p0448-04"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "unans-006",
       "question": "How many seconds after the FtsZ ring finishes assembling does the inward growth of the septum actually begin in E. coli?",
       "type": "unanswerable",
       "answer": "The provided passages do not contain information regarding how many seconds elapse after the FtsZ ring finishes assembling before the inward growth of the septum begins in *E. coli*.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "biology-p0299-01",
         "biology-p0304-04",
@@ -4388,14 +4880,24 @@
         "biology-p0398-02",
         "anatomy-and-physiology-p1303-04"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "unans-007",
       "question": "How did smooth muscle tissue evolve independently from skeletal muscle, and what were the ancestral proteins before actin and myosin specialized for contraction?",
       "type": "unanswerable",
       "answer": "The provided passages do not contain information about how smooth muscle tissue evolved independently from skeletal muscle or what the ancestral proteins were before actin and myosin specialized for contraction.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "anatomy-and-physiology-p0417-00",
         "biology-p1131-02",
@@ -4458,14 +4960,24 @@
         "anatomy-and-physiology-p0450-05",
         "anatomy-and-physiology-p0451-07"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "unans-008",
       "question": "How do insect asynchronous flight muscles achieve contraction frequencies that bypass the normal calcium-pump relaxation limits we see in vertebrate skeletal muscle?",
       "type": "unanswerable",
       "answer": "The provided passages do not contain information about insect asynchronous flight muscles or how they bypass calcium-pump relaxation limits.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "anatomy-and-physiology-p0444-03",
         "anatomy-and-physiology-p0435-06",
@@ -4528,14 +5040,24 @@
         "anatomy-and-physiology-p0430-09",
         "anatomy-and-physiology-p0437-00"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "unans-009",
       "question": "How does a mutation in the PRDM9 gene alter histone methylation patterns to stop homologous chromosomes from properly synapsing during meiosis in human infertility?",
       "type": "unanswerable",
       "answer": "The supplied passages do not contain information about a mutation in the PRDM9 gene, how it alters histone methylation patterns, or its role in stopping homologous chromosomes from properly synapsing during meiosis in human infertility.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "biology-p0369-08",
         "biology-p0362-00",
@@ -4598,14 +5120,24 @@
         "biology-p0309-05",
         "biology-p0312-09"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "unans-010",
       "question": "How do cohesin complexes maintain sister chromatid cohesion specifically along the chromosome arms versus the centromere during meiosis I?",
       "type": "unanswerable",
       "answer": "The provided passages do not contain information explaining how cohesin complexes maintain sister chromatid cohesion specifically along the chromosome arms versus the centromere during meiosis I. They only state that cohesin holds the chromatids together until anaphase II [1], and that cohesin proteins bind the pairs together at the centromere [1, 2].",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "biology-p0308-03",
         "biology-p0309-04",
@@ -4671,14 +5203,24 @@
         "biology-p0286-01",
         "biology-p0301-03"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "unans-011",
       "question": "How does the latch-state mechanism in vascular smooth muscle differ energetically from the catch-muscle mechanism found in mollus bivalves?",
       "type": "unanswerable",
       "answer": "The provided passages do not contain information about the catch-muscle mechanism found in mollusk bivalves; therefore, this comparison cannot be made using the supplied text.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "anatomy-and-physiology-p0444-03",
         "anatomy-and-physiology-p0427-05",
@@ -4741,14 +5283,24 @@
         "anatomy-and-physiology-p0444-04",
         "biology-p1136-10"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "unans-012",
       "question": "How do the licensing factors like Cdc6 and Cdt1 actually coordinate with origin recognition complexes to ensure DNA only replicates once per cell cycle?",
       "type": "unanswerable",
       "answer": "The provided passages do not contain information about licensing factors like Cdc6, Cdt1, or how they coordinate with origin recognition complexes to ensure DNA replicates only once per cell cycle.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "biology-p0294-04",
         "biology-p0293-03",
@@ -4811,15 +5363,25 @@
         "biology-p0303-03",
         "biology-p0391-02"
       ],
-      "rerank": {}
+      "sub_questions": [],
+      "retries": 0,
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     }
   ],
   "aggregates": {
-    "faithfulness": 0.9476031215161649,
-    "answer_relevancy": 0.7553488264566796,
-    "context_precision": 0.7321557970571245,
-    "context_recall": 0.9384057971014492,
-    "graded_samples": 46.0
+    "faithfulness": 0.9647435897435898,
+    "answer_relevancy": 0.8686511504251815,
+    "context_precision": 0.7836458332881934,
+    "context_recall": 0.9916666666666666,
+    "graded_samples": 40.0
   },
   "retrieval_aggregates": {
     "recall_at_k": 0.967391304347826,
@@ -4829,13 +5391,14 @@
   },
   "abstention": {
     "unanswerable_total": 12,
-    "unanswerable_abstained": 0,
+    "unanswerable_abstained": 12,
     "answerable_total": 46,
-    "answerable_abstained": 0,
-    "precision": null,
-    "recall": 0.0,
-    "f1": null,
-    "false_abstention_rate": 0.0
+    "answerable_abstained": 6,
+    "unmeasured": 0,
+    "precision": 0.6666666666666666,
+    "recall": 1.0,
+    "f1": 0.8,
+    "false_abstention_rate": 0.13043478260869565
   },
   "totals": {
     "questions": 58.0,

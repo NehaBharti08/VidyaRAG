@@ -133,25 +133,71 @@ against the frozen baseline.
 
 | | baseline | + rerank | + decompose | **shipped** |
 |---|---:|---:|---:|---:|
-| **Abstention recall** | 0.000 | 0.000 | 0.000 | **0.917 – 1.000** |
-| Abstention precision | — | — | — | 0.80 – 0.85 |
-| False abstention rate | 0.000 | 0.000 | 0.000 | 0.043 – 0.065 |
-| Faithfulness | 0.948 | 0.950 | 0.951 | 0.959 – 0.962 |
-| Answer relevancy | 0.755 | 0.770 | 0.709 | 0.820 – 0.844 |
-| Context precision | 0.732 | 0.792 | 0.690 | 0.819 – 0.828 |
+| **Abstention recall** | 1.000 | 1.000 | 1.000 | 0.917 – 1.000 |
+| Abstention precision | 0.667 | 0.706 | 0.600 | 0.647 – 0.667 |
+| False abstention rate | 0.130 | 0.109 | 0.174 | 0.130 |
+| Faithfulness | 0.965 | 0.944 | 0.956 | 0.958 – 0.963 |
+| Answer relevancy | 0.869 | 0.864 | 0.836 | 0.864 – 0.880 |
+| Context precision | 0.784 | 0.840 | 0.777 | 0.831 – 0.836 |
 | Recall @k | 0.967 | 0.967 | 0.957 | 0.967 |
 | Recall @context | 0.880 | **0.913** | 0.826 | **0.913** |
 | MRR | 0.770 | **0.830** | 0.769 | **0.830** |
-| Mean latency | 1,091 ms | 6,856 ms | 2,635 ms | 21,738 – 22,031 ms |
-| Cost/query (list price) | $0.00026 | $0.00027 | $0.00026 | $0.00027 |
+| Cost/query (list price) | $0.00026 | $0.00027 | $0.00026 | see below |
 
-**Abstention went from never refusing to refusing 11–12 of 12.** The ranges in
-the shipped column are deliberate. Two runs of that pipeline — differing only in
-two boolean flags that provably never fired — bracket every non-deterministic
-metric. Recall came back 1.000 and 0.917. That spread is generation
-non-determinism, not a configuration difference, and quoting the better number
-as though it were fixed would misrepresent it, so both ends are shown wherever
-the two runs disagree.
+> **These numbers replace an earlier table, and the correction is the most
+> important thing on this page.** That table reported abstention recall
+> `0.000 → 0.917–1.000` and presented it as the project's headline result. It
+> was an artefact of a bug: the model that labels an answer as a refusal was
+> called with `max_tokens=5`, which returns `'REF'` with
+> `finish_reason='length'` — the label truncated mid-word — and the parser
+> tested `startswith("REFUSED")`. Every refusal in every run was therefore
+> recorded as an answer. `0.000` looked exactly like the expected result for a
+> pipeline with no abstention mechanism, so nothing prompted anyone to check
+> it. Re-judged from the same stored answers with a working budget
+> (`uv run vidyarag rejudge`), the real figures are above. The bug, the fix and
+> its tests are in `src/vidyarag/evaluation/abstention.py` and
+> `tests/test_abstention_judge.py`.
+
+**The self-check did not create the ability to refuse. The generator already
+had it.** Told to answer only from the supplied passages, the baseline declines
+when they do not support an answer — it just declines *in prose*, which is why
+a broken label reader could hide it. On this gold set, abstention recall is at
+ceiling for every profile, and the self-check does not improve abstention
+precision over plain reranking (0.647–0.667 versus 0.706).
+
+**What the self-check does change** is the *form* of a refusal, and that is
+worth having even though it does not move these numbers: a refusal becomes an
+explicit `abstained` flag with no citations attached, rather than a paragraph
+of prose a caller has to classify — which is precisely the classification that
+went wrong here. It also produces a claim-level groundedness score and, when a
+claim fails, a retry query aimed at it. The honest summary is that it makes
+refusal *legible and structured*, not more frequent.
+
+RAGAS scores are computed only over answered questions, and re-judging moved
+several questions out of that set, so the quality columns are not comparable
+with the ones this table previously showed. Graded samples per profile:
+40 / 41 / 38 / 40 / 40 of 58.
+
+**Latency is not quoted for the self-check profiles here, because the committed
+figure is wrong.** `trace.total_ms` summed every recorded stage, and the
+corrective stage contains the retrieval and generation stages it runs, so those
+were counted twice: the ~22,000 ms in the old table is roughly 11,000 ms of
+work plus part of itself. Wall-clock timing is fixed in code
+(`src/vidyarag/observe/trace.py`), but correcting the committed *figures* needs
+a re-run of those two profiles, which the free-tier quota does not currently
+allow. `baseline` (1,091 ms), `rerank` (6,856 ms) and `decompose` (2,635 ms)
+have no nested stages and are unaffected.
+
+Per-query cost is understated for the same reason on the other axis: only
+generation tokens were recorded, so grading and decomposition calls cost
+nothing in the table above. A grading call is *larger* than the generation it
+checks — measured at 2,497 input and 612 output tokens against roughly 2,400
+and 60 for generation. That is also fixed in code and also needs a re-run to
+restate.
+
+Two of the 58 `guarded` questions could not be re-judged: the free-tier quota
+returned 429 on both attempts. They are recorded as `unmeasured` in the run
+file rather than counted as answers, which is the whole point of the fix.
 
 Every cell above is read directly from a committed run file — `corrective` from
 [`eval/results/corrective__20260828T154656Z.json`](eval/results/corrective__20260828T154656Z.json)
@@ -169,18 +215,22 @@ questions the input guard blocked nothing and the context guard quarantined
 nothing, while every deterministic retrieval metric came back bit-identical to
 the unguarded run. They cost latency only when there is something to catch.
 
-**The quality gains are mostly not real, and this repo says so.** Abstentions are
-excluded from RAGAS grading, so the denominator drops from 46 to 43 and the
-removed questions are the worst-answered. Compared only on the questions both
-profiles answered, relevancy moves +0.037 — inside the measured noise floor.
-**The self-check does not make answers better; it removes answers that should
-not have been given.**
+**The quality gains are mostly not real, and this repo says so.** Abstentions
+are excluded from RAGAS grading, so each profile is scored over a different
+subset — and the excluded questions are the worst-answered ones, which flatters
+whichever profile refuses most. That was true before the re-judging and is more
+visible after it, because every profile now has refusals excluded rather than
+only the two with a self-check. **The self-check does not make answers better;
+it makes it explicit when an answer should not have been given.**
 
-**The three "false" abstentions are not false alarms.** Those multi-hop questions
-had context recall 0.444 against 0.981 across the run — retrieval genuinely
-failed. Under `rerank` they produced faithfulness 0.952 on that broken context:
-*well-grounded answers to the wrong material*. That failure mode is invisible to
-faithfulness alone, and it is what abstention is for.
+**The false abstentions are mostly not false alarms.** The multi-hop questions
+refused across several profiles had context recall 0.444 against ~0.98 for the
+run — retrieval genuinely failed on them. Under `rerank` they produced
+faithfulness 0.952 on that broken context: *well-grounded answers to the wrong
+material*. That failure mode is invisible to faithfulness alone, and it is what
+abstention is for. The false abstention rate of 0.109–0.174 across profiles is
+nevertheless a real cost, reported here rather than buried, because a refusal
+on an answerable question is a failure a student notices.
 
 **Decomposition was built, measured, and rejected.** It was meant to fix
 multi-hop retrieval and made it worse — recall @context on split multi-hop
@@ -190,9 +240,18 @@ between sub-questions, and for a real two-hop question the passage each hop need
 is retrieved by that hop alone while generic passages both hops surface score
 twice and win. **Consensus selects for the unspecific.**
 
-**Guardrails, measured rather than asserted:** 0 false positives across all 3,608
-corpus chunks, 8/8 input injections blocked, 0/8 legitimate questions blocked,
-5/5 context injections quarantined.
+**Guardrails:** 0 false positives across all 3,608 real corpus chunks — that
+one is a measurement over the whole corpus. The other figures quoted for the
+guards (8/8 input injections blocked, 0/8 legitimate questions blocked, 5/5
+context injections quarantined) are **counts of hand-written test cases**, not
+an adversarial benchmark: they are the cases in
+[`tests/test_guard.py`](tests/test_guard.py), and they pass because the
+patterns were written for them. These are regular expressions. They catch
+canonical phrasings instantly and for free, and they are bypassable by
+paraphrase, by another language, and by obvious obfuscation. The defence that
+actually bounds the damage is the rest of the pipeline: passages-only prompt,
+validated citations, the self-check, no conversation state, and a "secret"
+system prompt that is published in this repository.
 
 Full methodology, gold-set provenance, and the failures that shaped the harness
 are in [docs/EVALUATION.md](docs/EVALUATION.md). Every run is a committed JSON

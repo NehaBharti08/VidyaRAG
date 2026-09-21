@@ -101,15 +101,21 @@ async def rejudge_run(
                 answer=sample.answer,
             )
             limiter.observe(loop.time() - started)
-            verdicts.put(
-                key,
-                {
-                    "abstained": verdict.refused,
-                    "measured": verdict.measured,
-                    "raw": verdict.raw,
-                    "error": verdict.error,
-                },
-            )
+            # Only a real verdict is cached. A failure is not a judgement, and
+            # caching one turns a transient 429 into a permanent hole in the
+            # metric: the next run reads the failure back off disk, never
+            # retries it, and reports a number computed over fewer questions
+            # than it claims -- which is the failure this whole module exists
+            # to correct, reintroduced one layer down.
+            if verdict.measured:
+                verdicts.put(
+                    key,
+                    {
+                        "abstained": verdict.refused,
+                        "measured": True,
+                        "raw": verdict.raw,
+                    },
+                )
 
         sample.abstained = verdict.refused
         sample.abstention_judge = {

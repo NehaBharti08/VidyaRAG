@@ -54,7 +54,7 @@
       "question": "What specific discovery about DNA enabled scientists to develop laboratory techniques used to identify genetic diseases and determine paternity?",
       "type": "factual",
       "answer": "Based on the provided passages, there is no mention of the specific discovery about DNA that enabled scientists to develop laboratory techniques for identifying genetic diseases and determining paternity. The passages state that DNA testing and analysis have various applications (such as determining paternity, diagnosing diseases, and identifying genetic disorders), and mention that techniques like DNA fingerprinting were invented by Dr. Alec Jeffreys [1, 3], but they do not describe the foundational *discovery* about DNA that enabled these techniques.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "biology-p0375-00",
         "biology-p0474-02",
@@ -91,13 +91,10 @@
       "gold_chunk_ids": [
         "biology-p0027-09"
       ],
-      "ragas": {
-        "faithfulness": 1.0,
-        "answer_relevancy": 0.0,
-        "context_precision": 0.0,
-        "context_recall": 0.0
+      "ragas": {},
+      "ragas_errors": {
+        "abstention": "dropped: re-judged as a refusal"
       },
-      "ragas_errors": {},
       "retrieval": {
         "recall_at_k": 0.0,
         "hit_at_k": false,
@@ -137,14 +134,22 @@
         "Which laboratory techniques used to identify genetic diseases and determine paternity rely on DNA analysis?"
       ],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "fact-002",
       "question": "What is the term for the process by which tiny bacteria move toward or away from chemicals?",
       "type": "factual",
       "answer": "The provided passages do not contain the term for the process by which tiny bacteria move toward or away from chemicals. They only mention \"positive chemotaxis\" as a phenomenon where injured or infected cells and nearby leukocytes emit chemical signals that attract more leukocytes [5].",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "biology-p0167-00",
         "biology-p0605-00",
@@ -180,13 +185,10 @@
       "gold_chunk_ids": [
         "biology-p0030-02"
       ],
-      "ragas": {
-        "faithfulness": 0.75,
-        "answer_relevancy": 0.0,
-        "context_precision": 0.0,
-        "context_recall": 0.0
+      "ragas": {},
+      "ragas_errors": {
+        "abstention": "dropped: re-judged as a refusal"
       },
-      "ragas_errors": {},
       "retrieval": {
         "recall_at_k": 0.0,
         "hit_at_k": false,
@@ -223,7 +225,15 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "fact-003",
@@ -312,7 +322,15 @@
         "What role do biological membranes play in maintaining the organization of the human body?"
       ],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-004",
@@ -398,7 +416,15 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-005",
@@ -487,7 +513,15 @@
         "How does a hyperbaric chamber alter pressure to treat decompression sickness?"
       ],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-006",
@@ -573,7 +607,15 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-007",
@@ -659,7 +701,15 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-008",
@@ -745,7 +795,15 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-009",
@@ -832,7 +890,15 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-010",
@@ -919,7 +985,15 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-011",
@@ -1009,7 +1083,15 @@
         "How are the cytoplasm and nucleus of an oligodendrocyte located in relation to the myelin sheath?"
       ],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-012",
@@ -1095,7 +1177,15 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-013",
@@ -1181,7 +1271,15 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-014",
@@ -1271,7 +1369,15 @@
         "How does the change in histone charge affect the tightness of DNA winding around the histones?"
       ],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-015",
@@ -1358,7 +1464,15 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-016",
@@ -1445,7 +1559,15 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-017",
@@ -1532,7 +1654,15 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-018",
@@ -1619,7 +1749,15 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-019",
@@ -1705,7 +1843,15 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-020",
@@ -1794,7 +1940,15 @@
         "What is the resulting side effect of loop diuretics on ion reabsorption in the loop of Henle?"
       ],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-021",
@@ -1880,7 +2034,15 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-022",
@@ -1970,7 +2132,15 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-023",
@@ -2057,14 +2227,22 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-024",
       "question": "Which specific cells in the afferent and efferent arterioles produce renin?",
       "type": "factual",
       "answer": "The supplied passages state that specialized cells in the kidneys found in the juxtaglomerular apparatus secrete renin [2, 3], but the text does not specify which cells in the afferent and efferent arterioles produce it.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "anatomy-and-physiology-p0925-02",
         "anatomy-and-physiology-p0927-05",
@@ -2101,13 +2279,10 @@
       "gold_chunk_ids": [
         "biology-p1216-01"
       ],
-      "ragas": {
-        "faithfulness": 1.0,
-        "answer_relevancy": 0.0,
-        "context_precision": 0.0,
-        "context_recall": 0.0
+      "ragas": {},
+      "ragas_errors": {
+        "abstention": "dropped: re-judged as a refusal"
       },
-      "ragas_errors": {},
       "retrieval": {
         "recall_at_k": 1.0,
         "hit_at_k": true,
@@ -2144,7 +2319,15 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "fact-025",
@@ -2230,7 +2413,15 @@
       ],
       "sub_questions": [],
       "retries": 1,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-026",
@@ -2319,7 +2510,15 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-027",
@@ -2406,7 +2605,15 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "fact-028",
@@ -2494,7 +2701,15 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-001",
@@ -2585,7 +2800,15 @@
         "How do nonparental genotypes like Ab and aB arise from crossing over during meiosis?"
       ],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-002",
@@ -2674,14 +2897,22 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-003",
       "question": "What specific developmental and structural condition of the ovaries and reproductive anatomy would you expect in an individual with triplo-X syndrome based on the genetic requirement for ovary maturation and typical female developmental pathways?",
       "type": "multi_hop",
       "answer": "The provided passages do not contain information about triplo-X syndrome. Therefore, the specific developmental and structural conditions of the ovaries and reproductive anatomy associated with triplo-X syndrome cannot be answered from the supplied text.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "anatomy-and-physiology-p1303-04",
         "anatomy-and-physiology-p1319-00",
@@ -2716,13 +2947,10 @@
         "biology-p0367-06",
         "anatomy-and-physiology-p1319-00"
       ],
-      "ragas": {
-        "faithfulness": 1.0,
-        "answer_relevancy": 0.0,
-        "context_precision": 0.0,
-        "context_recall": 0.0
+      "ragas": {},
+      "ragas_errors": {
+        "abstention": "dropped: re-judged as a refusal"
       },
-      "ragas_errors": {},
       "retrieval": {
         "recall_at_k": 1.0,
         "hit_at_k": true,
@@ -2762,7 +2990,15 @@
         "What specific developmental and structural conditions of the ovaries and reproductive anatomy occur in individuals with triplo-X syndrome?"
       ],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "multi-004",
@@ -2850,14 +3086,22 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-005",
       "question": "Which nitrogenous base found in the genetic material discovered to be transferred by Frederick Griffith pairs with adenine according to Erwin Chargaff's rules?",
       "type": "multi_hop",
       "answer": "The provided passages do not contain information about Frederick Griffith or the genetic material he discovered to be transferred. Therefore, the name of the genetic material he studied is missing from the text. \n\nHowever, according to Erwin Chargaff's rules, the amount of adenine equals the amount of thymine ($A = T$) [1]. The nitrogenous bases found in DNA include adenine, thymine, guanine, and cytosine [1, 2].",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "biology-p0378-01",
         "anatomy-and-physiology-p0086-16",
@@ -2895,13 +3139,10 @@
         "biology-p0376-00",
         "biology-p0378-01"
       ],
-      "ragas": {
-        "faithfulness": 1.0,
-        "answer_relevancy": 0.8373338039590821,
-        "context_precision": 0.8666666666377778,
-        "context_recall": 0.6666666666666666
+      "ragas": {},
+      "ragas_errors": {
+        "abstention": "dropped: re-judged as a refusal"
       },
-      "ragas_errors": {},
       "retrieval": {
         "recall_at_k": 1.0,
         "hit_at_k": true,
@@ -2941,14 +3182,22 @@
         "Which nitrogenous base pairs with adenine according to Erwin Chargaff's rules?"
       ],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "multi-006",
       "question": "When skeletal muscle cells undergo extensive damage that exceeds the repair capacity of their local stem cells, what specific type of tissue replaces them, and how does this replacement tissue fundamentally differ in its cellular structure regarding myoblast fusion origins?",
       "type": "multi_hop",
       "answer": "When skeletal muscle cells sustain damage to a greater extent than can be repaired by satellite cells, the damaged muscle fibers are replaced by scar tissue in a process known as fibrosis [1]. \n\nThe provided passages do not contain information explaining how this replacement scar tissue fundamentally differs in its cellular structure regarding myoblast fusion origins.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "anatomy-and-physiology-p0446-02",
         "anatomy-and-physiology-p0445-01",
@@ -2985,13 +3234,10 @@
         "anatomy-and-physiology-p0446-02",
         "anatomy-and-physiology-p0418-03"
       ],
-      "ragas": {
-        "faithfulness": 1.0,
-        "answer_relevancy": 0.0,
-        "context_precision": 0.9999999999,
-        "context_recall": 1.0
+      "ragas": {},
+      "ragas_errors": {
+        "abstention": "dropped: re-judged as a refusal"
       },
-      "ragas_errors": {},
       "retrieval": {
         "recall_at_k": 1.0,
         "hit_at_k": true,
@@ -3028,7 +3274,15 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "multi-007",
@@ -3118,7 +3372,15 @@
         "What radioactive isotope would tag the genetic material of the lytic bacteriophage T4?"
       ],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-008",
@@ -3210,7 +3472,15 @@
         "According to Chargaff's rules, how do nitrogenous base complementary base pairs form in the template strands of DNA?"
       ],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-010",
@@ -3301,14 +3571,22 @@
         "What structural feature does the RNA primer originally provide to allow DNA polymerase to begin adding nucleotides during DNA replication?"
       ],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-011",
       "question": "Which specific skull bones that form the rigid anterior wall of the palate also provide an origin point for the primary muscle responsible for closing the mouth during mastication?",
       "type": "multi_hop",
       "answer": "The supplied passages state that the hard palate is created by the maxillary and palatine bones of the skull [1]. However, the passages do not contain information regarding which skull bones provide an origin point for the primary muscle responsible for closing the mouth during mastication.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "anatomy-and-physiology-p1107-02",
         "biology-p1106-03",
@@ -3345,13 +3623,10 @@
         "anatomy-and-physiology-p0467-04",
         "anatomy-and-physiology-p1107-02"
       ],
-      "ragas": {
-        "faithfulness": 1.0,
-        "answer_relevancy": 0.0,
-        "context_precision": 0.0,
-        "context_recall": 0.3333333333333333
+      "ragas": {},
+      "ragas_errors": {
+        "abstention": "dropped: re-judged as a refusal"
       },
-      "ragas_errors": {},
       "retrieval": {
         "recall_at_k": 1.0,
         "hit_at_k": true,
@@ -3391,7 +3666,15 @@
         "Which skull bone and palate structure provides an origin point for the masseter muscle responsible for closing the mouth?"
       ],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "multi-012",
@@ -3478,14 +3761,22 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-013",
       "question": "What is the anatomical term for the large central body of the rectus abdominis muscles, and what connective tissue covering organizes the muscle fibers that form this structure?",
       "type": "multi_hop",
       "answer": "The passages do not contain the specific anatomical term for the central body of the rectus abdominis muscles (the passages only refer to this general muscle feature as the \"belly\" or \"central body\" in the context of parallel and fusiform muscles like the biceps brachii) [3]. Furthermore, the passages do not state which connective tissue covering organizes the muscle fibers that form this specific structure in the rectus abdominis.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "anatomy-and-physiology-p0476-02",
         "anatomy-and-physiology-p0474-01",
@@ -3522,13 +3813,10 @@
         "anatomy-and-physiology-p0476-02",
         "anatomy-and-physiology-p0457-03"
       ],
-      "ragas": {
-        "faithfulness": 0.6666666666666666,
-        "answer_relevancy": 0.0,
-        "context_precision": 0.3333333333,
-        "context_recall": 1.0
+      "ragas": {},
+      "ragas_errors": {
+        "abstention": "dropped: re-judged as a refusal"
       },
-      "ragas_errors": {},
       "retrieval": {
         "recall_at_k": 1.0,
         "hit_at_k": true,
@@ -3568,7 +3856,15 @@
         "What connective tissue covering organizes the muscle fibers that form the rectus abdominis muscle?"
       ],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "multi-014",
@@ -3659,7 +3955,15 @@
         "What broader category of mutation does a mutation caused by an environmental agent belong to based on its origin?"
       ],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-015",
@@ -3748,7 +4052,15 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-016",
@@ -3835,7 +4147,15 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-018",
@@ -3927,7 +4247,15 @@
         "What is the exact base sequence of the corresponding consensus sequence region found at the -10 position in prokaryotes?"
       ],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-019",
@@ -4020,7 +4348,15 @@
         "Which visual field information does the optic tract primarily transmit to the thalamus?"
       ],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "multi-020",
@@ -4108,14 +4444,22 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
+      }
     },
     {
       "id": "unans-001",
       "question": "How does the metabolic rate and ATP turnover in a hummingbird compare to a human on a per-gram tissue basis during peak activity?",
       "type": "unanswerable",
       "answer": "The provided passages do not contain information comparing the metabolic rate and ATP turnover of a hummingbird to a human during peak activity.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "anatomy-and-physiology-p1197-01",
         "biology-p0983-07",
@@ -4183,14 +4527,22 @@
         "What is the metabolic rate and ATP turnover per gram of tissue in a human during peak activity?"
       ],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "unans-002",
       "question": "At what exact hour during embryonic development do the histone proteins first associate with the newly replicated DNA strands to form nucleosomes?",
       "type": "unanswerable",
       "answer": "The provided passages do not contain information about the exact hour during embryonic development when histone proteins first associate with newly replicated DNA strands to form nucleosomes.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "biology-p0384-08",
         "anatomy-and-physiology-p0117-04",
@@ -4255,14 +4607,22 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "unans-003",
       "question": "How did shivering and vasoconstriction evolve as mechanisms for temperature regulation in mammals compared to birds?",
       "type": "unanswerable",
       "answer": "The provided passages do not contain information about how shivering and vasoconstriction evolved in mammals compared to birds.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "biology-p0961-05",
         "biology-p0961-06",
@@ -4330,14 +4690,22 @@
         "How did shivering and vasoconstriction evolve as mechanisms for temperature regulation in birds?"
       ],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "unans-004",
       "question": "How do specific mutations in cyclin-dependent kinase inhibitors lead to the uncontrolled proliferation seen in triple-negative breast cancer?",
       "type": "unanswerable",
       "answer": "The provided passages do not contain information about triple-negative breast cancer.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "biology-p0297-00",
         "biology-p0443-01",
@@ -4405,14 +4773,22 @@
         "What role do cell cycle dysregulations play in the uncontrolled proliferation of triple-negative breast cancer?"
       ],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "unans-005",
       "question": "How do post-translational modifications like phosphorylation cascades specifically regulate the ubiquitin ligase activity that targets p53 for degradation during normal cell cycle progression?",
       "type": "unanswerable",
       "answer": "The provided passages do not contain information about ubiquitin ligase activity targeting p53 for degradation or how post-translational modifications like phosphorylation cascades specifically regulate it.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "biology-p0293-03",
         "biology-p0443-00",
@@ -4480,14 +4856,22 @@
         "Which ubiquitin ligase targets the p53 protein for degradation, and how does this process function in normal cell cycle progression?"
       ],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "unans-006",
       "question": "How many seconds after the FtsZ ring finishes assembling does the inward growth of the septum actually begin in E. coli?",
       "type": "unanswerable",
       "answer": "The supplied passages do not contain information about the number of seconds that pass after the FtsZ ring finishes assembling before the inward growth of the septum begins in *E. coli* [1, 2, 3, 4, 5].",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "biology-p0299-01",
         "biology-p0304-04",
@@ -4558,14 +4942,22 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "unans-007",
       "question": "How did smooth muscle tissue evolve independently from skeletal muscle, and what were the ancestral proteins before actin and myosin specialized for contraction?",
       "type": "unanswerable",
       "answer": "The provided passages do not contain information about how smooth muscle tissue evolved independently from skeletal muscle, nor do they mention ancestral proteins before actin and myosin specialized for contraction [1, 2, 3, 4, 5].",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "anatomy-and-physiology-p0417-00",
         "biology-p1131-02",
@@ -4639,14 +5031,22 @@
         "What were the ancestral proteins before actin and myosin specialized for contraction?"
       ],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "unans-008",
       "question": "How do insect asynchronous flight muscles achieve contraction frequencies that bypass the normal calcium-pump relaxation limits we see in vertebrate skeletal muscle?",
       "type": "unanswerable",
       "answer": "The provided passages do not contain information about insect asynchronous flight muscles or how they bypass normal calcium-pump relaxation limits.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "anatomy-and-physiology-p0435-06",
         "anatomy-and-physiology-p0444-03",
@@ -4714,14 +5114,22 @@
         "What are the calcium-pump relaxation limits in vertebrate skeletal muscle?"
       ],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "unans-009",
       "question": "How does a mutation in the PRDM9 gene alter histone methylation patterns to stop homologous chromosomes from properly synapsing during meiosis in human infertility?",
       "type": "unanswerable",
       "answer": "The provided passages do not contain information about a mutation in the PRDM9 gene, histone methylation patterns, or their specific role in human infertility.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "biology-p0311-07",
         "biology-p0369-08",
@@ -4789,14 +5197,22 @@
         "How do disruptions in histone methylation during meiosis prevent homologous chromosomes from properly synapsing in human infertility?"
       ],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "unans-010",
       "question": "How do cohesin complexes maintain sister chromatid cohesion specifically along the chromosome arms versus the centromere during meiosis I?",
       "type": "unanswerable",
       "answer": "The provided passages do not contain information explaining how cohesin complexes maintain sister chromatid cohesion specifically along the chromosome arms versus the centromere during meiosis I. The texts mention that cohesin holds chromatids together until anaphase II [1] and that chromosomes are bound by cohesin proteins at the centromere [1, 2], but they do not detail the specific maintenance along the arms versus the centromere during meiosis I.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "biology-p0308-03",
         "biology-p0309-04",
@@ -4867,14 +5283,22 @@
         "How do cohesin complexes maintain sister chromatid cohesion at the centromere during meiosis I?"
       ],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "unans-011",
       "question": "How does the latch-state mechanism in vascular smooth muscle differ energetically from the catch-muscle mechanism found in mollus bivalves?",
       "type": "unanswerable",
       "answer": "The provided passages do not contain information about the \"catch-muscle mechanism found in mollus bivalves,\" so it is not possible to compare it with the latch-state mechanism in vascular smooth muscle using only these texts. \n\nThe passages do note that in smooth muscle, latch-bridges (a subset of cross-bridges between myosin heads and actin) keep thick and thin filaments linked together for a prolonged period without needing ATP, which allows smooth muscle lining arterioles and other visceral organs to maintain muscle tone with very little energy expenditure [2].",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "anatomy-and-physiology-p0427-05",
         "anatomy-and-physiology-p0444-03",
@@ -4944,14 +5368,22 @@
         "How does the catch-muscle mechanism function energetically in mollusc bivalves?"
       ],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     },
     {
       "id": "unans-012",
       "question": "How do the licensing factors like Cdc6 and Cdt1 actually coordinate with origin recognition complexes to ensure DNA only replicates once per cell cycle?",
       "type": "unanswerable",
       "answer": "The provided passages do not contain information about licensing factors like Cdc6, Cdt1, or how they coordinate with origin recognition complexes to ensure DNA replicates only once per cell cycle.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "biology-p0294-04",
         "biology-p0293-03",
@@ -5016,15 +5448,23 @@
       ],
       "sub_questions": [],
       "retries": 0,
-      "rerank": {}
+      "corrective": {},
+      "rerank": {},
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
+      }
     }
   ],
   "aggregates": {
-    "faithfulness": 0.951086956521739,
-    "answer_relevancy": 0.7089368786176677,
-    "context_precision": 0.6897644927139727,
-    "context_recall": 0.8731884057971016,
-    "graded_samples": 46.0
+    "faithfulness": 0.9561403508771928,
+    "answer_relevancy": 0.8361516476961481,
+    "context_precision": 0.7770833332896041,
+    "context_recall": 0.9780701754385964,
+    "graded_samples": 38.0
   },
   "retrieval_aggregates": {
     "recall_at_k": 0.9565217391304348,
@@ -5034,13 +5474,14 @@
   },
   "abstention": {
     "unanswerable_total": 12,
-    "unanswerable_abstained": 0,
+    "unanswerable_abstained": 12,
     "answerable_total": 46,
-    "answerable_abstained": 0,
-    "precision": null,
-    "recall": 0.0,
-    "f1": null,
-    "false_abstention_rate": 0.0
+    "answerable_abstained": 8,
+    "unmeasured": 0,
+    "precision": 0.6,
+    "recall": 1.0,
+    "f1": 0.7499999999999999,
+    "false_abstention_rate": 0.17391304347826086
   },
   "totals": {
     "questions": 58.0,
