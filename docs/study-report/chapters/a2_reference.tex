@@ -1,0 +1,109 @@
+\chapter{Quick Reference}
+\label{app:reference}
+
+\section{Commands}
+
+\begin{lstlisting}[language=bash]
+# setup
+uv sync                                  # runtime + dev, from uv.lock
+uv sync --group eval                     # + RAGAS, only for evaluation
+cp .env.example .env                     # paste a real GOOGLE_API_KEY
+uv run pre-commit install                # gitleaks, hygiene, ruff, black, mypy
+
+# data
+uv run vidyarag download [-b biology] [--force]
+uv run vidyarag ingest [--recreate] [--batch-size 64]
+uv run vidyarag health                   # settings, profile, Qdrant, point count
+uv run vidyarag config [-p guarded]      # merged profile, incl. thresholds + guards
+
+# ask and serve
+uv run vidyarag ask "QUESTION" [-p PROFILE] [--context]
+uv run uvicorn vidyarag.api.main:app     # :8000, /docs
+uv run python app/app.py                 # Gradio, :7860
+
+# evaluate
+uv run vidyarag eval -p guarded [--limit 4] [--rate 6] [--no-cache]
+uv run vidyarag rejudge [PROFILES] [--rate 5] [--dry-run]
+uv run vidyarag report [PROFILES]
+uv run vidyarag goldset check|draft|unanswerable|triage
+
+# quality
+uv run pytest -m "not costly" [--cov]    # 466 hermetic tests
+uv run pytest -m costly                  # 3 live tests (key + index)
+uv run ruff check . && uv run black --check . && uv run mypy
+
+# containers
+docker build -t vidyarag .
+docker run -p 8000:8000 -v "$(pwd)/data/index:/app/data/index" -e GOOGLE_API_KEY=... vidyarag
+docker compose up -d                     # local Qdrant server on :6333
+
+# the study report itself
+cd docs/study-report && tectonic -X compile --outdir build main.tex
+\end{lstlisting}
+
+\section{Environment variables}
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{4.0cm}>{\raggedright\arraybackslash}p{3.2cm}L@{}}
+\toprule
+\textbf{Variable} & \textbf{Default} & \textbf{Purpose}\\
+\midrule
+\code{GOOGLE_API_KEY} & empty & Gemini; needed to answer and evaluate, not to ingest or search\\
+\code{QDRANT_MODE} & \code{embedded} & \code{embedded}, \code{server} or \code{cloud}\\
+\code{QDRANT_URL} / \code{QDRANT_API_KEY} & --- & Required for server / cloud\\
+\code{QDRANT_PATH} & \code{data/index} & Embedded folder (repo-relative), or \code{:memory:}\\
+\code{QDRANT_COLLECTION} & \code{vidyarag_biology_v1} & Collection name\\
+\code{VIDYARAG_PROFILE} & \code{guarded} & Which profile to load\\
+\code{VIDYARAG_CONFIG_DIR} & \code{<repo>/config} & Profile directory; set to \code{/app/config} in Docker\\
+\code{LOG_LEVEL} / \code{LOG_FORMAT} & \code{INFO} / \code{json} & API logging\\
+\code{HF_TOKEN} & --- & Deploy script only\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Pipeline configuration}
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{5.0cm}>{\raggedright\arraybackslash}p{3.8cm}L@{}}
+\toprule
+\textbf{Key} & \textbf{Default} & \textbf{Notes}\\
+\midrule
+\code{generation_model} / \code{grader_model} & \code{gemini-3.5-flash-lite} / \code{gemini-3.1-flash-lite} & Pinned; different on purpose\\
+\code{temperature} & 0.0 & Generation only\\
+\code{embedding_model}, \code{embedding_dim} & \code{bge-base-en-v1.5}, 768 & Must match the index\\
+\code{chunking.chunk_size} / \code{chunk_overlap} & 512 / 64 & Ingestion\\
+\code{retrieval.top_k_retrieve} / \code{top_k_context} & 20 / 5 & Pool / prompt\\
+\code{retrieval.use_reranker} & false & \code{Xenova/ms-marco-MiniLM-L-6-v2}\\
+\code{retrieval.use_decomposition} & false & Measured and rejected\\
+\code{retrieval.use_hybrid} & false & \emph{Rejected if true}: not implemented\\
+\code{corrective.enabled} & false & The self-check loop\\
+\code{corrective.accept_threshold} / \code{abstain_threshold} & 0.8 / 0.5 & Validated at load: $0\le$ abstain $\le$ accept $\le1$\\
+\code{corrective.max_attempts} & 2 & $\ge1$\\
+\code{guardrails.check_user_input} / \code{check_retrieved_context} & false / false & Both true in \code{guarded}\\
+\code{embedding_max_tokens}, \code{respect_sentence_boundaries}, \code{sparse_model} & 512, true, \code{Qdrant/bm25} & \textbf{Read by no code}\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Key files}
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{5.2cm}L@{}}
+\toprule
+\textbf{File} & \textbf{Open it to show\ldots}\\
+\midrule
+\code{src/vidyarag/pipeline.py} & The whole query path, flags, \code{SelfCheck}, wall-clock timing\\
+\code{src/vidyarag/correct/policy.py} & The accept / retry / abstain rules and fail-open\\
+\code{src/vidyarag/correct/grader.py} & Claim-level grading and the refusal flag\\
+\code{src/vidyarag/generate/citations.py} & Marker parsing and invalid-citation stripping\\
+\code{src/vidyarag/evaluation/retrieval.py} & The three lists behind recall, MRR and recall@context\\
+\code{src/vidyarag/evaluation/abstention.py} & The judge, its bug, and the fix\\
+\code{src/vidyarag/evaluation/rejudge.py} & Rebuilding verdicts from stored answers\\
+\code{src/vidyarag/observe/trace.py} & Nested stages, wall clock, tokens by purpose\\
+\code{src/vidyarag/ingest/parse.py}, \code{chunk.py} & Outline-driven structure; tokeniser-accurate packing\\
+\code{tests/test_abstention_judge.py}, \code{test_query_pipeline.py} & The tests the audit said were missing\\
+\code{Dockerfile}, \code{.github/workflows/docker.yml} & Five defects found by running the container\\
+\code{scripts/deploy_space.py} & How the demo ships with its index and a secret key\\
+\bottomrule
+\end{tabularx}
+\end{center}

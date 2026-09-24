@@ -1,0 +1,54 @@
+\chapter{Glossary}
+\label{app:glossary}
+
+\begin{small}
+\begin{description}[style=sameline,leftmargin=0pt,labelindent=0pt,itemsep=1.5pt,font=\normalfont\bfseries]
+  \item[Ablation.] Changing one component to measure its effect; each profile changes one flag.
+  \item[Abstention.] Declining to answer. Here, the fixed, citation-free sentence the self-check returns.
+  \item[Abstention precision / recall / false-abstention rate.] Correct refusals over all refusals; unanswerable questions refused over all unanswerable; answerable questions refused over all answerable.
+  \item[Answer relevancy.] RAGAS: how well the answer addresses the question, via questions generated from the answer.
+  \item[BGE.] \code{BAAI/bge-base-en-v1.5}, the 768-d embedding model.
+  \item[Bi-encoder / cross-encoder.] Embed query and passage separately (fast search) / read them together and score the pair (accurate reranking).
+  \item[Chunk (passage).] One indexed piece of text: at most 512 BGE tokens, within one section.
+  \item[Citation marker.] A bracketed passage number such as \code{[2]} or \code{[2, 3]}.
+  \item[Claim.] An atomic assertion the grader extracts from a draft.
+  \item[Cold start.] The first request's extra delay while models load or download.
+  \item[Context.] The five passages placed in the prompt.
+  \item[Context precision / recall.] RAGAS: are the retrieved passages useful, and do they cover the reference answer?
+  \item[Cosine similarity.] The cosine of the angle between two vectors; the collection's distance.
+  \item[Dense retrieval.] Search by embedding similarity.
+  \item[Deterministic id.] A \code{uuid5} of the chunk id, so a rewrite overwrites.
+  \item[Embedded mode.] Qdrant running inside the Python process.
+  \item[Fail open.] Allowing an action when a check cannot run: the draft is accepted when grading fails, and labelled \code{unavailable}.
+  \item[Faithfulness.] RAGAS: the share of answer statements supported by the passages.
+  \item[Gold set / gold passage.] The 58 evaluation questions / a passage known to support a reference answer.
+  \item[Grader.] The second Gemini model, which labels claims and flags refusals.
+  \item[Groundedness score $g$.] The mean claim weight: supported 1, partial 0.5, unsupported 0.
+  \item[Hermetic test.] A test independent of the network, real services and the developer's environment.
+  \item[Hit rate / MRR.] Any gold passage in the top $k$? / Mean of 1/rank of the first gold passage.
+  \item[Hybrid search.] Keyword plus dense retrieval; reserved, not built.
+  \item[Idempotent.] Producing the same result when run again.
+  \item[Input guard / context guard.] Block manipulative questions before any work / quarantine directive passages before the prompt.
+  \item[Judge (LLM-as-judge).] A model used to label outputs: the abstention judge, and RAGAS.
+  \item[Multi-hop question.] One that needs two or more passages.
+  \item[Named vector.] A Qdrant vector stored under a name; here \code{dense}.
+  \item[Noise floor.] Run-to-run variation, below which a difference is not claimed (about $\pm0.05$).
+  \item[ONNX Runtime.] A CPU inference engine for exported models.
+  \item[Payload.] The metadata stored with each vector: text, citation, pages, licence.
+  \item[Pool recall (recall@k) / recall@context.] The gold share among the 20 candidates / among the 5 prompt passages.
+  \item[Printed page.] The page number printed in the book, read from the running head.
+  \item[Profile.] A committed pipeline configuration: \code{baseline}, \code{rerank}, \code{decompose}, \code{corrective}, \code{guarded}.
+  \item[Prompt injection.] Text designed to override a model's instructions.
+  \item[RAG.] Retrieval-augmented generation.
+  \item[Refusal flag.] The grader's \code{refuses} field.
+  \item[Rejudge.] Rebuilding abstention verdicts from stored answers (\code{vidyarag rejudge}).
+  \item[RRF.] Reciprocal rank fusion: merge lists by $\sum 1/(k+\text{rank})$.
+  \item[\code{SelfCheck}.] An answer's self-check state: \code{not_run}, \code{passed}, \code{unavailable}, \code{abstained}.
+  \item[Stage / wall clock.] A timed, possibly nested step in the trace / the real elapsed time, now the reported total.
+  \item[Temperature.] A sampling parameter; 0 is as predictable as the provider allows, not deterministic.
+  \item[Token / tokeniser.] A unit of text as a model splits it / the thing that splits it (BGE uses WordPiece).
+  \item[Unmeasured.] A verdict that could not be established --- truncated, failed or unparseable --- and is reported as such, never as a default.
+  \item[Validity rule.] Withholding metrics when more than 10\% of questions fail.
+  \item[ZeroGPU.] Hugging Face hardware that attaches GPUs on demand to decorated functions.
+\end{description}
+\end{small}

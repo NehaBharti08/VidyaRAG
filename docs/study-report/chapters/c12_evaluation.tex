@@ -1,0 +1,149 @@
+\chapter{Evaluation: Harness and Results}
+\label{ch:evaluation}
+
+The README calls one of the project's pillars ``numbers, not adjectives''. This chapter covers the machinery behind the numbers and then the numbers themselves, as they stand after the judging bug was fixed and every run re-judged.
+
+\section{Principles, as enforced in code}
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{4.0cm}L@{}}
+\toprule
+\textbf{Principle} & \textbf{Enforcement}\\
+\midrule
+One frozen control & \code{baseline} says ``DO NOT EDIT''; a test asserts every enhancement stays off.\\
+One change at a time & \code{rerank} and \code{decompose} each flip one flag; \code{corrective} builds on \code{rerank}; \code{guarded} adds only the guards.\\
+Report failures & Failed questions stay in the run; above 10\% failed, \emph{no metrics are printed at all}.\\
+Cache aggressively & Answers, verdicts and grader responses are cached on disk, so an interrupted run resumes.\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{The gold set}
+\label{sec:goldset}
+
+\code{eval/goldset/goldset_v1.jsonl} holds 58 questions (digest \code{258cb6f9b1a2ab04}, recorded in every run):
+
+\begin{center}\small
+\begin{tabular}{@{}lrcl@{}}
+\toprule
+\textbf{Type} & \textbf{Count} & \textbf{Gold passages} & \textbf{Provenance}\\
+\midrule
+Factual (\code{fact-001}\ldots) & 28 & 1 & LLM-drafted, human-verified\\
+Multi-hop (\code{multi-001}\ldots) & 18 & 2 & LLM-drafted, human-verified\\
+Unanswerable (\code{unans-001}\ldots) & 12 & 0 & LLM-drafted, retrieval-verified\\
+Ambiguous & 0 & --- & the type exists; none written\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+A Pydantic validator enforces that the ground truth matches the type. An unanswerable question may carry no reference or gold passages. A multi-hop question needs at least two gold passages, because ``with one it is a factual lookup and would inflate the multi-hop score.'' The \code{provenance} field exists ``so the honest answer to \emph{is this evaluation real?} lives in the data rather than in a claim about it'' \ev{src/vidyarag/evaluation/goldset.py}.
+
+\paragraph{Construction.} Answerable questions are drafted from sampled passages at temperature 0.7 and dropped if answerable from general knowledge. Multi-hop partners are the nearest passage from a \emph{different} section; random pairing produced non-sequiturs. A triage step checks that each gold passage really supports its reference. It deliberately does not check that retrieval finds the gold passage, which would make the set easy for the baseline. Unanswerable questions are the hardest, because ``an LLM asked plainly for unanswerable questions produces obviously out-of-domain ones, which makes refusing them trivial.'' Each candidate must therefore pass three checks: an in-domain check (its top retrieval score at or above the 10th percentile of answerable questions, 0.714); a near-duplicate check (cosine below 0.88); and a grader judging that the passages do not answer it. An early batch had ``exact'' in 11 of 12 questions, which a system could learn to refuse by phrasing alone, so the prompt now rotates eight question shapes.
+
+\begin{inferred}[limits]
+Fifty-eight questions give coarse resolution: one question moves abstention recall by 0.083. Every question was drafted by a model and approved by one person, who also built the system. There is no held-out split, so all tuning and all reporting used the same set. And because the file is ordered by type, a run that dies partway loses the hardest questions first.
+\end{inferred}
+
+\section{The runner}
+\label{sec:runner}
+
+\code{run_evaluation} first checks that RAGAS is importable. A run once generated every answer --- ``twenty minutes of quota'' --- and then died at the first grading call. It then answers \emph{sequentially} (the embedded index cannot be opened concurrently) and grades \emph{concurrently}, so that a grading rate-limit ``never destroys the generation work already paid for'' \ev{src/vidyarag/evaluation/runner.py}. Several constants encode specific incidents:
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.9cm}L@{}}
+\toprule
+\textbf{Constant} & \textbf{The incident behind it}\\
+\midrule
+\code{ANSWER_GAP_SECONDS = 4} & Unpaced answering hit a per-minute limit and hung inside the SDK: 18 of 58 answered, no output, no error.\\
+\code{ANSWER_ATTEMPTS = 3} & A \code{decompose} run lost 11 of 58 questions to transient 429/503 errors, none retried.\\
+\code{MAX_FAILURE_RATE = 0.10} & A run lost 39 of 58 questions and still printed a table. The survivors were 17 factual, 0 multi-hop and 2 unanswerable, so faithfulness read 0.949 --- ``high \emph{because} of what was missing.''\\
+\code{SCRATCH_DIR} & A \code{--limit 4} smoke run became ``the latest guarded run'' and would have been reported.\\
+\code{CACHE_HIT_SECONDS = 0.25} & A fully cached re-run took as long as an uncached one, because cache hits were being paced.\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\paragraph{The answer cache} key now hashes the \emph{entire} merged configuration, plus the prompt version, the collection and the question. The original key listed six named fields and omitted reranking, decomposition, the grader model, the thresholds and both guardrails, so a profile edited in place would have been served the old behaviour's answers. Only successful answers are cached. \tagM{} In the committed \code{guarded} run, all 58 answers came from the cache, produced by an earlier \code{guarded} pass; \code{decompose} reused 47.
+
+\paragraph{Retrieval metrics} (Section~\ref{sec:ir-metrics}) read three different lists. Recall and hit rate read the 20-candidate pool, MRR reads the final ordering, and recall@context reads the five prompt passages. The first rerank ablation scored everything from the pool, so context recall and MRR came out \emph{bit-identical} to the baseline: ``the reranker was working; the instrument was reading the wrong list.'' They are ``the part of the harness worth trusting most'': free, exactly reproducible, and they isolate blame.
+
+\paragraph{RAGAS} is imported by one module only, so that ``the blast radius of the next change is one file.'' It reaches Gemini through \code{AsyncOpenAI} pointed at Google's OpenAI-compatible endpoint, with \code{provider="openai"} describing ``the wire protocol, not the vendor''. Answer relevancy uses the local BGE embeddings, so it is measured ``in the same vector space retrieval actually searched.'' Failures get five attempts with linear back-off and are then recorded as \code{None}, which averages skip, because treating one as zero ``would let a grader failure masquerade as a bad score.'' A \code{RateLimiter} reserves time slots under a lock (six per minute), because a semaphore ``bounds how many calls are in flight, not how many happen per minute.'' It paces only once a call proves slow enough to be real rather than cached.
+
+\paragraph{Abstention} is detected in two ways. \emph{Structurally}: the loop set the flag, or the answer is one of the two fixed sentinels. Otherwise it is \emph{judged}: a model is asked for one word, \code{REFUSED} or \code{ANSWERED}. That judge was truncated to five tokens, and so returned \code{'REF'}, for every committed run. The full story is in Chapter~\ref{ch:lessons}. It now has a 64-token budget and whole-word parsing, and it reports \code{unmeasured} rather than guessing.
+
+\section{The results}
+\label{sec:results}
+
+Every figure below comes from the committed run files as they now stand, after \code{vidyarag rejudge}. All five runs share the gold set, the models and Python 3.11, and none had a failed question.
+
+\begin{center}\small
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+\textbf{Metric} & \code{baseline} & \code{rerank} & \code{decompose} & \code{corrective} & \code{guarded}\\
+\midrule
+\multicolumn{6}{@{}l}{\textit{Retrieval --- deterministic, unaffected by the judge}}\\
+Recall@20 & 0.967 & 0.967 & 0.957 & 0.967 & 0.967\\
+Recall@context (5) & 0.880 & \textbf{0.913} & 0.826 & \textbf{0.913} & \textbf{0.913}\\
+MRR & 0.770 & \textbf{0.830} & 0.769 & \textbf{0.830} & \textbf{0.830}\\
+\midrule
+\multicolumn{6}{@{}l}{\textit{Abstention --- re-judged}}\\
+Unanswerable refused & 12/12 & 12/12 & 12/12 & 12/12 & 11/12\\
+Answerable refused & 6/46 & 5/46 & 8/46 & 6/46 & 6/46\\
+Recall & 1.000 & 1.000 & 1.000 & 1.000 & 0.917\\
+Precision & 0.667 & 0.706 & 0.600 & 0.667 & 0.647\\
+Unmeasured verdicts & 0 & 0 & 0 & 0 & 2\\
+\midrule
+\multicolumn{6}{@{}l}{\textit{RAGAS --- model-judged, answered questions only}}\\
+Faithfulness & 0.965 & 0.944 & 0.956 & 0.963 & 0.958\\
+Answer relevancy & 0.869 & 0.864 & 0.836 & 0.864 & 0.880\\
+Context precision & 0.784 & 0.840 & 0.777 & 0.831 & 0.836\\
+Questions graded & 40 & 41 & 38 & 40 & 40\\
+\midrule
+\multicolumn{6}{@{}l}{\textit{Latency (mean ms) and cost}}\\
+Mean latency & 1,091 & 6,856 & 2,635 & \multicolumn{2}{c}{not quoted --- double-counted}\\
+Median latency & 1,022 & 3,100 & 2,441 & \multicolumn{2}{c}{(Section~\ref{sec:latency-bug})}\\
+Tokens in/out per question & 2,400/59 & 2,423/61 & \multicolumn{3}{c}{omit decomposition / grading calls}\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{How to read it.} Each profile ran \emph{once}, so there are no confidence intervals. Retrieval metrics are exact, because retrieval is deterministic. Model-judged metrics are noisy: two baseline runs differed by 0.043 in relevancy and 0.006 in faithfulness, so only differences above about $\pm0.05$ are claimable. The RAGAS values are much higher than those first published (baseline relevancy 0.869, against 0.755) because re-judging moved prose refusals out of the scored set; a refusal scores badly on relevancy. They are not comparable with the old table.
+
+\subsection{Reranking works as designed}
+\label{sec:res-rerank}
+
+The pool is unchanged, recall@context rose by 0.033, and MRR by 0.060. The gap between the pool (0.967) and the context shrank from 8.7 to 5.4 points, so about 38\% of it was recovered. Per type, reranking helped factual questions (recall@context 0.893 $\rightarrow$ 0.964, MRR 0.744 $\rightarrow$ 0.839) and slightly hurt multi-hop ones (0.861 $\rightarrow$ 0.833, a single passage). On the 38 questions both answered, the only generation metric to move beyond noise was context precision, +0.073, consistent with better-ordered context. Faithfulness moved $-0.024$ and relevancy $-0.004$, both within noise.
+
+\subsection{Decomposition is rejected}
+\label{sec:res-decompose}
+
+Recall@context fell from 0.880 to 0.826. On multi-hop questions, pool recall reached 1.000 but context recall fell to 0.778, and on the 11 split questions to 0.727 against 0.864. Multi-hop answer relevancy fell to 0.700, against 0.804 for baseline. Rank fusion found the passages and then ordered them out of the prompt (Section~\ref{sec:decompose}).
+
+\subsection{The self-check: what it did not change, and what it did}
+\label{sec:res-corrective}
+
+\begin{keyidea}[the corrected finding]
+\textbf{Abstention recall did not move.} Every profile refused all 12 unanswerable questions (the shipped one 11), because prompt rule 3 makes the generator decline in prose. \textbf{Answer quality did not move either.} On shared answered questions, \code{rerank} against \code{corrective} is $+0.017$ faithfulness, $-0.003$ relevancy and $-0.006$ context precision; against \code{guarded} it is $+0.016$, $+0.013$ and $0.000$. All of this is within noise. \textbf{What changed is the form of the refusal.} Without the loop, a refusal is free text that may carry citations and can only be found by a judge, which is exactly the component that broke. With the loop, it is one fixed sentence, carries no citations, sets \code{abstained}, and is exactly countable.
+\end{keyidea}
+
+\paragraph{The answerable questions counted as refused} recur across profiles: \code{fact-002}, \code{multi-003}, \code{multi-006}, and in most profiles also \code{multi-011}, \code{multi-013} or \code{multi-015}. Several are \emph{partial} answers that give cited facts and then say what the passages lack. The judge's prompt calls these answered, yet the model labelled them refused. \tagI{} Counting only outright refusals, the answerable refusals are roughly 1--2 for \code{baseline} and 2--4 for the self-check profiles; the unanswerable column does not depend on this reading. The loop's own false abstentions were retrieval failures: in \code{multi-008} a gold passage was never retrieved, in \code{multi-011} and \code{multi-015} the second passage was ranked out, and for \code{fact-002} (\code{guarded}) the gold passage was not among the 20 candidates. The shipped profile's one missed refusal, \code{unans-011}, declined the comparison asked for and then described a related topic. \code{multi-011} shows the cost of the loop's all-or-nothing rule: \code{rerank} gave a useful partial answer, and \code{corrective} replaced it with the abstention sentence.
+
+\section{What the evidence supports}
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{6.4cm}>{\raggedright\arraybackslash}p{2.0cm}L@{}}
+\toprule
+\textbf{Claim} & \textbf{Supported?} & \textbf{Why}\\
+\midrule
+Reranking improves recall@context and MRR & \textbf{Yes} & Deterministic; pool unchanged.\\
+Reranking improves faithfulness or relevancy & No & Within noise.\\
+Decomposition hurts multi-hop context & \textbf{Yes} & Deterministic: 0.861 $\rightarrow$ 0.778.\\
+The self-check raises abstention recall & \textbf{No} & 1.000 without it. The old ``0.000'' was the judge.\\
+The self-check makes refusals explicit and countable & \textbf{Yes} & Every abstention in both runs is structural.\\
+The self-check improves answer quality & No & Like-for-like within $\pm0.02$.\\
+The guards cause no false positives on the corpus & Yes & 0 of 3,608, reproduced.\\
+The guards stop injection & Canonical phrasings only & 1 of 11 new phrasings blocked.\\
+Shipped latency is about 22\,s / cost \$0.00027 & No & 1.69$\times$ over and 2.5$\times$ under, measured.\\
+\bottomrule
+\end{tabularx}
+\end{center}

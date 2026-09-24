@@ -1,0 +1,173 @@
+\chapter{Architecture}
+\label{ch:architecture}
+
+VidyaRAG is one Python package, \code{vidyarag}, under \code{src/vidyarag}. It has no microservices, no queue and no relational database. It has three user-facing entry points --- a CLI, a FastAPI app and a Gradio page --- that all call the same \code{Pipeline} object. It uses one vector store (Qdrant) and two model sources: local ONNX models via fastembed for embedding and reranking, and Google Gemini for generation, grading and decomposition. Behaviour lives in committed YAML profiles, and evidence lives in committed result files.
+
+\begin{figure}[htbp]
+\centering
+\resizebox{0.94\textwidth}{!}{%
+\begin{tikzpicture}[
+  font=\sffamily\small,
+  layer/.style={draw, rounded corners=3pt, fill=#1, minimum width=150mm, minimum height=12mm, align=center},
+  mod/.style={draw, rounded corners=2pt, fill=white, align=center, font=\sffamily\scriptsize, minimum height=7mm, inner sep=2pt},
+  arr/.style={-Stealth, thick, gray!70!black}
+]
+\node[layer=orange!10] (iface) at (0,0) {};
+\node[anchor=west, font=\sffamily\bfseries\small] at (iface.west) {\ Interfaces};
+\node[mod] at (-2.5,0) {\code{cli.py} (Typer)};
+\node[mod] at (1.5,0) {\code{api/} (FastAPI)};
+\node[mod] at (5.3,0) {\code{app/app.py} (Gradio)};
+\node[layer=blue!8] (orch) at (0,-1.7) {};
+\node[anchor=west, font=\sffamily\bfseries\small] at (orch.west) {\ Orchestration};
+\node[mod] at (1.5,-1.7) {\code{pipeline.py}: \code{Pipeline.answer()} / \code{retrieve()}};
+\node[layer=green!8, minimum height=15mm] (stages) at (0,-3.6) {};
+\node[anchor=west, font=\sffamily\bfseries\small] at (stages.west) {\ Stages};
+\node[mod] at (-3.0,-3.6) {\code{guard/}\\input + context};
+\node[mod] at (-0.4,-3.6) {\code{retrieve/}\\dense, rerank, decompose};
+\node[mod] at (2.6,-3.6) {\code{generate/}\\prompt, answer, citations};
+\node[mod] at (5.5,-3.6) {\code{correct/}\\grader, policy, loop};
+\node[layer=violet!8] (infra) at (0,-5.5) {};
+\node[anchor=west, font=\sffamily\bfseries\small] at (infra.west) {\ Infrastructure};
+\node[mod] at (-2.9,-5.5) {\code{settings.py}};
+\node[mod] at (-0.6,-5.5) {\code{store/} (Qdrant)};
+\node[mod] at (1.9,-5.5) {\code{llm/provider.py}};
+\node[mod] at (4.5,-5.5) {\code{observe/} (trace, log)};
+\node[layer=yellow!14] (off) at (0,-7.3) {};
+\node[anchor=west, font=\sffamily\bfseries\small] at (off.west) {\ Offline};
+\node[mod] at (-0.2,-7.3) {\code{ingest/}: corpus, download, parse, chunk, pipeline};
+\node[mod] at (4.9,-7.3) {\code{evaluation/}: gold set, runner, metrics};
+\draw[arr] (iface.south) -- (orch.north);
+\draw[arr] (orch.south) -- (stages.north);
+\draw[arr] (stages.south) -- (infra.north);
+\draw[arr] (off.north) -- (infra.south);
+\end{tikzpicture}}
+\caption{Layered view of the package, reconstructed from its imports. Arrows point in the direction of calls. The one exception is \code{/v1/search}, which calls \code{retrieve_dense} directly.}
+\label{fig:layers}
+\end{figure}
+
+\section{Ingestion}
+\label{sec:arch-ingest}
+
+Ingestion turns two PDFs into a searchable index, offline and without an API key. It is driven by \code{vidyarag download} and then \code{vidyarag ingest} (Figure~\ref{fig:arch-ingest}). It has four properties worth stating:
+\begin{itemize}
+  \item \textbf{Idempotent.} Point ids are \code{uuid5(namespace, chunk_id)}, so writing a chunk twice overwrites it instead of duplicating it \ev{src/vidyarag/store/collection.py}.
+  \item \textbf{Resumable.} The orchestrator first reads back which chunk ids already exist and embeds only the rest \ev{src/vidyarag/ingest/pipeline.py}.
+  \item \textbf{Credential-free.} Nothing on this path imports the Gemini SDK.
+  \item \textbf{Provenance.} A manifest records the PDFs' checksums and page counts. A per-collection run report, \code{data/ingest_run.<collection>.json}, records the model, the chunking parameters and the counts.
+\end{itemize}
+
+\begin{figure}[htbp]
+\centering
+\resizebox{0.92\textwidth}{!}{%
+\begin{tikzpicture}[
+  font=\sffamily\footnotesize,
+  node distance=5mm and 7mm,
+  proc/.style={draw, rounded corners=2pt, fill=blue!6, align=center, text width=40mm, minimum height=11mm},
+  data/.style={draw, fill=yellow!12, align=center, text width=40mm, minimum height=9mm},
+  ext/.style={draw, dashed, rounded corners=2pt, fill=gray!8, align=center, text width=40mm, minimum height=9mm},
+  store/.style={draw, cylinder, shape border rotate=90, aspect=0.15, fill=violet!10, align=center, text width=34mm, minimum height=16mm},
+  arr/.style={-Stealth, thick}
+]
+\node[ext] (web) {OpenStax asset URLs\\(\code{corpus.py})};
+\node[proc, below=of web] (dl) {\textbf{download.py}\\httpx stream, Range resume,\\\code{.part} then rename, SHA-256};
+\node[data, below=of dl] (raw) {\code{data/raw/*.pdf}\\+ \code{manifest.json}};
+\node[proc, below=of raw] (parse) {\textbf{parse.py}\\PDF outline $\rightarrow$ (chapter, section) map;\\strip running heads, order columns,\\clean text, drop question pages};
+\node[data, right=12mm of parse] (pages) {\code{PageText} stream\\(text, chapter, section,\\PDF page, printed page)};
+\node[proc, above=of pages] (chunk) {\textbf{chunk.py}\\sentence split; greedy pack\\to 512 BGE tokens, 64 overlap;\\never across sections};
+\node[data, above=of chunk] (chunks) {\code{Chunk} objects\\id \code{biology-p0133-05}, citation};
+\node[proc, right=12mm of chunks] (embed) {\textbf{llm/provider.py}\\\code{embed_texts}: fastembed\\\code{bge-base-en-v1.5}, 768-d};
+\node[proc, below=of embed] (points) {\textbf{store/collection.py}\\uuid5 id, named vector\\\code{dense}, payload};
+\node[store, below=of points] (qdrant) {Qdrant collection\\\code{vidyarag_biology_v1}\\3,608 points, 34.9\,MB};
+\node[data, below=of qdrant] (report) {\code{ingest_run.<collection>.json}\\run provenance};
+\draw[arr] (web) -- (dl);
+\draw[arr] (dl) -- (raw);
+\draw[arr] (raw) -- (parse);
+\draw[arr] (parse) -- (pages);
+\draw[arr] (pages) -- (chunk);
+\draw[arr] (chunk) -- (chunks);
+\draw[arr] (chunks) -- (embed);
+\draw[arr] (embed) -- (points);
+\draw[arr] (points) -- node[right, font=\scriptsize]{upsert, batch 64} (qdrant);
+\draw[arr] (qdrant) -- (report);
+\node[draw, dashed, rounded corners, fit=(parse)(pages)(chunk)(chunks)(embed)(points)(qdrant)(report), inner sep=3mm, label={[font=\sffamily\scriptsize]north:\code{ingest/pipeline.py: ingest()}, resumable by existing chunk ids}] {};
+\end{tikzpicture}}
+\caption{Ingestion, as implemented.}
+\label{fig:arch-ingest}
+\end{figure}
+
+\section{Query time}
+\label{sec:arch-query}
+
+Every entry point calls \code{Pipeline.answer(question)}. The active \emph{profile} decides which stages run; the code path is the same. Figure~\ref{fig:arch-query} shows the shipped \code{guarded} profile. Its key properties:
+\begin{itemize}
+  \item \textbf{Flags, not code paths.} Reranking, decomposition, the self-check and both guards are booleans read inside one \code{Pipeline} class, and a hermetic test asserts that each flag really changes what runs \ev{tests/test_query_pipeline.py}.
+  \item \textbf{Cheap refusals first.} The input guard runs before any embedding, search or model call. A blocked question returns \code{blocked=True} and \code{grounded=False}.
+  \item \textbf{Retrieval is local.} Only generation and grading reach the network.
+  \item \textbf{A retry re-retrieves.} It reruns the whole retrieval chain with a reformulated query, rather than only re-asking the generator.
+  \item \textbf{The trace travels with the answer.} Each \code{Answer} carries a \code{QueryTrace} (wall clock, nested stage timings, tokens by purpose) and a \code{SelfCheck} state.
+  \item \textbf{One pipeline per process.} Embedded Qdrant locks its folder, so the API builds the pipeline once at startup and the demo keeps a module-level singleton.
+\end{itemize}
+
+\begin{figure}[htbp]
+\centering
+\resizebox{!}{0.60\textheight}{%
+\begin{tikzpicture}[
+  font=\sffamily\footnotesize,
+  node distance=5mm and 9mm,
+  proc/.style={draw, rounded corners=2pt, fill=blue!6, align=center, text width=38mm, minimum height=10mm},
+  dec/.style={draw, diamond, aspect=2.2, fill=orange!12, align=center, inner sep=1pt, font=\sffamily\scriptsize},
+  ext/.style={draw, dashed, rounded corners=2pt, fill=gray!8, align=center, text width=34mm, minimum height=9mm},
+  good/.style={draw, rounded corners=6pt, fill=green!10, align=center, text width=38mm, minimum height=10mm},
+  bad/.style={draw, rounded corners=6pt, fill=red!8, align=center, text width=38mm, minimum height=10mm},
+  arr/.style={-Stealth, thick}
+]
+\node[ext] (entry) {Entry point:\\Gradio / \code{POST /v1/query} / CLI};
+\node[proc, below=of entry] (ig) {\textbf{Input guard}\\\code{screen_input} (regex)};
+\node[bad, right=of ig] (block) {Refusal text, 0 tokens\\\code{blocked=True}};
+\node[proc, below=8mm of ig] (dense) {\textbf{Dense retrieval}\\embed question (BGE, local)\\Qdrant top 20};
+\node[ext, right=of dense] (qd) {Qdrant\\(embedded, on disk)};
+\node[proc, below=of dense] (rr) {\textbf{Rerank}\\MiniLM cross-encoder (local)\\sort all 20};
+\node[proc, below=of rr] (cg) {\textbf{Context guard}\\top 5 $\rightarrow$ drop directive passages};
+\node[proc, below=of cg] (gen) {\textbf{Generate}\\\code{gemini-3.5-flash-lite}\\passages [1]..[5]};
+\node[proc, below=of gen] (cite) {\textbf{Citations}\\resolve markers, strip invalid};
+\node[proc, below=of cite] (grade) {\textbf{Grade}\\\code{gemini-3.1-flash-lite}\\claims + \code{refuses} flag};
+\node[dec, below=6mm of grade] (pol) {policy\\decide};
+\node[good, below left=8mm and -6mm of pol] (acc) {Answer + citations\\\code{self_check}: passed\\(or \code{unavailable})};
+\node[bad, below right=8mm and -6mm of pol] (abs) {Abstention text,\\no citations\\\code{self_check}: abstained};
+\node[proc, right=14mm of rr] (ref) {\textbf{Reformulate}\\question + failed claims};
+\draw[arr] (entry) -- (ig);
+\draw[arr] (ig) -- node[above, font=\scriptsize]{blocked} (block);
+\draw[arr] (ig) -- node[left, font=\scriptsize]{clean} (dense);
+\draw[arr, <->, dashed] (dense) -- (qd);
+\draw[arr] (dense) -- (rr);
+\draw[arr] (rr) -- (cg);
+\draw[arr] (cg) -- (gen);
+\draw[arr] (gen) -- (cite);
+\draw[arr] (cite) -- (grade);
+\draw[arr] (grade) -- (pol);
+\draw[arr] (pol) -- node[left, font=\scriptsize]{accept: $g\ge0.8$} (acc);
+\draw[arr] (pol) -- node[right, font=\scriptsize, align=left]{refuses, or $g<0.5$,\\or budget spent} (abs);
+\draw[arr, dashed] (pol.east) -| node[near start, below, font=\scriptsize]{retry: $0.5\le g<0.8$, attempt 1} (ref.south);
+\draw[arr, dashed] (ref.north) |- (dense.east);
+\node[draw, dotted, rounded corners, fit=(dense)(rr)(cg)(gen)(cite)(grade)(pol)(ref), inner sep=3mm, label={[font=\sffamily\scriptsize]west:\rotatebox{90}{\code{run_corrective_loop}, max 2 attempts}}] {};
+\end{tikzpicture}}
+\caption{Query time in the shipped \code{guarded} profile. If the grader cannot be reached, the policy accepts the draft (fail-open) and the answer is marked \code{unavailable}, not \code{passed}. In \code{baseline}, only dense retrieval, generation and citation validation run.}
+\label{fig:arch-query}
+\end{figure}
+
+\section{Evaluation and deployment}
+\label{sec:arch-eval}
+
+\paragraph{Evaluation} (\code{vidyarag eval}) runs in two phases on purpose \ev{src/vidyarag/evaluation/runner.py}. \emph{Generation} is sequential, because the embedded index cannot be opened concurrently. It paces calls 4\,s apart, makes up to three attempts on transient errors, and caches every answer under a key that hashes the whole configuration. \emph{Grading} is concurrent and rate-limited. It covers the abstention judge and the four RAGAS metrics, reached through Google's OpenAI-compatible endpoint. The deterministic retrieval metrics are computed in between, with no model call. The result is a JSON run file plus a rendered Markdown report in \code{eval/results/}. The separate \code{vidyarag rejudge} command rebuilds the abstention verdicts of committed runs from their stored answers, without spending any generation quota.
+
+\paragraph{Deployment.} Pushing to GitHub runs CI (lint, types and tests on Python 3.10 and 3.11, plus a secret scan) and a Docker workflow that builds the API image, runs it, waits for it to become healthy and calls it. \emph{Nothing deploys automatically.} The Hugging Face Space is updated only by running \code{scripts/deploy_space.py} by hand, which uploads a 61-file, 35\,MB payload that includes the index. The image is never pushed to a registry (Chapter~\ref{ch:shipping}).
+
+\section{Properties worth being able to state}
+
+\begin{enumerate}
+  \item \textbf{Two swap points.} Qdrant access lives only in \code{store/client.py}, and model construction only in \code{llm/provider.py}. The swap was exercised once, when the stack moved from OpenAI to local embeddings plus Gemini.
+  \item \textbf{Configuration is reviewed data.} A profile fully describes a variant and is committed; secrets never live in one.
+  \item \textbf{The index ships with the demo.} The Space carries its own 35\,MB index, so no free-tier database can expire and take the demo down.
+  \item \textbf{Retrieval has no third-party runtime dependency.} Only answering does.
+  \item \textbf{Everything measurable is returned per query,} not merely logged.
+\end{enumerate}

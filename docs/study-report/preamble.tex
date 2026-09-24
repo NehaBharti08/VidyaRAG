@@ -1,7 +1,7 @@
 % ---------------------------------------------------------------------------
 % preamble.tex -- VidyaRAG study report (compile with XeLaTeX / Tectonic)
 % ---------------------------------------------------------------------------
-\usepackage[a4paper,top=2.4cm,bottom=2.4cm,left=2.2cm,right=2.2cm,headheight=15pt]{geometry}
+\usepackage[a4paper,top=2.1cm,bottom=2.2cm,left=2.1cm,right=2.1cm,headheight=15pt]{geometry}
 
 % --- Fonts (loaded by file name so the build does not depend on fontconfig) --
 \usepackage{fontspec}
@@ -20,7 +20,7 @@
 \usepackage{booktabs,tabularx,longtable,array,multirow,makecell}
 \usepackage{enumitem}
 \usepackage[autostyle=false,style=english]{csquotes}
-\usepackage[skip=0.55em plus 0.1em]{parskip}
+\usepackage[skip=0.45em plus 0.1em]{parskip}
 \usepackage{fancyhdr}
 \usepackage{titlesec}
 \usepackage{etoolbox}
@@ -59,15 +59,17 @@
 \renewcommand{\chaptermark}[1]{\markboth{\ifnum\value{chapter}>0 \thechapter.\ \fi #1}{}}
 \renewcommand{\sectionmark}[1]{}
 
-\titleformat{\chapter}[display]
-  {\sffamily\bfseries\color{vrblue}}
-  {\large\chaptertitlename\ \thechapter}
-  {0.5ex}
-  {\huge\raggedright}
-  [\vspace{0.4ex}{\color{vrblue!45}\titlerule[0.8pt]}]
-\titlespacing*{\chapter}{0pt}{0pt}{16pt}
-\titleformat{\section}{\sffamily\Large\bfseries\color{vrblue}\raggedright}{\thesection}{0.7em}{}
-\titleformat{\subsection}{\sffamily\large\bfseries\raggedright}{\thesubsection}{0.7em}{}
+\titleformat{\chapter}[hang]
+  {\sffamily\bfseries\color{vrblue}\LARGE\raggedright}
+  {\thechapter}
+  {0.6em}
+  {}
+  [\vspace{0.2ex}{\color{vrblue!45}\titlerule[0.8pt]}]
+\titlespacing*{\chapter}{0pt}{-6pt}{10pt}
+\titleformat{\section}{\sffamily\large\bfseries\color{vrblue}\raggedright}{\thesection}{0.7em}{}
+\titlespacing*{\section}{0pt}{1.6ex plus 0.6ex minus 0.3ex}{0.7ex}
+\titleformat{\subsection}{\sffamily\normalsize\bfseries\raggedright}{\thesubsection}{0.7em}{}
+\titlespacing*{\subsection}{0pt}{1.2ex plus 0.4ex minus 0.2ex}{0.4ex}
 \titleformat{\subsubsection}{\sffamily\normalsize\bfseries\raggedright}{\thesubsubsection}{0.7em}{}
 \titleformat{\paragraph}[runin]{\sffamily\normalsize\bfseries}{}{0em}{}[]
 \titlespacing*{\paragraph}{0pt}{0.8ex plus 0.3ex}{0.6em}
@@ -110,7 +112,7 @@
 % --- Boxes -----------------------------------------------------------------------
 \tcbset{vrbase/.style={enhanced, breakable, boxrule=0.6pt, arc=1.2mm,
   left=2.2mm, right=2.2mm, top=1.2mm, bottom=1.2mm,
-  fonttitle=\sffamily\bfseries\small, before skip=8pt, after skip=8pt}}
+  fonttitle=\sffamily\bfseries\small, before skip=6pt, after skip=6pt}}
 \DeclareTColorBox{keyidea}{O{Key idea}}{vrbase, colback=vrblue!5, colframe=vrblue!80!black, title={#1}}
 \DeclareTColorBox{background}{O{}}{vrbase, colback=gray!6, colframe=gray!55!black,
   title={Background --- general knowledge, not taken from the repository\ifstrempty{#1}{}{: #1}}}
@@ -140,7 +142,7 @@
 \lstdefinelanguage{toml}{sensitive=true,comment=[l]{\#},morestring=[b]",morestring=[b]',keywords={true,false}}
 \lstdefinelanguage{plain}{}
 \lstset{
-  basicstyle=\ttfamily\small,
+  basicstyle=\ttfamily\footnotesize,
   columns=fullflexible, keepspaces=true,
   breaklines=true, breakatwhitespace=false,
   postbreak=\mbox{\textcolor{vrgray}{$\hookrightarrow$}\space},

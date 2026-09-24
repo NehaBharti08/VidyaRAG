@@ -1,48 +1,51 @@
-# VidyaRAG: a complete technical study
+# VidyaRAG: a technical study
 
-**[Read the PDF](VidyaRAG_Study_Report.pdf)** — 257 pages.
+**[Read the PDF](VidyaRAG_Study_Report.pdf)** — 70 pages.
 
 A full analysis of this repository, written from the code rather than from the
-documentation: what every part does, how it was measured, how it is deployed,
-where it is weak, and what the evaluation got wrong about itself.
+documentation: what every part does, how it was measured, how it ships, where
+it is weak, what its evaluation got wrong about itself, and how to explain all
+of it in an interview.
 
-It is the document that found the measurement bug described in the README's
-Results section. Appendix H records the corrections that followed.
+It began as an audit of commit `fa5164b`. That audit found 32 defects, one of
+which invalidated the project's headline result, and the fixes that followed
+(PR #20) are why the report can state corrected numbers as current fact.
+Chapter 15 tells that story.
 
 ## How to read it
 
-Every statement carries one label, and they are never mixed inside a sentence:
+Every statement carries one label, never mixed inside a sentence:
 
 | Label | Means |
 |---|---|
-| **Verified** | Read directly out of the code, a config file, a test or a committed result file. |
-| **Measured in this analysis** | Produced by running the system during the analysis, on the machine and date stated. |
-| **Inferred** | Reasoned from the code, but not stated anywhere and not measured. |
+| **Verified** | Read out of the code, a config file, a test, a committed result file or git history. |
+| **Measured** | Produced by running the system while writing the report; not in the repository. |
+| **Inferred** | Reasoned from the code, but neither stated nor measured. |
 | **Recommended** | Not implemented. A suggestion, marked as one. |
 
-Claims about a file cite it as `[src/vidyarag/pipeline.py:155-171]`, at commit
-`fa5164b`. Line numbers drift; the file and symbol names are the stable part.
-
-**Start with "How to Read This Report", then Appendix H.** The report describes
-commit `fa5164b`, and its headline evaluation numbers were later corrected —
-Appendix H carries the corrected figures and the status of all 32 findings, so
-nothing in Part III gets quoted after it has been retracted.
+Claims about the code cite the file they come from, for example
+`[src/vidyarag/pipeline.py]`.
 
 ## Structure
 
-| Part | Chapters | What it covers |
-|---|---|---|
-| I | 1–3 | The project in plain language, the concepts, the architecture |
-| II | 4–16 | Repository, environment, dependencies, config, ingestion, retrieval, generation, the self-check, guardrails, observability, interfaces, a real end-to-end trace, master flows |
-| III | 17–21 | Evaluation harness, results, testing, performance, security |
-| IV | 22–24 | Deployment, local setup, reproducibility |
-| V | 25–30 | Development history, the findings register, trade-offs, limitations, improvements, a rebuilding guide |
-| VI | 31–34 | Explaining the project at four depths, design rationale, 68 interview questions, and a claims audit |
-| Appendices | A–H | Glossary, commands, config reference, file and function map, data tables, biology background, self-audit, and the fixes applied afterwards |
+| Chapters | Covers |
+|---|---|
+| 1–3 | The project in plain language, the concepts with their maths, the architecture |
+| 4–11 | Stack and configuration, ingestion, retrieval, generation, the self-check, guardrails, observability and interfaces, one question traced end to end |
+| 12–14 | Evaluation and the corrected results; testing, performance and security; shipping and reproducibility |
+| 15–16 | What went wrong and what was fixed, all 32 findings with status; trade-offs, limitations, next steps |
+| 17 | Interview preparation: four-length explanations, "why X" answers, a question bank, résumé claims |
+| A–B | Glossary; commands, configuration and key files |
+
+## How it was checked
+
+Every file reference resolves to a real file, and every cell of the results
+table recomputes from the committed run files in `eval/results/`. The longer
+257-page audit this was condensed from is in git history at commit `41ebf4d`.
 
 ## Building it
 
-Needs XeLaTeX (for `fontspec`). [Tectonic](https://tectonic-typesetting.github.io/)
+Needs XeLaTeX (for `fontspec`); [Tectonic](https://tectonic-typesetting.github.io/)
 fetches what it needs on first run:
 
 ```bash
@@ -50,8 +53,5 @@ cd docs/study-report
 tectonic -X compile --outdir build main.tex
 ```
 
-Any XeLaTeX toolchain works too; run it twice so the cross-references settle.
-The committed `VidyaRAG_Study_Report.pdf` is the output of that command — copy
-a rebuilt `build/main.pdf` over it to update the published version.
-
-`OUTLINE.md` is the working plan the chapters were written against.
+Copy `build/main.pdf` over `VidyaRAG_Study_Report.pdf` to update the published
+version.

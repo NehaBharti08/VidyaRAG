@@ -1,0 +1,97 @@
+\chapter{Shipping, Running and Reproducing It}
+\label{ch:shipping}
+
+\section{What ships where}
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.0cm}>{\raggedright\arraybackslash}p{4.4cm}L@{}}
+\toprule
+\textbf{Artefact} & \textbf{Built by / trigger} & \textbf{Published?}\\
+\midrule
+Python package & hatchling via \code{uv sync} & No; built inside the image\\
+Docker image (API) & \code{docker.yml}, on changes to image inputs & No --- \code{push: false}\\
+Hugging Face Space & \code{scripts/deploy_space.py}, \emph{by hand} & Yes: the live demo\\
+Evaluation results & \code{eval.yml}, manual dispatch & As an artefact; never run\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\paragraph{One version.} \code{__version__} in \code{src/vidyarag/__init__.py} is the only place the version is written. hatchling reads it, the CLI prints it and OpenAPI reports it. It is a literal because the Space imports the package from \code{src/} without installing it. It was adopted after ``pyproject and \code{__version__} said 0.1.0, the OpenAPI schema said 0.3.0, and the releases said v1.2.0''. Even so, release \code{v1.2.2} shipped package version 1.2.1; the fixes set 1.3.0.
+
+\section{The Docker image}
+
+Two stages: a builder with uv and a slim runtime. Almost every unusual line prevents a failure that actually happened, and five of those were exposed only when CI began \emph{running} the container rather than just building it \ev{Dockerfile}:
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{4.4cm}L@{}}
+\toprule
+\textbf{Line} & \textbf{The failure it prevents}\\
+\midrule
+\code{COPY ... LICENSE} & The wheel build needs it --- a failure ``that never reproduces locally, where the file is always present.''\\
+\code{--no-install-project} first & Dependencies form their own cached layer, so a code change does not reinstall them.\\
+\code{--no-editable} & An editable install points at \code{/app/src}, which the runtime stage does not contain.\\
+\code{WORKDIR /app} in the builder & Console scripts record an absolute interpreter path. Built in \code{/build} and copied to \code{/app}, \code{uvicorn} pointed at an interpreter that did not exist.\\
+\code{VIDYARAG_CONFIG_DIR=/app/config} & Installed into \code{site-packages}, the package looked for profiles inside the venv: ``Unknown profile 'guarded'. Available: (none)''.\\
+Writable, user-owned \code{/app/data} & Embedded Qdrant opens its \code{.lock} read-write, so a read-only mount made startup fail.\\
+HTTP \code{HEALTHCHECK} & The old check ran \code{vidyarag health}, which opens the index the server has locked: healthy containers reported unhealthy forever.\\
+\code{USER vidyarag}; no index or models baked in & No root; the image stays a build artefact, not a data artefact.\\
+\bottomrule
+\end{tabularx}
+\end{center}
+\code{tests/test_container_contract.py} checks these contracts on every commit by reading the Dockerfile.
+
+\section{Continuous integration}
+
+\textbf{\code{ci.yml}} (every push and PR) runs a Python 3.10/3.11 matrix with \code{uv sync --frozen --python <v>}. Without \code{--python}, ``the 3.10 leg of the matrix would quietly run on 3.11 and prove nothing.'' It then runs ruff, black, mypy and \code{pytest -m "not costly" --cov}, and a separate job runs gitleaks over the full history.
+
+\textbf{\code{docker.yml}} (image inputs changed) exists because ``Docker Desktop is not installed on the development machine, so CI is where the image is actually proven to build. A Dockerfile nobody has built is a claim, not a deliverable.'' It builds with a layer cache and fails above 900\,MB (``has torch crept in?''). It checks that console scripts name a real interpreter, starts the container and waits for \code{healthy}, then requires \code{"profile":"guarded"} and \code{"status":"ok"}. It checks that the CLI and OpenAPI versions match, and runs \code{vidyarag health} against a compose Qdrant server. The health check reports \code{"points":0}, because the CI volume is empty: CI proves the server starts and stays healthy, not that it answers.
+
+\textbf{\code{eval.yml}} (manual) checks for the key \emph{before} checkout, builds the index, evaluates, and uploads results rather than committing them, because ``a number lands there only once a person has looked at it.'' It has never been run.
+
+\section{The Hugging Face Space}
+\label{sec:space-deploy}
+
+\code{deploy_space.py} stages a payload into a temporary folder: requirements, the Space README, \code{src/vidyarag}, \code{config}, the whole \code{data/index}, the licence and the attribution file. It writes an \code{app.py} with a \code{sys.path} shim, creates or updates a Gradio Space on ZeroGPU hardware, and uploads it. It then sets \code{GOOGLE_API_KEY} as a Space \emph{secret}, read from the local environment, and \code{VIDYARAG_PROFILE=guarded} and \code{QDRANT_MODE=embedded} as variables \ev{scripts/deploy_space.py}. Its two guarantees: the index ships with the Space, so no free-tier database can expire under the demo; and ``the API key never enters a file.'' A dry run reports 61 files and 35.2\,MB.
+
+\begin{inferred}[what is not automated]
+Nothing connects GitHub to the Space. No workflow calls the Hub, and the upload message is the same constant every time. The Space can therefore run a different revision from \code{main}, and which commit it runs is recorded nowhere. At the time of writing it still runs the pre-fix code, which shows ``Self-check passed'' on a failed grade; redeploying after the fixes merge is a manual step.
+\end{inferred}
+
+\section{Running it locally}
+\label{sec:setup}
+
+\begin{lstlisting}[language=bash]
+git clone https://github.com/NehaBharti08/VidyaRAG.git && cd VidyaRAG
+uv sync                              # runtime + dev, exactly as locked
+cp .env.example .env                 # then paste a real key: GOOGLE_API_KEY=...
+uv run vidyarag health               # expect a WARN: no collection yet
+uv run vidyarag download             # ~415 MB, resumable, checksummed
+uv run vidyarag ingest               # ~32 min on CPU; resumable
+uv run vidyarag ask "How does facilitated diffusion move glucose into a cell?"
+uv run uvicorn vidyarag.api.main:app # http://localhost:8000/docs
+uv run python app/app.py             # Gradio on http://localhost:7860
+uv run pytest -m "not costly"        # 466 passed
+uv sync --group eval && uv run vidyarag eval --profile guarded --limit 4   # smoke run
+\end{lstlisting}
+
+Three traps. \textbf{Replace the placeholder key}: it is not empty, so the ``no key'' check does not fire, and the first Gemini call fails instead. \textbf{Run from the repository root}, or \code{.env} is not found. \textbf{One process per index}: stop the API or demo before running \code{ask}, \code{ingest} or \code{eval} against the same \code{data/index}, or Qdrant reports that the index is ``already accessed by another instance''. Other errors map directly to their causes. ``Unknown profile'' is a misspelling. ``Collection has N-dim vectors'' means the model changed, so \code{ingest --recreate}. ``Grading needs the eval group'' means \code{uv sync --group eval}. A 429 or 503 is the free tier, so wait. Makefile targets need a Unix shell on Windows.
+
+\section{Reproducibility}
+\label{sec:reproducibility}
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{5.8cm}>{\raggedright\arraybackslash}p{2.3cm}L@{}}
+\toprule
+\textbf{Level} & \textbf{Achievable?} & \textbf{Why}\\
+\midrule
+Recompute every reported number from the run files & Yes, exactly & Per-question ids, scores and verdicts are stored.\\
+Rebuild the corpus and index from scratch & Yes; counts match & Checksummed PDFs, deterministic parsing and chunking (3,608 again).\\
+Rebuild abstention verdicts & Yes & \code{vidyarag rejudge}; no generation needed.\\
+Re-run an evaluation and get the same numbers & Only the deterministic part & Generation and judged metrics vary.\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\paragraph{What is pinned.} The lockfile, the corpus bytes (SHA-256), exact model ids, the answer prompt version, the full configuration and its hash in the cache key, the gold-set digest, and per-collection ingest provenance. \textbf{What is not:} the git commit a run came from, model file hashes, Gemini model revisions, and versions for the grader, decomposition and judge prompts. The Space resolves dependency ranges at build time.
+
+\paragraph{Where exact reproduction stops.} Temperature 0 still varies: three identical calls returned 315, 300 and 307 characters. Running a profile twice moved relevancy by 0.043. The functionally identical \code{corrective} and \code{guarded} refused 12 and 11 unanswerable questions. Providers fail transiently: two of three grading attempts returned 503. Caches carry history: the committed \code{guarded} run was fully cached. Timings depend on the machine: the same rerank took 2.1\,s or 14.9\,s.

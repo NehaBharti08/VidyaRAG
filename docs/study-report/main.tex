@@ -13,87 +13,53 @@
 \vspace*{2.2cm}
 {\sffamily\bfseries\color{vrblue}\fontsize{44}{48}\selectfont VidyaRAG\par}
 \vspace{0.7cm}
-{\sffamily\LARGE A Complete Technical Study of an Agentic,\\[2pt] Self-Correcting RAG Study Assistant\par}
+{\sffamily\LARGE A Technical Study of an Agentic,\\[2pt] Self-Correcting RAG Study Assistant\par}
 \vspace{0.9cm}
 {\color{vrblue!55}\rule{0.62\textwidth}{0.9pt}\par}
 \vspace{0.7cm}
-{\large Repository analysis \textperiodcentered{} learning guide \textperiodcentered{} interview preparation\par}
+{\large How it works \textperiodcentered{} how it was measured \textperiodcentered{} what it got wrong \textperiodcentered{} how to explain it\par}
 \vfill
 {\small
 \begin{tabular}{@{}>{\sffamily\bfseries}r@{\hspace{1.2em}}l@{}}
 Repository & \url{https://github.com/NehaBharti08/VidyaRAG}\\
-Snapshot analysed & branch \code{main}, commit \code{fa5164b}, package version 1.2.1\\
+Describes & version 1.3.0, after the measurement fixes (PR \#20)\\
+Audit baseline & commit \code{fa5164b}, version 1.2.1\\
 Live demo & \url{https://huggingface.co/spaces/nehabharti0802/VidyaRAG}\\
 Project author & Neha Bharti\\
-Analysis completed & September 2026\\
+Written & September 2026\\
 \end{tabular}\par}
 \vspace{1.4cm}
-{\footnotesize\color{vrgray} Every statement in this report is labelled as verified, inferred or recommended.\\
-The conventions are explained in \emph{How to Read This Report}.\par}
+{\footnotesize\color{vrgray} Every statement is labelled verified, measured, inferred or recommended.\\
+The conventions are on the next page.\par}
 \end{titlepage}
 \hypersetup{pageanchor=true}
 
 \pagenumbering{roman}
 \tableofcontents
-\listoffigures
-\chap{ch00_reading_guide}
+\chap{c00_preface}
 \clearpage
 \pagenumbering{arabic}
 
-\part{Understanding the Project}
-\chap{ch01_plain_language}
-\chap{ch02_concepts}
-\chap{ch03_architecture}
-
-\part{How the Code Works}
-\chap{ch04_repository}
-\chap{ch05_environment}
-\chap{ch06_dependencies}
-\chap{ch07_configuration}
-\chap{ch08_ingestion}
-\chap{ch09_retrieval}
-\chap{ch10_generation}
-\chap{ch11_corrective}
-\chap{ch12_guardrails}
-\chap{ch13_observability}
-\chap{ch14_interfaces}
-\chap{ch15_trace}
-\chap{ch16_master_flows}
-
-\part{The Evidence}
-\chap{ch17_evaluation}
-\chap{ch18_results}
-\chap{ch19_testing}
-\chap{ch20_performance}
-\chap{ch21_security}
-
-\part{Shipping It}
-\chap{ch22_deployment}
-\chap{ch23_local_setup}
-\chap{ch24_reproducibility}
-
-\part{Critical Analysis}
-\chap{ch25_history}
-\chap{ch26_findings}
-\chap{ch27_tradeoffs}
-\chap{ch28_limitations}
-\chap{ch29_improvements}
-\chap{ch30_rebuilding}
-
-\part{Interview Preparation}
-\chap{ch31_explaining}
-\chap{ch32_why}
-\chap{ch33_questions}
-\chap{ch34_resume}
+\chap{c01_overview}
+\chap{c02_concepts}
+\chap{c03_architecture}
+\chap{c04_stack}
+\chap{c05_ingestion}
+\chap{c06_retrieval}
+\chap{c07_generation}
+\chap{c08_selfcheck}
+\chap{c09_guardrails}
+\chap{c10_serving}
+\chap{c11_journey}
+\chap{c12_evaluation}
+\chap{c13_quality}
+\chap{c14_shipping}
+\chap{c15_lessons}
+\chap{c16_judgement}
+\chap{c17_interview}
 
 \appendix
-\chap{appA_glossary}
-\chap{appB_commands}
-\chap{appC_config}
-\chap{appD_file_map}
-\chap{appE_data}
-\chap{appF_biology}
-\chap{appG_self_audit}
-\chap{appH_fixes}
+\chap{a1_glossary}
+\chap{a2_reference}
 
 \end{document}

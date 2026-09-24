@@ -1,0 +1,109 @@
+\chapter{One Question, End to End}
+\label{ch:journey}
+
+This chapter follows one real question through the shipped \code{guarded} profile, using measurements rather than illustrations. The run captured on the audited code happened to include a grading failure, which makes it more instructive than a clean run would have been.
+
+\begin{measured}[how the trace was captured]
+A script built \code{Pipeline(Settings(), load_pipeline_config("guarded"))} against the working index and ran one retrieval to load the models. It then timed \code{answer("What happens during anaphase of mitosis?")}, wrapping the Gemini client to record each call. No project code was changed.
+\end{measured}
+
+\section{The run, step by step}
+
+\begin{enumerate}
+  \item \textbf{Model loading, before the question: 23.7\,s.} Neither local model loads when the pipeline is built. Both are created on first use and then cached for the life of the process. A later benchmark with warm files loaded both in about 5\,s. The first visitor after a restart pays this.
+  \item \textbf{Input guard: 0.1\,ms, clean.}
+  \item \textbf{Dense retrieval: 1,570\,ms.} The question is embedded, and Qdrant returns 20 passages.
+  \item \textbf{Rerank: 14,871\,ms.} The cross-encoder rescored all 20; 17 moved and 2 were promoted into the top five. The final five are below. A steady-state benchmark later took 2.1\,s for the same 20 passages, so the machine was evidently slower during this run: single CPU timings on a laptop are fragile.
+  \item \textbf{Context guard: 24\,ms}, all five kept.
+  \item \textbf{Generation: 1,782\,ms}, 2,367 input and 156 output tokens. The system instruction was 745 characters and the user message 10,609. The answer, four sentences on cohesin breakdown, chromatid separation, kinetochore microtubules and cell elongation, cited passages 2--5. All four markers were valid, and passage 1, the top-ranked one, was not cited.
+  \item \textbf{Grading: failed.} \code{gemini-3.1-flash-lite} returned \code{503 UNAVAILABLE} (``This model is currently experiencing high demand'') after about 0.9\,s.
+  \item \textbf{Decision: ACCEPT on rule 1}, because grading was not measured. The unverified draft was returned with four citations.
+\end{enumerate}
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}c>{\raggedright\arraybackslash}p{5.0cm}Lrc@{}}
+\toprule
+\textbf{Final} & \textbf{Chunk id} & \textbf{Citation} & \textbf{Rerank score} & \textbf{Dense rank}\\
+\midrule
+1 & \code{anatomy-and-physiology-p0127-03} & A\&P, 3.5 Cell Growth and Division*, p.117 & 3.698 & 1\\
+2 & \code{biology-p0286-02} & Biology, 10.2 The Cell Cycle*, p.274 & 3.496 & 4\\
+3 & \code{biology-p0288-03} & Biology, 10.2 The Cell Cycle*, p.276 & 3.335 & 2\\
+4 & \code{biology-p0302-00} & Biology, Glossary, p.290 & 3.199 & 8\\
+5 & \code{anatomy-and-physiology-p0128-04} & A\&P, 3.5 Cell Growth and Division*, p.118 & 1.726 & 6\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\paragraph{What grading would have said.} The same answer and passages were graded again a few minutes later. The first retry also returned 503; the next succeeded in 4,569\,ms, using 2,497 input and 612 output tokens. It produced five claims, all \code{supported}, each with a quoted piece of evidence: $g=1.0$ and \code{refuses=false}. The outcome was right; the verification simply had not happened.
+
+\paragraph{What each interface showed then, and shows now.} On the audited code the API returned \code{grounded: true} with \code{total_ms} 37,431, twice the real 19,184\,ms, and no field revealing the failed grading. The demo printed ``Self-check passed after 1 attempt(s)''. The same failure now produces \code{self_check: "unavailable"}, \code{verified: false}, a wall-clock total, and ``\textbf{Not verified}'' in the demo.
+
+\begin{measured}[the same question on the fixed code]
+Warm process, grading succeeded: wall clock 14,525\,ms (the old sum would have said 24,588); generation 2,367/132 tokens and grading 2,473/488, both now recorded; one attempt, four claims all supported, \code{self_check: passed}. The earlier run's 156 output tokens against 132 here is temperature~0 non-determinism: identical prompt, different length.
+\end{measured}
+
+\section{What one trace demonstrates}
+
+\begin{enumerate}
+  \item \textbf{Reranking dominates local time.} It took 14.9\,s here, or about 2\,s steady-state. Embedding the question takes about 70\,ms and searching about 30\,ms.
+  \item \textbf{The cross-encoder changed what the model read.} Two of the five passages came from outside the dense top five, one of them a Glossary passage.
+  \item \textbf{Citations are valid but not exhaustive.} Nothing requires the top passage to be cited.
+  \item \textbf{All three measurement defects appear in one query:} doubled latency, a grader call missing from the tokens, and fail-open reported as a pass.
+\end{enumerate}
+
+\section{Where things can go wrong}
+\label{sec:failure-flows}
+
+\begin{figure}[htbp]
+\centering
+\resizebox{!}{0.52\textheight}{%
+\begin{tikzpicture}[
+  font=\sffamily\footnotesize,
+  node distance=5mm and 9mm,
+  proc/.style={draw, rounded corners=2pt, fill=blue!6, align=center, text width=30mm, minimum height=9mm},
+  dec/.style={draw, diamond, aspect=2.4, fill=orange!12, align=center, inner sep=1pt, text width=24mm},
+  outc/.style={draw, rounded corners=6pt, fill=red!8, align=left, text width=66mm, minimum height=9mm},
+  good/.style={draw, rounded corners=6pt, fill=green!10, align=left, text width=66mm, minimum height=9mm},
+  arr/.style={-Stealth, thick}
+]
+\node[proc] (q) {question};
+\node[dec, below=of q] (d1) {matches an input pattern?};
+\node[outc, right=of d1] (o1) {Fixed refusal, no search or model call. \code{blocked=True}, \code{grounded=False}.};
+\node[proc, below=of d1] (r) {retrieve, rerank, screen passages};
+\node[dec, below=of r] (d2) {any passage left?};
+\node[outc, right=of d2] (o2) {``Found nothing'' text, no model call. With the self-check, grading errors and the text is accepted as \code{unavailable}.};
+\node[proc, below=of d2] (g) {generate};
+\node[dec, below=of g] (d3) {call raised?};
+\node[outc, right=of d3] (o3) {API 429 (quota) or 503; demo shows a plain message and logs the detail; CLI exits; evaluation retries transient errors.};
+\node[dec, below=of d3] (d4) {empty text?};
+\node[outc, right=of d4] (o4) {The same ``found nothing'' text --- misleading, since the model failed, not retrieval. \textbf{Still open.}};
+\node[proc, below=of d4] (gr) {grade};
+\node[dec, below=of gr] (d5) {grading failed?};
+\node[outc, right=of d5] (o5) {ACCEPT the unverified draft, now labelled \code{self_check: unavailable} and ``Not verified''.};
+\node[dec, below=of d5] (d6) {\code{refuses}?};
+\node[outc, right=of d6] (o6) {ABSTAIN: fixed text, no citations.};
+\node[dec, below=of d6] (d7) {score?};
+\node[good, right=of d7] (o7) {$g\ge0.8$: ACCEPT, \code{passed}. $g<0.5$: ABSTAIN.\\Otherwise RETRY once, then ABSTAIN.};
+\draw[arr] (q) -- (d1);
+\draw[arr] (d1) -- node[above, font=\scriptsize]{yes} (o1); \draw[arr] (d1) -- node[left, font=\scriptsize]{no} (r);
+\draw[arr] (r) -- (d2);
+\draw[arr] (d2) -- node[above, font=\scriptsize]{no} (o2); \draw[arr] (d2) -- node[left, font=\scriptsize]{yes} (g);
+\draw[arr] (g) -- (d3);
+\draw[arr] (d3) -- node[above, font=\scriptsize]{yes} (o3); \draw[arr] (d3) -- node[left, font=\scriptsize]{no} (d4);
+\draw[arr] (d4) -- node[above, font=\scriptsize]{yes} (o4); \draw[arr] (d4) -- node[left, font=\scriptsize]{no} (gr);
+\draw[arr] (gr) -- (d5);
+\draw[arr] (d5) -- node[above, font=\scriptsize]{yes} (o5); \draw[arr] (d5) -- node[left, font=\scriptsize]{no} (d6);
+\draw[arr] (d6) -- node[above, font=\scriptsize]{yes} (o6); \draw[arr] (d6) -- node[left, font=\scriptsize]{no} (d7);
+\draw[arr] (d7) -- (o7);
+\end{tikzpicture}}
+\caption{Every point in the \code{guarded} profile where something can go wrong, and what happens.}
+\label{fig:failure-flow}
+\end{figure}
+
+Beyond a single query, the configuration boundaries fail loudly and early. A missing key raises a \code{ValueError} naming the AI Studio URL, at the first model use; ingestion and \code{/v1/search} are unaffected. A second process opening the embedded index fails, because Qdrant holds a lock, which is why the container health check uses HTTP. Unknown profiles, misspelt keys, inverted thresholds, a missing server URL, a wrong vector width and a PDF without an outline all stop with a specific message. In evaluation, generation makes up to three attempts with 45\,s and 90\,s waits, and more than 10\% failed questions invalidates the run.
+
+\begin{keyidea}[the pattern]
+The code is \emph{strict at configuration and data boundaries} and \emph{lenient at model-call boundaries}. Failed decomposition falls back to plain retrieval, failed grading accepts the draft, and a failed judgement used to count as ``answered''. Each lenient choice is defensible on its own, but together they let model outages degrade the system quietly. All three measurement defects sat exactly on that seam. The fixes keep the leniency where it is right and make it \emph{visible}: failed grading is labelled, and a failed judgement is reported as \code{unmeasured} instead of being folded into a verdict.
+\end{keyidea}
+
+\paragraph{Startup.} The API opens the index and takes its lock at startup, but loads the models and the Gemini client lazily. The Docker image ships no weights, so a fresh container downloads them on its first query, and the health check (every 30\,s after 60\,s) touches only Qdrant. The Space installs \code{requirements.txt} plus Gradio 5.50.0 on Python 3.10, and \code{app.py}'s first lines, spliced in by the deploy script, put \code{src/} on \code{sys.path}. \tagI{} A container or Space can therefore report healthy long before it can answer quickly. The committed runs show the same effect: the first question of each reranking run is among its slowest.

@@ -1,0 +1,145 @@
+\chapter{Repository, Stack and Configuration}
+\label{ch:stack}
+
+\section{The repository}
+
+\begin{lstlisting}[language={},numbers=none,basicstyle=\ttfamily\scriptsize,frame=single]
+VidyaRAG/
+|-- .github/workflows/   ci.yml  docker.yml  eval.yml (manual only)
+|-- app/                 app.py (Gradio demo)  requirements.txt  README_space.md
+|-- config/              default.yaml + profiles/{baseline,rerank,decompose,corrective,guarded}.yaml
+|-- docs/                DESIGN.md  EVALUATION.md  architecture.mmd  study-report/
+|-- eval/                goldset/goldset_v1.jsonl (58 questions)  results/ (5 runs, .json + .md)
+|-- scripts/             deploy_space.py
+|-- src/vidyarag/
+|   |-- __init__.py      __version__ = "1.3.0"  (the only place the version is written)
+|   |-- _compat.py       StrEnum / UTC shims so the package runs on Python 3.10
+|   |-- settings.py      Settings (env) + PipelineConfig (YAML) + profile loader
+|   |-- pipeline.py      Pipeline, Answer, SelfCheck -- the heart of query time
+|   |-- cli.py           Typer CLI (936 lines, the largest file)
+|   |-- api/             main.py  models.py  routes_v1.py
+|   |-- ingest/          corpus  download  parse  chunk  pipeline
+|   |-- store/           client.py (the only Qdrant factory)  collection.py
+|   |-- llm/             provider.py (the only model factory)
+|   |-- retrieve/        dense  rerank  decompose
+|   |-- generate/        prompts  answer  citations
+|   |-- correct/         grader  policy  loop
+|   |-- guard/           patterns  input_guard  context_guard
+|   |-- observe/         trace  logging
+|   `-- evaluation/      goldset retrieval abstention answer_cache metrics runner rejudge report verify draft
+|-- tests/               32 modules, 4,942 lines
+`-- Dockerfile  docker-compose.yml  pyproject.toml  uv.lock  Makefile  .pre-commit-config.yaml
+    (not tracked: data/raw, data/index, .env, .eval_cache/, .venv/)
+\end{lstlisting}
+
+The package is 9,290 lines. It uses the \emph{src layout}, so it is importable only once installed (\code{uv sync}) or put on \code{sys.path}, which is what the Space bootstrap does. Evaluation code lives in \code{vidyarag.evaluation} rather than a top-level \code{eval} package, which would shadow Python's built-in \code{eval}. \code{.gitignore} keeps out the PDFs (large, and reproducible from a checksummed manifest), the index (shipped through the Space's own repository), \code{.env} and caches. It commits \code{eval/results/*.json} on purpose: ``the run history is the evidence behind the README results table''.
+
+\section{Where it runs}
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{2.5cm}>{\raggedright\arraybackslash}p{2.0cm}>{\raggedright\arraybackslash}p{4.4cm}L@{}}
+\toprule
+\textbf{Environment} & \textbf{Python} & \textbf{Dependencies from} & \textbf{Runs}\\
+\midrule
+Developer machine & 3.11 & \code{uv sync} from \code{uv.lock} & Everything. Docker is not installed there, which is why image builds are proven in CI.\\
+GitHub Actions & 3.10 and 3.11 & \code{uv sync --frozen} & Lint, format, types and tests on both versions; secret scan; Docker build and health checks.\\
+Docker image & 3.11-slim & \code{uv sync --frozen --no-dev} & The HTTP API only.\\
+Hugging Face Space & 3.10 (fixed by ZeroGPU) & pip, \code{app/requirements.txt}; builder adds Gradio 5.50.0 & The demo, with its own copy of the index.\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Python 3.10 is the floor because ZeroGPU images are pinned to it and ignore the Space's \code{python_version} \ev{pyproject.toml}. Two 3.11 features had crept into the code (\code{enum.StrEnum} and \code{datetime.UTC}) and once stopped the Space from starting. They now go through \code{_compat.py}, whose backport sets \code{__str__ = str.__str__}. Without that line, \code{QdrantMode.EMBEDDED} would format as \code{QdrantMode.EMBEDDED} on 3.10, \enquote{the one that silently corrupts output rather than raising.} CI runs the full suite on 3.10 so that this claim is tested. \textbf{No GPU is used anywhere.} The Space runs on ZeroGPU only because the platform requires a GPU-decorated function to exist at startup; the app declares one and never calls it \ev{app/app.py}.
+
+\section{The technology, and why each piece}
+\label{sec:tech}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}p{5.6cm}>{\raggedright\arraybackslash}p{7.8cm}@{}}
+\toprule
+\textbf{Technology} & \textbf{Role} & \textbf{Recorded reason, and alternatives rejected}\\
+\midrule
+\endhead
+uv, hatchling & Lock, install and run everything; build the wheel. The version is read dynamically from \code{__init__.py}. & ``CI, the container, and a developer's shell all execute identical commands.'' The dynamic version was adopted after three version numbers disagreed.\\
+PyMuPDF & Reads the PDF outline, text blocks with coordinates, and running heads. & Structure comes from the outline, because font-size heuristics ``misfire\ldots and fail silently.''\\
+httpx & Resumable PDF download. & Declared directly even though it is transitive: an undeclared import is ``a break waiting to happen''.\\
+Qdrant (\code{qdrant-client}) & Vector store, in embedded, server or cloud mode. & The demo is embedded because free cloud clusters are suspended after about a week idle and deleted after about four. A keep-alive ping was rejected.\\
+fastembed + ONNX Runtime & Local embedding and cross-encoder inference on CPU. & No torch: an image of about 400\,MB instead of about 2.5\,GB.\\
+\code{bge-base-en-v1.5} & 768-d embeddings. & Free, local, no key. OpenAI \code{text-embedding-3-small} was rejected because it needs funded billing.\\
+\code{ms-marco-MiniLM-L-6-v2} & Cross-encoder reranker (80\,MB, ONNX). & Small, no torch. \code{bge-reranker-base} (1.04\,GB) was considered and never measured; Jina v2 was rejected for its non-commercial licence.\\
+Gemini (\code{google-genai}) & \code{gemini-3.5-flash-lite} generates and decomposes; \code{gemini-3.1-flash-lite} grades. 90-second timeout. & Free tier with no card. Model ids are pinned, never aliased. The lite tier because \code{gemini-3.5-flash} allowed 20 requests a day (measured). Generator and grader are different models to avoid self-grading bias.\\
+OpenAI SDK (eval only) & A client pointed at Google's OpenAI-compatible endpoint. & RAGAS recognises an async client by \code{chat.completions.create}. ``No OpenAI account or spend is involved.''\\
+FastAPI, Uvicorn & HTTP API with generated OpenAPI docs. & Not recorded.\\
+Gradio & Demo page; also the Space's SDK. & Version pinned in the Space README, because the builder injects Gradio itself.\\
+Typer + Rich & The \code{vidyarag} CLI. & Not recorded.\\
+Pydantic (+settings) & Config, API schemas, gold-set schema, and the JSON schemas Gemini must answer in. & \code{extra="forbid"} makes a typo in a profile fail loudly.\\
+structlog & JSON logs at API start and stop. & Not recorded.\\
+RAGAS 0.4 & Faithfulness, relevancy, context precision and recall. & Established metrics are stronger evidence than hand-written ones.\\
+pytest, respx & 32 test modules; HTTP mocking for downloads. & Coverage floor of 60\%, ``a floor, not a target''.\\
+ruff, black, mypy & Lint, format, strict typing of the package. & ``One formatter, one linter''. Hooks now pinned to the lockfile's versions.\\
+pre-commit + gitleaks & Secret scan first, then hygiene hooks. CI rescans the full history. & ``A leaked key in git history survives \code{git rm}.''\\
+Docker, Compose & Two-stage non-root API image; a local Qdrant server for server mode. & Compose exercises the same server path Qdrant Cloud uses.\\
+\bottomrule
+\end{longtable}
+
+\paragraph{What it does not use.} Searching every import found no PyTorch, TensorFlow, \code{transformers}, SQL or Redis, and no cloud SDKs, experiment trackers, queues, authentication libraries, \code{tiktoken} or \code{numpy} in project code. \textbf{There is no LLM framework.} LlamaIndex was declared, advertised and never imported, and was then removed. LangChain appears only as a dependency of RAGAS. The pipeline is written directly against \code{qdrant-client}, \code{fastembed} and \code{google-genai}.
+
+\section{Dependencies}
+
+Runtime dependencies (14 packages) are in \code{[project] dependencies}. The \code{dev} (9) and \code{eval} (5) groups are separate, and \code{uv.lock} pins everything; CI and Docker install with \code{--frozen}. Four constraints look odd and are deliberate:
+\begin{itemize}
+  \item \textbf{The eval group stays out of the image.} RAGAS pulls in LangChain, about 200\,MB (stated, not measured), ``for code that never runs in production''.
+  \item \textbf{\code{langchain-community<0.4}} is an upstream bug pin. RAGAS 0.4 imports a module that 0.4.0 removed, so \code{import ragas} would fail outright.
+  \item \textbf{The Space pins major versions, not exact ones}, because ``a hard pin that stops resolving turns a working demo into a build failure months later.'' It omits Gradio entirely: declaring a range alongside the builder's own pin once failed with \code{ResolutionImpossible}.
+  \item \textbf{Pre-commit hooks match the lockfile}: black 25.12.0, ruff 0.16.0, mypy 1.20.2. They did not before the fixes. The hooks then ran black 24 while the project used black 25, and each rewrote the other's output.
+\end{itemize}
+Three disagreements remain. Gradio is installed in the API image, which never imports it. \code{pandas} and \code{datasets} are declared and never imported. And \code{huggingface_hub} is imported by the deploy script but only arrives transitively.
+
+\section{Configuration: two layers}
+\label{sec:config}
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{2.8cm}LL@{}}
+\toprule
+& \textbf{\code{Settings} (deployment)} & \textbf{\code{PipelineConfig} (behaviour)}\\
+\midrule
+Answers & Where am I running, with which credentials? & What does the pipeline do?\\
+Source & Environment variables, then \code{.env} & \code{config/default.yaml} deep-merged with one profile\\
+Secrets & Yes & Never\\
+In git & No (\code{.env.example} only) & Yes, every file\\
+Unknown keys & Ignored & \textbf{Rejected} (\code{extra="forbid"})\\
+In run files & Indirectly & The whole merged config, and its hash in the cache key\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\paragraph{\code{Settings}.} \code{GOOGLE_API_KEY} is stored as a \code{SecretStr}, so it never appears in \code{repr} or logs, and a test asserts this. It is not needed to download, ingest or search. \code{QDRANT_MODE} is \code{embedded}, \code{server} or \code{cloud}. The model validator requires \code{QDRANT_URL} for server and cloud and \code{QDRANT_API_KEY} for cloud, so a missing URL fails at startup rather than deep inside a query. \code{QDRANT_PATH} defaults to \code{data/index} and is resolved against the repository root; \code{:memory:} gives a throwaway index. \code{QDRANT_COLLECTION} defaults to \code{vidyarag_biology_v1}. \code{VIDYARAG_PROFILE} defaults to \code{guarded}. It used to be \code{baseline}, which meant a fresh clone ran with the guardrails down. \code{LOG_LEVEL} and \code{LOG_FORMAT} are read by the API only.
+
+\paragraph{Path traps.} \code{.env} is found relative to the \emph{working directory}. Run the CLI from elsewhere and the key is simply empty: retrieval works, and the first Gemini call fails \tagI. \code{REPO_ROOT} is \code{Path(__file__).parents[2]}, which is wrong after a non-editable install. The Docker image once refused to start with \enquote{Unknown profile 'guarded'. Available: (none)}, so it sets \code{VIDYARAG_CONFIG_DIR=/app/config} and an absolute \code{QDRANT_PATH}.
+
+\paragraph{The five profiles.} Each changes flags only; models, temperature, chunking, top-$k$ and thresholds are identical across all five.
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{4.2cm}*{5}{>{\centering\arraybackslash}X}@{}}
+\toprule
+& \code{baseline} & \code{rerank} & \code{decompose} & \code{corrective} & \code{guarded}\\
+\midrule
+\code{use_reranker} & \no & \yes & \no & \yes & \yes\\
+\code{use_decomposition} & \no & \no & \yes & \no & \no\\
+\code{corrective.enabled} & \no & \no & \no & \yes & \yes\\
+both guardrails & \no & \no & \no & \no & \yes\\
+Role & frozen control & one flag & one flag, rejected & rerank + check & shipped\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+The \code{baseline} file says \enquote{DO NOT EDIT IT. Changing it silently invalidates every reported delta}, and a test asserts that every enhancement stays off. \code{rerank} states its own sanity check: pool recall must not change. \code{decompose} keeps the reranker off because ``running both would leave that unattributable.''
+
+\paragraph{Loading.} \code{load_pipeline_config} resolves the directory (an argument, else \code{VIDYARAG_CONFIG_DIR}, else \code{<repo>/config}). It then deep-merges the profile onto \code{default.yaml}: nested mappings merge key by key, and everything else replaces. Last, it validates the result. Mistakes therefore surface at startup: an unknown profile lists the available ones, a misspelt key is a \code{ValidationError}, \code{use_hybrid: true} is rejected as ``reserved but not implemented'', and inverted thresholds are rejected. That last check used to happen only at the first corrective query.
+
+\paragraph{Dead keys.} Three keys are read by no code: \code{embedding_max_tokens}, \code{chunking.respect_sentence_boundaries} and \code{retrieval.sparse_model}. Only the last is documented as reserved. The 512 limit holds only because \code{chunk_size} is also 512.
+
+\begin{lstlisting}[language=bash]
+uv run vidyarag config --profile guarded      # merged config, incl. guards + thresholds
+uv run vidyarag ask "What is osmosis?" --profile rerank
+QDRANT_MODE=server QDRANT_URL=http://localhost:6333 uv run vidyarag health
+\end{lstlisting}

@@ -1,0 +1,138 @@
+\chapter{What Went Wrong, and What Was Fixed}
+\label{ch:lessons}
+
+\section{How the project was built}
+\label{sec:history}
+
+The git history is unusually informative: most commit messages state the problem, how it was found, the fix, and why the fix is right. The project was built in 31 commits between 30 July and 14 September 2026:
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{2.0cm}L>{\raggedleft\arraybackslash}p{1.3cm}@{}}
+\toprule
+\textbf{Date} & \textbf{Milestone} & \textbf{Tests}\\
+\midrule
+30 Jul & Scaffold: uv, two-layer config, Qdrant factory, frozen \code{baseline}, pre-commit, CI & ---\\
+7 Aug & Licence corrected (second editions are NC-SA); download, parse, chunk & 58\\
+8 Aug & 3,608 chunks indexed; switch to local embeddings plus Gemini; tokeniser truncation fixed & 104\\
+9 Aug & Baseline RAG, validated citations, tracing, HTTP API & 163\\
+18 Aug & Evaluation harness and 58-question gold set; first valid run after three failed ones & 252\\
+28 Aug & Reranking ships, decomposition rejected, hybrid not built; the corrective loop & 289\\
+29 Aug & Guardrails, demo, Docker; deployment blocked by a 402 from Hugging Face & 356\\
+30 Aug--10 Sep & LlamaIndex removed; \code{guarded} first measured; \code{/v1/search}; four fixes to get the Space running & ---\\
+10--14 Sep & Audit PRs 12--19: stale claims, live tests, five Docker defects, threshold-tuning claim removed & 401\\
+Sep 2026 & \textbf{This analysis, then PR \#20}: the measurement fixes described below & 466\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\paragraph{Problems met along the way,} with each fix recorded in the code or the commit that made it:
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{4.4cm}>{\raggedright\arraybackslash}p{5.2cm}L@{}}
+\toprule
+\textbf{Problem} & \textbf{Root cause} & \textbf{Fix}\\
+\midrule
+Attribution claimed CC~BY for second editions & Licence inferred from the title & Verify per edition via OpenStax's API; switch to first editions\\
+Chunk tails silently dropped at embedding & Sized with tiktoken; BGE counts about 7\% more and truncates at 512 & Count with the embedding model's own tokeniser\\
+Five-passage answer showed two references & Marker regex matched \code{[1]} but not \code{[1, 2]} & Grouped and semicolon markers; prune invalid numbers inside a group\\
+A run lost 39 of 58 questions and printed faithfulness 0.949 & Averages over the survivors: 17 factual, 0 multi-hop & Above 10\% failed, withhold every metric\\
+An eval hung at 18/58, silently & Unpaced calls; the SDK retrying with no timeout & 4\,s pacing; 90\,s timeout on every call\\
+50 minutes of grading lost & Windows cp1252 cannot encode Rich's spinner & Force UTF-8; no spinner when not a TTY\\
+RAGAS would not run with Gemini & Upstream import break; async-client detection & Pin \code{langchain-community<0.4}; OpenAI-compatible endpoint\\
+Reranker invisible to MRR and recall@context & Every metric read the pre-rerank list & Each metric reads the list its definition names\\
+Generator refusals credited to the loop & A refusal scores 1.0 on grounding & The grader's \code{refuses} flag\\
+Guard quarantined three chapter openings & A bare \code{SYSTEM:} at a line start & Require directive language after it\\
+Unanswerable set gameable by phrasing & 11 of 12 contained ``exact'' & Eight rotating shapes; near-duplicate check\\
+LlamaIndex declared, never imported & Planned and advertised, never used & Removed --- ``found by checking whether the claim was true''\\
+Space would not start (four causes) & Gradio pin clash; \code{sys.path} shim before \code{__future__}; \code{StrEnum} on 3.10; no GPU function & SDK pin; splice order; \code{_compat.py}; a never-called \code{@spaces.GPU}\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+The commit messages name their own recurring patterns: ``cheap knowledge arriving after expensive work''; ``a check that consults the ambient environment instead of declaring what it needs''; claims ``found by checking whether the claim was true, not by anything failing''; and ``every bug that reached the deployed Space was invisible to the hermetic suite.''
+
+\section{The bug that invalidated the headline}
+\label{sec:judge-bug}
+
+This is the most useful story in the project, because it is about \emph{evaluation integrity}: the evaluation lied, in the direction everyone expected, and nothing objected.
+
+\paragraph{The claim.} The published headline result was ``abstention recall $0.000 \rightarrow 0.917$--$1.000$'': the baseline never refused, and the self-check taught the system to. It appeared in the README, \code{docs/EVALUATION.md}, the \code{corrective} profile, the loop's docstring, the Space README and several commit messages.
+
+\paragraph{The mechanism.} Abstention on free text is decided by a model asked to reply with one word, \code{REFUSED} or \code{ANSWERED}. It was called with \code{max_tokens=5}, and the reply was tested with \code{startswith("REFUSED")}.
+
+\begin{measured}[the same prompt and answer at three budgets, against the live endpoint]
+\begin{center}\small
+\begin{tabular}{@{}rlll@{}}
+\toprule
+\code{max_tokens} & content & \code{finish_reason} & read as\\
+\midrule
+5 (shipped) & \code{'REF'} & \code{length} & \textbf{not a refusal}\\
+16 & \code{'REFUSED'} & \code{stop} & a refusal\\
+50 & \code{'REFUSED'} & \code{stop} & a refusal\\
+\bottomrule
+\end{tabular}
+\end{center}
+The label was truncated mid-word. The function returned \code{False} for \emph{every} input, including the pipeline's own canonical abstention sentence. All 275 cached verdicts were ``not abstained''.
+\end{measured}
+
+\paragraph{Why nobody noticed.} The history shows the developer knew half of it. On 28 August a commit records that ``the generator can already refuse on its own'', and adds the \code{refuses} flag so that the loop would not take credit for those refusals. The \emph{other} side of the comparison went unchecked: whether the baseline's prose refusals were being counted. They were not, so the baseline read 0.000 --- the \emph{expected} value for a pipeline ``with no corrective loop'', described in \code{EVALUATION.md} as ``the single most useful number in this table.'' A wrong number that confirms the design is the hardest kind to see. It also lived behind a network call, so no test ever compared the judge's output with a known label.
+
+\paragraph{How it was found.} The analysis read the stored answers instead of the aggregates. The baseline's answers to all 12 unanswerable questions were refusals: ``The provided passages do not contain information comparing the ATP turnover in a hummingbird to a human\ldots'' Twelve refusals scored as zero meant the instrument, not the system, was wrong. The three-budget measurement above then confirmed the mechanism.
+
+\paragraph{The fix} \ev{src/vidyarag/evaluation/abstention.py}:
+\begin{enumerate}
+  \item A 64-token budget, and the label matched as a whole word, with the last match winning.
+  \item Parsing moved into a pure function, \code{parse_judge_label}, tested without a network against \code{'REF'}, \code{'REFUSED'}, empty text and prose.
+  \item A truncated, empty, unparseable or failed judgement is now \code{unmeasured}, never ``answered''. A judge whose failures all land on one label does not produce a noisy metric; it produces a confident wrong one.
+  \item Each run file records how each verdict was reached, and the aggregate reports the unmeasured count.
+  \item A judge version enters the verdict-cache key, or the fixed judge would keep reading the broken one's verdicts off disk.
+\end{enumerate}
+
+\paragraph{The re-measurement.} \code{vidyarag rejudge} rebuilds verdicts from the stored answers, spending no generation quota. Two independent implementations --- the analysis's throwaway script and the new command --- agree cell for cell. The corrected result is in Section~\ref{sec:results}: recall is 1.000 for four profiles and 0.917 for the shipped one. The self-check makes refusals structured; it does not make them more frequent.
+
+\paragraph{A second bug, found by fixing the first.} The first re-judging pass ran too fast, and 30 calls hit 429. Those failures were written to the verdict cache \emph{as verdicts}, and the next run read them back and never retried --- a transient rate limit turned into a permanent hole in the metric. That is the same shape as the original bug, one layer down: a failure quietly becoming a number. Now only measured verdicts are cached. The 30 poisoned entries were removed and re-judged, and the two \code{guarded} questions still hitting quota are reported as \code{unmeasured}.
+
+\paragraph{The retraction.} The README now explains the old figure rather than quietly replacing it, and a test fails if ``0.000'' reappears in its abstention row. The docstrings, the profile comment and \code{DESIGN.md} were corrected. \code{EVALUATION.md}, a dated phase-by-phase record, keeps its original text with ``Retracted'' notes and an erratum table. Its reasoning (``0.000 is the expected behaviour'') is precisely the lesson.
+
+\section{All 32 findings, and their status}
+\label{sec:findings}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.9cm}>{\raggedright\arraybackslash}p{7.0cm}>{\raggedright\arraybackslash}p{8.4cm}@{}}
+\toprule
+\textbf{ID} & \textbf{Finding} & \textbf{Status}\\
+\midrule
+\endhead
+F1 & Abstention judge truncated to 5 tokens & \textbf{Fixed}, with tests (above).\\
+F2 & Headline ``0.000 $\rightarrow$ 1.000'' is an artefact & \textbf{Fixed}: runs re-judged; README, Space README, docstrings, profile, DESIGN and EVALUATION corrected.\\
+F3 & Latency double-counts nested stages & \textbf{Fixed} in code (1.69$\times$ measured); committed figures await a re-run.\\
+F4 & Grading and decomposition tokens unrecorded & \textbf{Fixed} (2.5$\times$ cost measured); committed figures await a re-run.\\
+F5 & Failed grading shown as ``Self-check passed'' & \textbf{Fixed}: four-state \code{SelfCheck}; the demo says ``Not verified''.\\
+F6 & No test of how profile flags wire the pipeline & \textbf{Fixed}: \code{test_query_pipeline.py}.\\
+F7 & Answer-cache key omits answer-changing settings & \textbf{Fixed}: the key hashes the whole configuration.\\
+F8 & README calls \code{/v1/search} reranked & \textbf{Fixed}.\\
+F9 & Space README: wrong profile's numbers; ``held-out'' & \textbf{Fixed} (redeploy pending).\\
+F10 & \code{book_slug} accepted and ignored & \textbf{Fixed}, including through decomposition.\\
+F11 & Blocked questions return \code{grounded=True} & \textbf{Fixed}: \code{grounded=False}, \code{blocked=True}.\\
+F12 & Provider errors become 500s & \textbf{Fixed}: 429 for quota, 503 otherwise, message withheld.\\
+F13 & Regex guards bypassable; some false positives & Open by design; documented as a limit.\\
+F14 & Guard ``8/8, 0/8, 5/5'' presented as measurement & \textbf{Fixed}: labelled as test-case counts.\\
+F15 & A partial answer can become a full abstention & Open.\\
+F16 & Committed \code{guarded} run fully cached & Open; needs quota for a fresh run.\\
+F17 & Ingest report at a fixed path, overwritten & \textbf{Fixed}: per-collection file.\\
+F18 & Empty completion reuses the ``found nothing'' text & Open.\\
+F19 & Demo shows raw exception text & \textbf{Fixed}; privacy note added.\\
+F20 & Threshold ordering checked only at query time & \textbf{Fixed}: validated at config load.\\
+F21--23 & Hard-coded window of 5; fused score not reported; retries overwrite trace lists & Open; diagnostics only.\\
+F24 & Release v1.2.2 shipped version 1.2.1 & \textbf{Fixed}: 1.3.0.\\
+F25 & Documented citation format idealised & Open.\\
+F26 & Stale figures (6,000 chunks, 60 questions, 130\,ms) & \textbf{Fixed} in docs; one ``6k'' comment remains in \code{store/client.py}.\\
+F27 & Documented baseline numbers from an uncommitted run & Open; now also flagged by the erratum.\\
+F28 & Hyphenation comment contradicts its regex & Open.\\
+F29--30 & Dead config keys, unused and undeclared dependencies, Gradio in the API image & Open.\\
+F31 & Pre-commit tool versions differ from the lockfile & \textbf{Fixed}.\\
+F32 & \code{/v1/config} omits guard flags and thresholds & \textbf{Fixed}, in the API and the CLI.\\
+\bottomrule
+\end{longtable}
+
+\section{What was checked and found to be right}
+
+A findings list can suggest nothing works. These were verified directly. Citations cannot point outside the supplied passages. The corpus pipeline is reproducible: 3,608 chunks from a scratch rebuild. The deterministic retrieval metrics are correct and read the right lists, and the reranking and decomposition results are real. The guards produce no false positives on the corpus. Every number in the README table matches a committed file. CI and the Docker workflow are green. The demo's three behaviours work live, and secrets hygiene holds. And the documentation was already unusually candid: it recorded decomposition's failure, the quality gains that were not real, the untuned thresholds and the definitional-question weakness. \textbf{All 485 file-and-line citations in the original 257-page audit resolved to real code, and every table in it recomputed exactly from the run files.}

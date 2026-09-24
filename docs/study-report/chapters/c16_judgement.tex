@@ -1,0 +1,69 @@
+\chapter{Trade-offs, Limitations and Next Steps}
+\label{ch:judgement}
+
+\section{The design decisions, as trade-offs}
+
+The decisions and their stated reasons below come from the code, the config comments, \code{DESIGN.md} and the commits. A cost marked \tagI{} is this report's inference.
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.6cm}>{\raggedright\arraybackslash}p{5.4cm}L@{}}
+\toprule
+\textbf{Decision} & \textbf{Why} & \textbf{Cost}\\
+\midrule
+No LLM framework & A few hundred lines over three libraries; a framework ``would have added indirection without removing any of it'' & More code to own \tagI\\
+Local ONNX embeddings and reranker & Free, no key, no torch; retrieval has no third-party runtime dependency & CPU cold start; smaller models than hosted ones\\
+Gemini \emph{lite} models, pinned ids & The stronger model allowed 20 requests a day; aliases would move under a benchmark & A weaker generator and grader; manual updates when models retire\\
+512/64 chunks within sections & One self-contained concept; metadata exactly true & Short definitions can fall between chunks\\
+Pool of 20, context of 5 & A reranker needs a wider pool & Never swept \tagI\\
+Reject decomposition; no hybrid search & Measured worse; pool recall already 0.967 & Multi-hop weakness remains; exact-term queries unmeasured \tagI\\
+Claim-level grading, separate model & Tells a retry what to search for; avoids self-grading & A second call larger than generation, about 2.5$\times$ the cost\\
+Untuned thresholds & Twelve unanswerable questions are too few; tuning would spend the gold set & Effect unmeasured; they decided one retry in 116\\
+Fail open on grading errors & An outage must not look like caution & Unverified answers ship --- now labelled as such\\
+Regex guards; block questions, quarantine passages & Cheap, deterministic, explainable; don't edit for an attacker; one bad document must not deny service & Easily bypassed; some study phrasings blocked\\
+RAGAS plus deterministic retrieval metrics & Standard metrics; exact metrics that locate faults & Two upstream workarounds; lite-model judge\\
+A model judge for prose refusals & Keyword matching would be guesswork & A single point of failure: F1\\
+YAML profiles, \code{extra="forbid"} & Diffable, citable variants; typos fail at load & A little ceremony\\
+Trace returned with every answer & Cost and latency visible where the answer is & No aggregation, alerting or history \tagI\\
+Index shipped inside the Space & Free clusters expire; no network hop & Exact search; about 20,000-point ceiling\\
+Gradio on ZeroGPU with an unused GPU hook & The only free Gradio hardware & Tied to a platform quirk and Python 3.10\\
+Manual Space deployment & Not stated & The demo drifts from \code{main} \tagI\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{interview}
+Pick three and present each as a trade-off, not a preference. For example: ``I shipped the index inside the Space instead of using a managed vector database. That removes an expiring dependency and a network hop. The cost is exact search, which is fine at 3,608 chunks but not past about 20,000 --- and at that point the same client factory points at a Qdrant server.''
+\end{interview}
+
+\section{Limitations}
+
+\begin{description}[style=nextline]
+  \item[Scope.] Two introductory English textbooks, a decade old; text only, since images are skipped and tables may lose their structure; single-turn, with no conversation history. Short definitional questions are weak, and multi-hop questions are harder.
+  \item[Answers.] A valid citation is not proof that the passage supports the sentence. Answers vary even at temperature 0, and only five passages reach the model.
+  \item[The self-check.] In practice it formalises refusals rather than correcting answers: every abstention came from the refusal flag. It fails open, its grader is itself a model, it retries at most once, and its thresholds are untuned. It can discard a useful partial answer.
+  \item[Safety.] The regex guards catch canonical phrasings only. There is no output screening, authentication or rate limiting.
+  \item[Evaluation.] 58 model-drafted questions approved by one person who also built the system; no held-out split; one run per profile; model-judged quality with no human grading. Committed latency and cost for the self-check profiles remain wrong until they are re-run.
+  \item[Operations.] CPU reranking takes about 2\,s; cold starts; free-tier limits and transient 503s; exact vector search; no load testing; manual deployment; no monitoring.
+\end{description}
+
+\begin{inferred}[what the limitations mean for claims]
+VidyaRAG demonstrates a carefully instrumented RAG pipeline with honest ablations over a small curated corpus --- and an evaluation that caught and corrected its own headline error. It does not demonstrate production readiness, robustness to adversarial users, or statistically significant quality differences, and it should not be described as doing so.
+\end{inferred}
+
+\section{What to do next}
+\label{sec:improvements}
+
+\begin{recommended}[in priority order; all unimplemented]
+\begin{enumerate}
+  \item \textbf{Re-run \code{corrective} and \code{guarded}} once quota allows, so that committed latency and cost use wall clock and every model call. Re-judge the two unmeasured \code{guarded} verdicts. Redeploy the Space.
+  \item \textbf{Validate the judge against people.} Hand-label about 50 answers as refused or answered and report the judge's agreement before trusting it again. The bug showed that an unvalidated judge is an unvalidated metric.
+  \item \textbf{Repeat runs and report spread}: three runs per profile, with bootstrap intervals over questions.
+  \item \textbf{Keep the useful part of partial answers.} Use the grader's claims to drop only the unsupported sentences instead of abstaining wholesale (F15), measured against abstention precision.
+  \item \textbf{Fix retrieval's known weaknesses.} Split glossaries into one chunk per term; try one guaranteed context slot per sub-question, or MMR over the reranked pool; evaluate hybrid search on an exact-term question set; measure top-10 against top-20 reranking.
+  \item \textbf{Grow the gold set}: ambiguous and definitional questions, more unanswerable ones, a second reviewer, and a held-out split never used during development.
+  \item \textbf{Operate it}: warm models at startup, a per-IP rate limit, one structured log line per query, deploy the Space from CI on release, expose the git commit in \code{/v1/config}, and add dependency and image scanning.
+  \item \textbf{Clean up}: the empty-completion message (F18), the citation-format docs (F25), the hyphenation comment (F28), dead config keys and unused dependencies (F29--30), and the ``6k'' comment.
+\end{enumerate}
+\end{recommended}
+
+\paragraph{If you rebuilt it from scratch} \tagR, the order that worked here is a good one. Corpus and licence first, then a reproducible index, then a frozen baseline \emph{with its evaluation}, then one improvement at a time. Add one thing this project lacked until late: a test that feeds the judge a known label, and a check that the baseline's refusals are counted. Validate every instrument before trusting what it says about the system.

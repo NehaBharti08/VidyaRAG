@@ -1,0 +1,168 @@
+\chapter{Interview Preparation}
+\label{ch:interview}
+
+Every fact in this chapter is verified elsewhere in the report; the wording is a recommendation. The fixes described in Chapter~\ref{ch:lessons} are \emph{done}, so you can say so.
+
+\section{Explaining it at four lengths}
+
+\begin{keyidea}[30 seconds]
+VidyaRAG is a biology study assistant that answers only from two open textbooks and cites the printed page for each claim. Retrieval runs locally --- BGE embeddings in Qdrant, reranked by a cross-encoder --- and Gemini writes the answer. A second model checks the draft claim by claim, and when the books don't support an answer, it returns an explicit abstention instead of guessing. It's live on Hugging Face, and every design choice is backed by an ablation.
+\end{keyidea}
+
+\begin{keyidea}[1 minute]
+A chatbot gives you a fluent answer with no way to tell whether it came from the book. I built VidyaRAG so every answer is traceable. It retrieves from 3,608 passages, the model must cite numbered passages, and citations to passages it was never given are stripped. A second model grades each claim, and unsupported or refusing drafts become a fixed, citation-free abstention. I treated it as an experiment, with a frozen baseline, 58 gold questions, and one change at a time. Reranking lifted gold-passage recall in the prompt from 0.880 to 0.913 and MRR from 0.770 to 0.830; decomposition made multi-hop worse, so I rejected it. \textbf{And the most important thing I learned came from auditing my own evaluation}: the judge that counted refusals was truncated to five tokens and had hidden the fact that my baseline already refused. I fixed it, re-measured everything, and published the correction.
+\end{keyidea}
+
+\paragraph{3 minutes} --- seven beats, about 25 seconds each:
+\begin{enumerate}
+  \item \textbf{Problem.} Students need answers they can check. The goal was a RAG system that can prove an answer is in the source, and abstain when it isn't.
+  \item \textbf{Ingestion.} The only CC~BY biology titles, with the licence checked per edition. Structure comes from the PDF outline, and printed pages from the running heads. Sentence-packed chunks of up to 512 tokens are counted with the embedding model's own tokeniser, after a bug where they weren't. Deterministic ids make ingestion idempotent, and a rebuild reproduces all 3,608 chunks.
+  \item \textbf{Query path.} Guard, then 20 dense candidates, a cross-encoder down to 5, and a context guard. Gemini answers with numbered citations, and invalid markers are stripped. A second model grades the claims and flags refusals, and the policy accepts, retries once on the failed claims, or abstains. The trace carries wall-clock time, tokens by purpose and the self-check state.
+  \item \textbf{Evaluation.} Five profiles, each one flag from a frozen baseline. Exact retrieval metrics sit beside RAGAS and abstention metrics, and a run with more than 10\% failures reports nothing.
+  \item \textbf{Results.} Reranking: +0.033 recall@context and +0.060 MRR, with the pool unchanged as predicted. Decomposition: multi-hop context recall 0.861 $\rightarrow$ 0.778, because rank fusion rewards consensus.
+  \item \textbf{The audit.} Abstention was judged by a model capped at five tokens, which returned \code{'REF'}, so every refusal read as an answer and the baseline looked unable to refuse. It had refused 12 of 12. I made the judge report ``unmeasured'' instead of guessing, tested it offline, rebuilt every verdict from stored answers, and retracted the headline. The same audit found doubled latency (1.69$\times$) and uncounted grading tokens (2.5$\times$ cost).
+  \item \textbf{What the self-check really does,} and what's next. It makes refusals explicit and machine-countable; it doesn't make them more frequent or answers better. Next steps: validate the judge against human labels, repeat runs, and handle partial answers.
+\end{enumerate}
+
+\paragraph{The deep version (10--15 min)} walks the code: \code{ingest/parse.py} and \code{chunk.py} (outline, tokeniser bug), \code{pipeline.py} (flags, trace), \code{retrieve/decompose.py} (RRF and why it failed), \code{generate/citations.py}, \code{correct/policy.py} (the rule table, fail-open), \code{evaluation/retrieval.py} (three lists), then \code{evaluation/abstention.py} and \code{tests/test_abstention_judge.py} for the bug and its fix. Finish with the Dockerfile's five defects.
+
+\paragraph{For a non-technical listener.} ``I built a study helper that answers only from two free biology textbooks and points to the page. A second AI checks every sentence against those pages, and if the books don't have the answer, it says so. I built a way to measure whether each part helps, dropped a part that made things worse, and caught a bug in my own measuring tool that had made my results look better than they were.''
+
+\paragraph{Whiteboard.} Draw two rows. Offline: PDFs $\rightarrow$ parse $\rightarrow$ chunk $\rightarrow$ embed $\rightarrow$ index. Online: question $\rightarrow$ guard $\rightarrow$ search 20 $\rightarrow$ rerank 5 $\rightarrow$ guard $\rightarrow$ generate $\rightarrow$ grade $\rightarrow$ accept, retry or abstain, with a retry arrow back to search labelled ``question + failed claims''. Add a side box for evaluation that points at everything. At each arrow, say what crosses it: text, 768 numbers, 20 ids, 5 passages, a draft, verdicts.
+
+\section{``Why did you use this?''}
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{4.3cm}L@{}}
+\toprule
+\textbf{Why\ldots} & \textbf{Answer (and ``why not'')}\\
+\midrule
+RAG, not fine-tuning? & Answers must cite a page and be able to abstain; weights can't cite. \tagI{} The repository never considers fine-tuning.\\
+These two books? & The only CC~BY biology titles, per edition; second editions are NC-SA. They overlap only slightly, which enables cross-book multi-hop questions.\\
+The PDF outline, not font heuristics? & Heuristics ``misfire \ldots{} and fail silently.'' PDFs also carry printed page numbers a student can check.\\
+512/64 chunks? & 512 is the model's hard limit, about 1.5 paragraphs. 256 fragments definitions; 1,024 dilutes the embedding. Not swept.\\
+BGE via fastembed? & Local, free, no key, no torch (an image of about 400\,MB against 2.5\,GB). OpenAI embeddings needed billing.\\
+Qdrant? & One client for in-memory, server and cloud. \tagI{} Named vectors and payload filters.\\
+An embedded index in the demo? & Free cloud clusters expire. Exact search is fine at 3,608 points.\\
+20 $\rightarrow$ 5 with a cross-encoder? & The gold passage was in the pool 96.7\% of the time but in the top 5 only 88.0\%. MiniLM (80\,MB) over \code{bge-reranker-base} (1\,GB, unmeasured).\\
+RRF, $k=60$? & Scores across queries aren't comparable; 60 is the published default, not tuned on the gold set.\\
+No hybrid search? & Pool recall was already 0.967, and it would need re-indexing. \tagI{} Exact-term queries are untested.\\
+Gemini \emph{lite}, pinned? & Free with no card. The stronger model allowed 20 requests a day. Aliases would move under a benchmark.\\
+Numbered, validated citations? & Models mangle ids; ``a fabricated citation is worse than none.''\\
+Claim-level grading, a separate model? & A single score gives a retry nothing to aim at. Self-grading is biased.\\
+The refusal flag? & A refusal is perfectly grounded ($g=1.0$) and would be accepted.\\
+Fail open on grading errors? & Refusing on an outage ``would look appropriately cautious while actually being broken.'' It is now \emph{labelled} unverified.\\
+Untuned thresholds? & Fitting two boundaries to 12 questions overfits and spends the gold set.\\
+Regex guards? & Cheap, explainable, zero false positives on the corpus. \tagI{} A model classifier costs a call per question on a free tier.\\
+RAGAS through an OpenAI client? & Standard metrics; RAGAS detects async clients by an OpenAI attribute, which Google's compatible endpoint satisfies.\\
+A model judge for refusals? & Keywords would be guesswork. \textbf{Lesson:} the judge needed its own tests.\\
+No LangChain/LlamaIndex? & A few hundred lines over three libraries. LlamaIndex was planned, found unused, and removed.\\
+FastAPI, Gradio, uv? & Pydantic types generate the OpenAPI spec; Gradio is the Space SDK; one lockfile runs CI, Docker and the shell identically.\\
+Python 3.10 support? & ZeroGPU pins 3.10 and ignores requests for another version.\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Question bank}
+
+\paragraph{Fundamentals.}
+\begin{description}[style=nextline,itemsep=1pt]
+  \item[Bi-encoder vs cross-encoder?] A bi-encoder embeds question and passage separately, so passages are precomputed and search is fast. A cross-encoder reads them together: more accurate, but one pass per pair. Here the bi-encoder fetches 20 and the cross-encoder picks 5, at about 2\,s for 20 on the CPU.
+  \item[What's RRF?] It merges ranked lists by $\sum 1/(k+\text{rank})$. It needs no score calibration, and it rewards agreement across lists.
+  \item[Recall@k vs MRR?] Recall@k is the share of gold passages in the top $k$. MRR is the mean of 1/rank of the first gold passage. Here pool recall reads the 20 candidates, MRR the final ordering, and recall@context the five prompt passages.
+  \item[What does ``grounded'' mean?] The grader judges \emph{support, not truth}: a true fact absent from the passages is unsupported. The API's \code{grounded} flag only means a citation resolved; \code{verified} means the self-check passed.
+\end{description}
+
+\paragraph{Design and pipeline.}
+\begin{description}[style=nextline,itemsep=1pt]
+  \item[Walk me through a query.] See the 3-minute version, beat 3.
+  \item[Why one Pipeline class with flags?] So an ablation changes one thing, and a test proves each flag routes the query.
+  \item[Why one pipeline per process?] Embedded Qdrant locks its folder, and loading the models is slow.
+  \item[What happens to a blocked question?] It is refused before any search or model call, with \code{blocked=true} and \code{grounded=false}.
+  \item[How would it scale to 100 books?] A Qdrant server with an approximate index, per-edition licence checks, and a new gold set. Reranking cost depends on candidates, not corpus size.
+  \item[How would you add hybrid search?] A sparse vector beside the named \code{dense} one, re-indexing, fusion, and a new profile ablated against \code{rerank}. The flag is reserved and rejected until then.
+\end{description}
+
+\paragraph{Ingestion and retrieval.}
+\begin{description}[style=nextline,itemsep=1pt]
+  \item[What was the tokeniser bug?] Chunks were sized with tiktoken, but BGE counts about 7\% more and truncates at 512, so chunk tails vanished silently. Counting with BGE's own tokeniser fixed it; the maximum chunk is now 487.
+  \item[How is ingestion idempotent?] \code{uuid5} ids overwrite rather than duplicate, existing ids are skipped, and downloads resume with Range requests.
+  \item[How do you know reranking was the only change?] Pool recall had to stay at 0.967, and it did.
+  \item[Why did decomposition fail?] RRF favours passages several sub-questions retrieve, which are the generic ones. The pool reached 1.000 multi-hop recall, but the context fell to 0.778.
+  \item[What does ``what is tissue?'' reveal?] The right section is retrieved, but its chunk starts mid-sentence, and the definition sits in a glossary chunk outside the top five. It's a chunking problem.
+\end{description}
+
+\paragraph{Generation and the self-check.}
+\begin{description}[style=nextline,itemsep=1pt]
+  \item[Limits of citation validation?] A valid marker points at a supplied passage; it doesn't prove the passage supports the sentence. That's the grader's job.
+  \item[Is temperature 0 deterministic?] No. Identical calls returned 315, 300 and 307 characters.
+  \item[What if grading fails?] The draft is accepted, because an outage shouldn't look like caution, and it is \emph{labelled}: \code{self_check: unavailable}, and ``Not verified'' in the demo. It used to say ``Self-check passed''; I caught that when a live grading call returned 503.
+  \item[Does the retry help?] It fired once in 116 questions. In practice the loop formalises refusals.
+  \item[Did the self-check improve answers?] No. Like for like, the differences are within $\pm0.02$. It makes refusals explicit and countable.
+\end{description}
+
+\paragraph{Evaluation --- expect the most questions here.}
+\begin{description}[style=nextline,itemsep=1pt]
+  \item[Tell me about the judge bug.] The judge had a 5-token budget and returned \code{'REF'}; the parser needed \code{REFUSED}. So every refusal was counted as an answer, and the baseline read 0.000 when it had refused 12 of 12. Nobody questioned it because 0.000 was the expected answer. I found it by reading stored answers instead of aggregates. The fix: a 64-token budget, whole-word parsing, ``unmeasured'' instead of a default, offline tests with known labels, and a judge version in the cache key. Then I rebuilt every verdict with a new \code{rejudge} command, which two independent implementations agree with, and retracted the claim publicly.
+  \item[How would you prevent that class of bug?] Test every measurement component against known inputs, offline. Validate a model judge against human labels before trusting it. Alarm on implausible distributions: 275 verdicts, all ``answered''. And read raw outputs, not just aggregates.
+  \item[You found a second bug while fixing it?] Yes. The re-judge cached 429 failures \emph{as verdicts}, so a transient error became a permanent gap that later runs never retried --- the same shape as the original bug. Now only measured verdicts are cached.
+  \item[Were your latency and cost figures right?] No, and both are fixed in code. Nested stages were summed, which overstated latency 1.69$\times$ (measured), and grading tokens weren't recorded, which understated cost 2.5$\times$. The committed figures await a re-run, and the README doesn't quote them meanwhile.
+  \item[How did you build the gold set?] Model-drafted from passages and human-verified. Unanswerable questions are checked for being in-domain, non-duplicate and genuinely unanswered, with rotating shapes so that ``exact'' doesn't give them away. The risks: 58 questions, one reviewer who is also the builder, and no held-out split.
+  \item[What's your noise floor?] Answer-dependent metrics move by about 0.05 between runs; retrieval metrics are exact.
+  \item[Which results would you publish?] The reranking and decomposition results (exact metrics, small sample stated), the corrected abstention numbers, and the retraction.
+\end{description}
+
+\paragraph{Engineering.}
+\begin{description}[style=nextline,itemsep=1pt]
+  \item[How is the suite hermetic?] Environment cleared, Qdrant in memory, PDFs built in the test, HTTP mocked, models faked; three live tests are opt-in. 466 pass, with 66\% coverage.
+  \item[What did running the container in CI reveal?] Five defects: a health check fighting the index lock, a read-only mount, three version numbers, a missing interpreter path, and config looked up inside the venv.
+  \item[How do docs stay consistent with code?] Tests compare the README diagram with its copy, forbid claims of a threshold sweep, and check the README's abstention row against the run files.
+  \item[How are secrets handled?] Ignore rules; gitleaks first in pre-commit and over the full history in CI; \code{SecretStr}; the key set as a Space secret through the API, never in a file.
+\end{description}
+
+\paragraph{Curveballs.}
+\begin{description}[style=nextline,itemsep=1pt]
+  \item[If the baseline already refused, what does the project add?] Measured retrieval gains, validated citations, a documented negative result, reproducible ingestion and deployment, a structured abstention --- and an evaluation that caught its own headline error. Say plainly that the self-check didn't create the ability to refuse.
+  \item[Isn't a regex guard pointless?] It's a free first layer that stops canonical attacks before they spend quota, with zero false positives on the corpus. It's not a defence against a determined attacker; grounding bounds the damage.
+  \item[58 questions is tiny.] Agreed. Retrieval metrics are exact but narrow, and differences below 0.05 aren't claimed. The next step is a bigger set with repeated runs.
+  \item[Why not a LangChain template?] Owning a few hundred lines made tracing, validation and measurement straightforward, and nothing needed a framework.
+\end{description}
+
+\section{Before it goes on a résumé}
+\label{sec:resume}
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{5.4cm}>{\raggedright\arraybackslash}p{1.9cm}L@{}}
+\toprule
+\textbf{Claim} & \textbf{Verdict} & \textbf{Evidence and safe wording}\\
+\midrule
+Found and fixed a bug in my own evaluation & \textbf{Safe --- strongest} & Truncated judge; fixed with tests; five runs re-judged; retraction published.\\
+Reranking improved retrieval & Safe & Recall@context 0.880 $\rightarrow$ 0.913, MRR 0.770 $\rightarrow$ 0.830; pool unchanged.\\
+Decomposition tested and rejected & Safe & Multi-hop recall@context 0.861 $\rightarrow$ 0.778.\\
+Validated page-level citations & Safe & Say ``validated'', not ``every claim proven''.\\
+Self-check abstains on unsupported answers & Safe, precisely & ``Returns an explicit, citation-free abstention.''\\
+Self-check raised abstention recall 0 $\rightarrow$ 1 & \textbf{Never} & Retracted: the 0 was the judge.\\
+Self-check improves answer quality & \textbf{Never} & Within noise.\\
+Blocks prompt injection & Rephrase & ``Regex input and context guards with zero false positives on the corpus.''\\
+About 22\,s latency; \$0.00027 per query & \textbf{Never} & Double-counted; grading uncounted.\\
+400+ tests, CI on 3.10/3.11, Docker & Safe & 466 hermetic tests; image built and health-checked in CI (not published).\\
+Held-out set; statistically significant; production-ready; LlamaIndex; fine-tuned; GPU & \textbf{Never} & None of these is true.\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{recommended}[bullets you can defend]
+\begin{itemize}
+  \item Built VidyaRAG, a RAG study assistant over two OpenStax textbooks (3,608 passages): local BGE embeddings in Qdrant, cross-encoder reranking, Gemini generation with validated page-level citations, and a claim-level self-check that abstains with an explicit, citation-free response.
+  \item Designed an ablation harness (58-question gold set; deterministic retrieval, RAGAS and abstention metrics; frozen baseline): reranking raised gold-passage recall in the prompt from 0.880 to 0.913 and MRR from 0.770 to 0.830; query decomposition was measured and rejected.
+  \item Audited my own evaluation and found a truncated LLM judge that had inverted the headline result; fixed it with offline tests, rebuilt all verdicts from stored answers, corrected latency (1.69$\times$ overstated) and cost (2.5$\times$ understated) accounting, and published the retraction.
+  \item Shipped a FastAPI service, CLI and Gradio demo on Hugging Face Spaces; Docker image health-checked in GitHub Actions; 466 hermetic tests on Python 3.10 and 3.11 with secret scanning.
+\end{itemize}
+\textbf{Tech list:} Python, RAG, Qdrant, fastembed (ONNX Runtime), BGE embeddings, cross-encoder reranking, Google Gemini API, RAGAS, FastAPI, Pydantic, Gradio, Typer, PyMuPDF, Docker, GitHub Actions, Hugging Face Spaces, pytest, mypy, ruff, uv.
+\end{recommended}
+
+\paragraph{The locked campus résumé} says ``LlamaIndex + Qdrant + Gemini''. If asked: ``I planned to use LlamaIndex, and the résumé was locked early. The pipeline turned out to be a few hundred lines directly over qdrant-client, fastembed and the Gemini SDK, so the framework was never imported. When I checked my docs against the code I found it listed and unused, and I removed it rather than keep it for appearances.''
+
+\paragraph{Facts at your fingertips.} 3,608 chunks from 2,900 pages; up to 512 BGE tokens, overlap 64, maximum 487. \code{bge-base-en-v1.5} (768-d), \code{ms-marco-MiniLM-L-6-v2}, \code{gemini-3.5-flash-lite} and \code{gemini-3.1-flash-lite}. 20 $\rightarrow$ 5. Accept $\ge0.8$, abstain $<0.5$, 2 attempts. 58 questions: 28 factual, 18 multi-hop, 12 unanswerable. Abstention recall 1.000 (baseline) and 0.917 (shipped). Embed 68\,ms, search 33\,ms, rerank 2.1\,s; one guarded query 14.5\,s wall clock at \$0.00073. 466 tests, 66\% coverage.
+
+\paragraph{Before each interview.} Open the live demo early (cold start, free-tier blips); keep screenshots or a local run as a fallback. Rehearse the 30-second, 1-minute and 3-minute versions aloud. Be ready to open \code{pipeline.py}, \code{correct/policy.py}, \code{generate/citations.py}, \code{evaluation/abstention.py} and \code{tests/test_abstention_judge.py}. Run \code{uv run pytest -m "not costly"} that morning so you can say it passes today.

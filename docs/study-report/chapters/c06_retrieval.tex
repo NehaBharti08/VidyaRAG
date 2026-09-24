@@ -1,0 +1,78 @@
+\chapter{Retrieval: Dense, Reranked, Decomposed}
+\label{ch:retrieval}
+
+Retrieval decides which five passages the model may read. If the right passage is not among them, no prompt, grader or policy can produce a correct cited answer. All retrieval runs through \code{Pipeline.retrieve}, and each optional step is switched by a profile flag \ev{src/vidyarag/pipeline.py}:
+
+\begin{lstlisting}[language=Python]
+if config.retrieval.use_decomposition:                          # optional
+    sub_questions = decompose(llm, question, ..., trace=trace).sub_questions
+candidates = (retrieve_decomposed(...) if sub_questions         # pool of 20
+              else retrieve_dense(client, question, limit=20, book_slug=book_slug))
+trace.retrieved_chunk_ids = ids(candidates)          # scored by recall@k, hit@k
+if config.retrieval.use_reranker:                               # optional
+    candidates = rerank(question, candidates, model_name=...)
+trace.ranked_chunk_ids = ids(candidates)             # scored by MRR
+context = candidates[:5]                             # scored by recall@context
+if config.guardrails.check_retrieved_context:                   # optional
+    context = screen_context(context).kept
+\end{lstlisting}
+
+The pool is recorded \emph{before} narrowing, because ``the gap between that and what reaches the prompt is the thing reranking exists to close.'' The context guard runs \emph{after} narrowing, because ``only what reaches the prompt can influence the model.'' The 20-to-5 ratio is justified as ``the latency/quality sweet spot on 2 vCPU''. That claim is not backed by a sweep; no other pool size was measured.
+
+\section{Dense retrieval}
+
+\code{retrieve_dense} embeds the question with the ingestion embedder, calls \code{query_points} on the \code{dense} vector, optionally filters on \code{book_slug}, and returns the whole payload as \code{RetrievedChunk}s. The citation is assembled from that payload two layers later \ev{src/vidyarag/retrieve/dense.py}. The module calls itself ``the frozen baseline \ldots{} it must stay boring.'' Queries get no BGE instruction prefix; adding one left the top three results for ``what is tissue?'' unchanged \tagM. Before the fixes, \code{/v1/query} accepted \code{book_slug} and ignored it. It now filters, including through decomposition.
+
+\section{Cross-encoder reranking}
+\label{sec:rerank}
+
+The reranker's docstring makes its case from the baseline numbers. Pool recall was 0.967 but recall@context only 0.880, so the gold passage ``is in the retrieved pool for almost every question, and is then ranked out of the top 5 before generation for roughly one question in eight. Reranking does not need to find anything new.'' \code{rerank} scores all 20 candidates with a cached fastembed \code{TextCrossEncoder}, keeps each dense score in \code{prior_score} ``so a rank change can be attributed rather than guessed at'', and sorts by the new score \ev{src/vidyarag/retrieve/rerank.py}. \code{rank_movement} then records how much moved. As its docstring puts it, ``a reranker that improves a metric while never changing the top 5 has not earned the credit.''
+
+\begin{verified}[what reranking did, from the committed run files]
+\begin{center}\small
+\begin{tabular}{@{}lccc@{}}
+\toprule
+& \code{baseline} & \code{rerank} & Change\\
+\midrule
+Recall@$k$ (pool of 20) & 0.967 & 0.967 & $\pm$0.000\\
+Recall@context (first 5) & 0.880 & 0.913 & +0.033\\
+MRR & 0.770 & 0.830 & +0.060\\
+Recall@context, factual & 0.893 & 0.964 & +0.071\\
+Recall@context, multi-hop & 0.861 & 0.833 & $-$0.028\\
+\bottomrule
+\end{tabular}
+\end{center}
+Pool recall did not move, exactly as the profile's sanity check requires. Per question, the reranker reordered 17.7 of 20 candidates on average, changed the top passage for 32 of 58 questions, and promoted a passage from outside the first five into the context for 55 of 58.
+\end{verified}
+
+\paragraph{The cost.} Reranking is the most expensive local stage. On the development machine (Intel Core i5-12450H), scoring 20 passages took a median of 2,142\,ms and 5 passages 444\,ms, and the first call adds about 3.2\,s of model loading \tagM. The \code{rerank} run's mean latency (6,856\,ms) is inflated by one 44\,s first question during model load; its median is 3,100\,ms. \code{docs/DESIGN.md} once said ``\textasciitilde130\,ms per batch''. That figure was never measured on this hardware and has been replaced.
+
+\paragraph{Why multi-hop got worse.} The repository's hypothesis: a cross-encoder ``scores each passage independently \ldots{} so it promotes whatever most resembles the question --- typically several near-duplicates of the strongest match. A factual question has one right passage and that is exactly correct. A multi-hop question needs two complementary passages, and the duplicates crowd the second one out.'' The hypothesis motivated decomposition but was never isolated experimentally.
+
+\section{Decomposition with rank fusion --- measured and rejected}
+\label{sec:decompose}
+
+The idea is to ask two narrower questions and give each hop its own shot at the passage it needs \ev{src/vidyarag/retrieve/decompose.py}. \code{decompose} asks Gemini, at temperature 0 and with a JSON schema, whether the question needs ``two or more DISTINCT topics that would live in different sections''. If it does, the model supplies two or three self-contained sub-questions. The prompt also warns that ``splitting an atomic question produces near-duplicates \ldots{} which is worse than not splitting at all.'' Every failure (an exception, empty or invalid JSON, fewer than two sub-questions) falls back to plain dense retrieval, which is ``the safe direction.'' Each sub-question gets the full top 20 (``not a share of it''), and the lists are fused with RRF, $k=60$. RRF uses ranks alone because dense scores from different queries ``are not on a comparable scale.'' The decomposition call's tokens are now recorded under the purpose \code{decomposition}; before the fixes they were invisible.
+
+\begin{verified}[the \code{decompose} run against \code{baseline}]
+It split 26 of 58 questions: 6 of 28 factual, 11 of 18 multi-hop and 9 of 12 unanswerable. On multi-hop questions, \textbf{pool recall rose to 1.000} --- every gold passage was among the candidates --- but \textbf{recall@context fell from 0.861 to 0.778}. On the 11 multi-hop questions that were actually split, it was 0.727 against 0.864 under \code{baseline}. Overall recall@context fell from 0.880 to 0.826.
+\end{verified}
+
+The diagnosis is that \textbf{consensus selects for the unspecific}. A passage that both sub-questions retrieve is usually the generic one, while the passage only one hop needs appears in one list and is pushed out of the top five (the worked example in Section~\ref{sec:rrf}). The fix that was not built is to reserve one prompt slot per sub-question. The code stays in the repository so that the negative result remains reproducible. One stored decomposition shows the failure the prompt warned about: \code{fact-003}, a single-lookup question, was split into two near-duplicates \tagM.
+
+\begin{interview}
+A rejected technique is one of the best things to discuss. Reranking helped factual questions and hurt multi-hop ones. The hypothesis was a diversity failure, and decomposition was the targeted fix. It put every multi-hop gold passage into the pool, then lost them in the final ordering, because rank fusion rewards agreement. It was rejected on the numbers, and the next step --- a guaranteed slot per hop --- is known.
+\end{interview}
+
+\section{Hybrid search: reserved, not built}
+
+The config has \code{use_hybrid} and \code{sparse_model: Qdrant/bm25}, but the loader \emph{rejects} \code{use_hybrid: true} rather than leave a switch that does nothing. The recorded reason: pool recall was already 0.967, ``leaving hybrid retrieval almost nothing to recover'', and hybrid search would require re-indexing with sparse vectors. \tagI{} That argument covers the gold set, whose passages dense retrieval already finds. It does not cover exact-term queries (rare words, abbreviations, names), where BM25 traditionally helps. \code{fact-002}, whose answer is the single term ``chemotaxis'', had no gold passage among the 20 dense candidates at all.
+
+\section{Open issues}
+
+Three issues remain, all affecting diagnostics rather than answers:
+\begin{itemize}
+  \item \code{rank_movement} hard-codes the context size as \code{5} instead of reading \code{top_k_context}.
+  \item Fused decomposition results carry the first-seen dense score, not the RRF score that ordered them.
+  \item In the self-check loop, a retry reuses the same trace, so \code{retrieved_chunk_ids} describes only the last attempt.
+\end{itemize}
