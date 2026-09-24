@@ -7,6 +7,25 @@ Methodology, gold set provenance, and per-phase results.
 > (`258cb6f9b1a2ab04`), so the comparisons are between pipelines rather than
 > between moving targets.
 
+> **Erratum — read before quoting any abstention figure below.** This document
+> is a phase-by-phase record, written as each phase was measured. Its
+> abstention figures for Phases 2–5 were produced by a judge whose output was
+> truncated to five tokens (`max_tokens=5` returns `'REF'`, and the parser
+> required `REFUSED`), so every prose refusal was recorded as an answer. The
+> sections below keep what was originally written and mark where it is wrong.
+> The corrected figures, re-judged from the same stored answers with
+> `uv run vidyarag rejudge`, are:
+>
+> | | baseline | rerank | decompose | corrective | guarded |
+> |---|---:|---:|---:|---:|---:|
+> | Abstention recall | 1.000 | 1.000 | 1.000 | 1.000 | 0.917 |
+> | Abstention precision | 0.667 | 0.706 | 0.600 | 0.667 | 0.647 |
+> | False abstention rate | 0.130 | 0.109 | 0.174 | 0.130 | 0.130 |
+>
+> The baseline was already refusing every unanswerable question, in prose. The
+> corrective loop did not create that ability; it makes a refusal explicit and
+> structured. Retrieval metrics are unaffected — they never read the judge.
+
 ---
 
 ## Principles
@@ -365,6 +384,15 @@ Averaged over the 46 answerable questions the system attempted.
 
 ### What this baseline says
 
+> **Retracted.** The abstention rows above, and the paragraph below, are wrong.
+> Re-judged correctly, the baseline refused **12 of 12** unanswerable questions
+> (recall 1.000, precision 0.667, false abstention rate 0.130). It declined in
+> prose — "The provided passages do not contain information comparing…" —
+> because prompt rule 3 tells it to name what is missing. The 0.000 below was a
+> truncated judge, and "nothing in it can decline" was never true. The text is
+> kept as written, because its reasoning is exactly what let the bug go
+> unnoticed: 0.000 was the *expected* answer, so nobody checked it.
+
 **Abstention recall is 0.000.** The baseline answered all twelve unanswerable
 questions rather than refusing any of them. That is the expected behaviour of a
 pipeline with no corrective loop — nothing in it can decline — and it is the
@@ -542,6 +570,16 @@ optimising the wrong stage. That is a decision from the measurements, not a
 shortcut around them.
 
 ### Phase 5 — the corrective self-check loop
+
+> **Retracted.** The table below compares the loop against baseline and rerank
+> figures that came from the truncated judge (see the erratum at the top).
+> Corrected, baseline and rerank both refused 12 of 12 unanswerable questions,
+> so the loop did **not** move abstention recall — it was 1.000 before and
+> after. Corrected precision is 0.667 for `corrective` against 0.706 for
+> `rerank`. What the loop genuinely changes is the form of a refusal: an
+> explicit `abstained` flag with no citations, instead of prose a caller must
+> classify. The analysis further down — why the false abstentions happened, and
+> how little the quality metrics moved — still stands.
 
 The number this phase existed to move:
 
