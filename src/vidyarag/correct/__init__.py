@@ -1,8 +1,11 @@
 """The corrective self-check loop.
 
-Baseline abstention recall is 0.000: the pipeline answers every question,
-including the twelve it cannot support, because nothing in it can decline. This
-package is what has to move that number.
+Grades a draft claim by claim, then accepts it, retries against the claims that
+failed, or withholds it. The baseline already declines unanswerable questions
+in prose; this package turns those refusals, and drafts the passages do not
+support, into an explicit, citation-free abstention a caller can detect without
+parsing text. See ``correct/loop.py`` for why an earlier version of this
+docstring said otherwise.
 """
 
 from vidyarag.correct.grader import (

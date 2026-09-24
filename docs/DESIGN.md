@@ -300,9 +300,13 @@ boundaries to twelve examples produces a number that looks tuned and generalises
 no better than the untuned one — and it would consume the gold set as a
 development set, leaving nothing held out.
 
-Measured at the default: abstention recall 1.000, precision 0.800, F1 0.889,
-false abstention 0.065. **Recall is at ceiling, so the only direction tuning
-could move is precision** — and the three imprecise refusals turn out not to be
+Measured at the default, re-judged with the fixed judge: abstention recall
+1.000, precision 0.667, F1 0.800, false abstention 0.130 for `corrective`. (As
+first published these read precision 0.800 and false abstention 0.065; the
+truncated judge had missed three prose refusals.) **Recall is at ceiling — as it
+is for the baseline, which already refuses in prose — so the only direction
+tuning could move is precision** — and the three refusals the loop itself made on
+answerable questions turn out not to be
 threshold errors at all. Those questions had context recall 0.444 against 0.981
 across the run: retrieval genuinely failed and the system declined rather than
 answering from passages that did not contain the answer. No threshold fixes a
