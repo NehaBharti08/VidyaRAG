@@ -1,0 +1,106 @@
+\chapter{Observability and Interfaces}
+\label{ch:serving}
+
+\section{The trace}
+\label{sec:trace}
+
+Every answer carries a \code{QueryTrace}, because ``the trace is returned with the answer rather than only logged, so latency and cost are inspectable from the API and the UI, not just from a log file nobody opens'' \ev{src/vidyarag/observe/trace.py}. The trace holds:
+\begin{itemize}
+  \item nested \textbf{stage timings}: \code{guard_input}, \code{decompose}, \code{retrieve}, \code{rerank}, \code{guard_context}, \code{generate}, and \code{corrective}, which wraps the loop;
+  \item a \textbf{wall-clock total} measured around the whole query;
+  \item \textbf{token usage per model call}, tagged with its purpose;
+  \item the pool, ranking and cited chunk ids;
+  \item what the self-check, the guards and the reranker did.
+\end{itemize}
+A stage is recorded in a \code{finally} block, so ``a failed query still shows where the time went --- which is exactly when that matters.''
+
+\paragraph{List price, not spend.} Each call is priced from a table in the code as $(t_{\text{in}}r_{\text{in}} + t_{\text{out}}r_{\text{out}})/10^6$. The rates are USD per million tokens: \$0.10 in and \$0.40 out for both lite models. An unknown model is priced at Flash rates, because ``a silently free-looking call is worse than a slightly wrong estimate.'' Showing ``\$0.00/query'' would ``hide the thing that actually matters --- whether the design is economical enough to run for real.'' Whether the table matches Google's current price list is \NotDet
+
+\section{Two measurement defects, and their fixes}
+\label{sec:latency-bug}
+\label{sec:token-bug}
+
+\paragraph{Time counted twice.} \code{total_ms} used to be the sum of all recorded stages. The \code{corrective} stage \emph{contains} the retrieval, reranking, screening and generation stages that run inside it, so for the two self-check profiles
+\[
+\text{reported} = \underbrace{t_{\text{guard\_input}} + t_{\text{corrective}}}_{\text{real elapsed}} + \underbrace{t_{\text{retrieve}} + t_{\text{rerank}} + t_{\text{guard\_context}} + t_{\text{generate}}}_{\text{counted again}}.
+\]
+
+\begin{measured}[the defect demonstrated, then the fix measured]
+Three \code{guarded} queries were timed from outside \code{Pipeline.answer} on the old code:
+\begin{center}\small
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+\textbf{Question} & \textbf{Wall (ms)} & \textbf{Reported (ms)} & \textbf{Nested stages} & \textbf{Excess}\\
+\midrule
+Glucose, facilitated diffusion & 79,673 & 92,578 & 12,906 & 12,905\\
+Oxytocin thresholds (abstained) & 16,463 & 29,060 & 12,596 & 12,597\\
+Anaphase of mitosis & 30,848 & 43,474 & 12,626 & 12,626\\
+\bottomrule
+\end{tabular}
+\end{center}
+In each case the excess equals the nested stages to within a millisecond. After the fix, one warm query reported \textbf{14,525\,ms} of wall clock, against 24,588\,ms under the old sum: a \textbf{1.69$\times$} overstatement.
+\end{measured}
+
+The fix gives stages a \code{depth}. The pipeline measures wall clock around the whole query, and \code{total_ms} now returns it. The old figure survives only as \code{stage_sum_ms}, under a name that says what it is. The committed \code{corrective} and \code{guarded} run files still carry the doubled latencies (means of 22,031 and 21,738\,ms), because restating them needs a re-run that the free tier has not allowed. The README says so and quotes no latency for those two profiles. \code{baseline}, \code{rerank} and \code{decompose} have no nested stages and are unaffected.
+
+\paragraph{Tokens not counted.} Only the generator recorded usage, although grading and decomposition also call Gemini. On the same live query, generation used 2,367 input and 132 output tokens (\$0.000289), and grading used 2,473 and 488 (\$0.000443) \tagM. A self-checked answer therefore costs \textbf{\$0.00073, about 2.5$\times$ what was reported}. Grading costs more than generation because it reads the passages \emph{plus} the draft and writes a structured verdict. All three call sites now record through one helper, and \code{tokens_by_purpose()} breaks the total down.
+
+\begin{interview}
+``My trace summed nested spans, so the self-check profiles over-reported latency. I proved it by timing queries from outside: the excess matched the nested stages to the millisecond. Separately, only the generator recorded tokens, so cost was understated two and a half times. The fixes are a wall-clock total with depth-aware spans, and usage recorded at every model call through one helper, so a new call cannot be silently free. Each fix has a test.''
+\end{interview}
+
+\paragraph{Logging} is minimal. structlog emits JSON events for API start and stop, and now logs demo failures server-side. Nothing logs individual queries, guard events or grader failures, and there are no metrics, request ids, alerting or query analytics \tagR.
+
+\section{The HTTP API}
+\label{sec:api}
+
+\code{uvicorn vidyarag.api.main:app} builds one pipeline at startup and closes it at shutdown, because ``a process that exits without closing leaves a stale lock that blocks the next run.'' The Gemini client is created lazily, so a server with no key starts, reports healthy, and fails only on \code{/v1/query} \ev{src/vidyarag/api/}.
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{2.4cm}>{\raggedright\arraybackslash}p{4.4cm}L@{}}
+\toprule
+\textbf{Endpoint} & \textbf{Request} & \textbf{Response}\\
+\midrule
+\code{POST /v1/query} & \code{question} (1--2,000 chars), optional \code{book_slug} (now honoured) & \code{answer}, \code{grounded}, \code{verified}, \code{self_check}, \code{blocked}, \code{citations[]}, \code{context[]}, and a \code{trace} with nested stages and \code{usage_by_purpose}. Missing key $\rightarrow$ 503; quota $\rightarrow$ 429; other upstream failures $\rightarrow$ 503 with the exception type only.\\
+\code{POST /v1/search} & \code{query}, \code{top_k} (1--20), \code{book_slug}; unknown fields rejected & Dense passages with full citation fields. No model call, no key, no cost.\\
+\code{GET /v1/health} & --- & Status, collection, \textbf{point count}, models, profile.\\
+\code{GET /v1/config} & --- & The active profile, now including thresholds and both guardrail flags.\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\code{/v1/search} is dense-only on purpose. Its caller is an agent in a sibling project (named Vichara in a commit message), which wants evidence rather than a finished answer: handing it one ``would spend a second model's quota and move the reasoning out of the system being evaluated.'' Being model-free, it ``costs nothing per request and cannot be rate limited.'' An empty result is a 200, not a 404: ``the corpus does not cover this'' is a finding. \code{/v1/health} reports the point count because ``a service pointed at an empty collection is up and useless.'' The handlers are plain \code{def} functions, so FastAPI runs them concurrently in a thread pool with no lock around the shared pipeline. Whether that is safe for embedded Qdrant and ONNX is \NotDet{} There is no authentication, rate limiting or CORS policy (Chapter~\ref{ch:quality}).
+
+\section{The command line}
+
+\code{vidyarag} is a Typer app that is ``deliberately thin: commands resolve configuration, call into the package, and print.''
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.6cm}L>{\centering\arraybackslash}p{1.4cm}@{}}
+\toprule
+\textbf{Command} & \textbf{Does} & \textbf{Key?}\\
+\midrule
+\code{download}, \code{ingest} & Fetch PDFs; build or resume the index (\code{--recreate}, \code{--batch-size}) & no\\
+\code{ask QUESTION} & Answer, with sources and the trace summary (\code{-p}, \code{--context}) & yes\\
+\code{config}, \code{health}, \code{version} & Show the merged profile; check settings, profile and Qdrant; print the version & no\\
+\code{eval} & Run a profile over the gold set; withhold metrics if the run is invalid & yes\\
+\code{rejudge [PROFILES]} & Rebuild abstention verdicts of committed runs from their stored answers & yes\\
+\code{report [PROFILES]} & Comparison table of the latest run per profile & no\\
+\code{goldset draft|check|unanswerable|triage} & Draft, validate, propose and triage gold questions & mostly\\
+\bottomrule
+\end{tabularx}
+\end{center}
+It forces UTF-8 output because ``\code{vidyarag eval > log.txt} on Windows died with a UnicodeEncodeError after fifty minutes of grading.'' \code{health} is \emph{not} the container health check: it opens the embedded index, which a running server holds locked. Each \code{ask} is a cold process, so model loading adds 5--24\,s \tagM. \code{cli.py} is the largest file in the package and has no direct tests (measured coverage 0\% at the audit).
+
+\section{The Gradio demo}
+\label{sec:demo}
+
+\code{app/app.py} builds a question column and a ``What happened'' column. Its five examples expose each behaviour, because ``a demo where the failure modes are hard to trigger is a demo that only ever shows its best case.'' The pipeline is built on the first question and kept. It reads its profile from \code{Settings}, not \code{os.environ}, which fixed a bug in which a \code{.env} profile was ``silently ignored here.'' Launch settings are a queue of 16 and SSR disabled: a three-pane form ``gains nothing from SSR and gains a second runtime that can fail on its own.'' A never-called \code{@spaces.GPU} function exists only because ZeroGPU refuses to start without one.
+
+After the fixes, the panel reports the truth in four places where it used to flatter:
+\begin{itemize}
+  \item the total is labelled \emph{wall clock}, and nested stages are indented;
+  \item tokens are broken down by purpose, so grading's cost is visible;
+  \item the self-check line is exact: ``Self-check passed'', ``\textbf{Not verified}'' when grading could not run, ``Abstained'', or nothing when the profile has no self-check;
+  \item a failure shows a generic message, or a named quota message, instead of the raw exception text, which could name internal hosts. The footer now also tells visitors that their question goes to Google's Gemini API.
+\end{itemize}
+\code{tests/test_demo_rendering.py} covers these strings; before it, the demo had no tests at all.

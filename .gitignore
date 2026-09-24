@@ -27,6 +27,20 @@ hf_token*
 data/
 *.pdf
 
+# ...except the built study report. The rule above exists to keep 415 MB of
+# OpenStax PDFs out of history; this one is 1.2 MB, is ours, and is the form
+# the report is actually read in.
+!docs/study-report/VidyaRAG_Study_Report.pdf
+
+# LaTeX intermediates from building that report. Its output directory is
+# already covered by the `build/` rule further down. The .tex sources and the
+# built PDF are tracked; nothing else from a compile is.
+*.aux
+*.toc
+*.lof
+*.out
+*.xdv
+
 # Local Qdrant server volume (docker-compose)
 qdrant_storage/
 

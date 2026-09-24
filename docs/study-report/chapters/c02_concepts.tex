@@ -1,0 +1,111 @@
+\chapter{The Ideas You Need First}
+\label{ch:concepts}
+
+Each idea below gets a short definition, the mathematics where there is some, and how VidyaRAG uses it. Definitions that belong to the wider field rather than to this repository are marked as background.
+
+\section{Tokens and tokenisers}
+
+Language models do not read words; they read \emph{tokens}, which are pieces of words produced by a \emph{tokeniser}. Different model families tokenise differently, so the same text has a different token count for each. Two tokenisers matter here. Gemini's counts are recorded from each response for cost \ev{src/vidyarag/observe/trace.py}. The local embedding model \code{BAAI/bge-base-en-v1.5} uses a BERT WordPiece tokeniser and \emph{silently drops everything after token 512}.
+
+\begin{keyidea}[why the tokeniser choice is load-bearing]
+The chunker measures passage length with the embedding model's own tokeniser \ev{src/vidyarag/llm/provider.py}. The repository records that this tokeniser produces about 7\% more tokens than OpenAI's \code{cl100k_base} on English prose. A chunk sized to ``512 tokens'' with the wrong tokeniser would be about 548 real tokens, and the last 36 would vanish at embedding time with no error. The text would still be shown and cited, but it would contribute nothing to search. In the shipped index the largest chunk is 487 tokens, and none exceeds 512 \tagM.
+\end{keyidea}
+
+\section{Hallucination, grounding and RAG}
+
+A language model can state false things fluently; this is \emph{hallucination}. \emph{Grounding} ties each claim to supplied evidence so that it can be checked. \emph{Retrieval-Augmented Generation} (RAG) retrieves relevant documents at question time, places them in the prompt, and instructs the model to answer from them. VidyaRAG's answering prompt says: \enquote{Use ONLY the numbered passages provided. Do not add facts from memory, even if you are confident they are correct}. It adds: \enquote{If the passages do not contain the answer, say exactly what is missing rather than guessing} \ev{src/vidyarag/generate/prompts.py}. That second sentence matters more than it looks. It is why the baseline already refuses unanswerable questions, as Chapter~\ref{ch:evaluation} shows.
+
+\section{Embeddings and cosine similarity}
+
+An \emph{embedding} maps text $t$ to a vector $\mathbf{e}(t)\in\mathbb{R}^{d}$ so that texts with similar meaning land close together. For \code{bge-base-en-v1.5}, $d=768$. Closeness is measured by the cosine of the angle between two vectors:
+\begin{equation}
+\cos(\mathbf{a},\mathbf{b}) = \frac{\mathbf{a}\cdot\mathbf{b}}{\lVert\mathbf{a}\rVert\,\lVert\mathbf{b}\rVert} \in [-1,1].
+\end{equation}
+For example, with $\mathbf{a}=(1,2,2)$ and $\mathbf{b}=(2,1,2)$: the dot product is $8$, both norms are $3$, so $\cos=8/9\approx0.889$. Each of the 3,608 passages is embedded once at ingestion; a question is embedded at query time with the same model, and the index returns the passages with the highest cosine similarity \ev{src/vidyarag/store/collection.py}. The model runs locally through \emph{fastembed} on ONNX Runtime, so it needs no key and no network once downloaded.
+
+\begin{keyidea}[same model, or nonsense]
+Vectors from different embedding models live in unrelated spaces. Querying with the wrong model returns plausible-looking garbage and raises no error. The collection refuses vectors of the wrong \emph{dimension}, but it cannot detect a different model that has the same dimension.
+\end{keyidea}
+
+\section{Vector databases}
+
+A vector database stores each vector with its text and metadata, which together make up a \emph{point} with a \emph{payload}. It answers ``the $k$ points most similar to this vector''. VidyaRAG uses \textbf{Qdrant} through a single factory function that can reach three targets \ev{src/vidyarag/store/client.py}. \emph{Embedded} mode runs in-process, either in memory for tests or in a folder for the demo. \emph{Server} mode talks to a local Qdrant server, and \emph{cloud} mode to Qdrant Cloud. Embedded mode does a linear scan and warns above about 20,000 points; 3,608 is comfortably below that. Every payload carries the passage text, book, chapter, section, pages, printed page, a pre-formatted citation, the token count, the licence and the source URL.
+
+\section{Chunking}
+
+Books are too long to embed or prompt whole, so they are cut into \emph{chunks}. Size trades precision against context. Small chunks are about one thing but can split an explanation; large ones keep explanations whole but blur the embedding. \emph{Overlap} repeats text across a boundary so that a sentence near the edge is not orphaned. VidyaRAG uses at most 512 tokens with 64 of overlap, packs whole sentences, never crosses a section boundary, and allows chunks to span a page break \ev{src/vidyarag/ingest/chunk.py}.
+
+\section{Bi-encoders, cross-encoders and reranking}
+\label{sec:crossencoder}
+
+A \textbf{bi-encoder} embeds query and passage \emph{independently}, and relevance is their cosine. Passage vectors can be computed in advance, which is what makes search fast. A \textbf{cross-encoder} reads query and passage \emph{together} and outputs one score $s(q,p)$. It can model word-level interactions (``this passage mentions glucose, but it is about plants''), but it must run once per pair at query time. \emph{Reranking} uses the bi-encoder to shortlist and the cross-encoder to order the shortlist. VidyaRAG retrieves 20 candidates, scores all 20 with \code{Xenova/ms-marco-MiniLM-L-6-v2} (an 80\,MB ONNX model), and sends the top 5 to the prompt. Cross-encoder scores are not bounded; for one question the top score was $0.45$ and the fourth was $-1.22$ \tagM.
+
+\begin{keyidea}[reranking can only reorder]
+Reranking never adds a passage that dense retrieval missed. So in a correct experiment, recall over the 20-candidate pool must be \emph{identical} with and without it. The \code{rerank} profile states this as its built-in sanity check, and the committed runs confirm it: pool recall is 0.967 in both.
+\end{keyidea}
+
+\section{Query decomposition and Reciprocal Rank Fusion}
+\label{sec:rrf}
+
+A question needing two separate facts may be easier to search as two sub-questions. An LLM does the split, and the ranked lists are merged by \emph{Reciprocal Rank Fusion}, which uses only rank positions:
+\begin{equation}
+\mathrm{RRF}(d) = \sum_{L\,:\,d\in L} \frac{1}{k + r_L(d)},
+\end{equation}
+where $r_L(d)$ is the 1-based rank of $d$ in list $L$. VidyaRAG uses $k=60$, the value from the original paper, deliberately not tuned \ev{src/vidyarag/retrieve/decompose.py}.
+
+\begin{example}[RRF with $k=60$]
+Passage X is ranked 1 for sub-question A and 3 for B: $\tfrac{1}{61}+\tfrac{1}{63}\approx0.0323$. Passage Y is ranked 1 for A only: $\tfrac{1}{61}\approx0.0164$. X wins because two lists agree on it, even though Y was someone's top hit. That agreement bonus is exactly why decomposition failed here (Section~\ref{sec:res-decompose}).
+\end{example}
+
+\section{Claim-level groundedness}
+\label{sec:groundedness}
+
+Instead of asking whether a whole answer is correct, break it into \emph{atomic claims} and label each one \code{supported}, \code{partial} or \code{unsupported} \emph{with respect to the passages}, not the real world. VidyaRAG's score is
+\begin{equation}
+g = \frac{n_{\text{supported}} + 0.5\,n_{\text{partial}}}{n_{\text{claims}}}.
+\end{equation}
+A draft is accepted if $g\ge0.8$ and abstained on if $g<0.5$. In between it is retried while attempts remain, with at most 2 attempts \ev{src/vidyarag/correct/policy.py}. For example, claims labelled supported, partial and unsupported give $g=0.5$. That triggers a retry on attempt~1 and an abstention on attempt~2.
+
+\begin{keyidea}[a refusal is perfectly grounded]
+``The passages do not contain X'' is \emph{supported} by passages that lack X, so a refusal scores $g=1.0$ and would be accepted as an answer. The grader therefore also returns a \code{refuses} flag, and the policy treats any refusal as an abstention \ev{src/vidyarag/correct/grader.py}. In both committed self-check runs, \emph{every} abstention came from this flag rather than from a low score.
+\end{keyidea}
+
+\section{Measuring abstention}
+\label{sec:abstention-metrics}
+
+Treat ``should abstain'' as the positive class. Of $U$ unanswerable questions, $U_a$ were abstained on; of $A$ answerable ones, $A_a$ were wrongly abstained on:
+\begin{align}
+\text{recall} &= \tfrac{U_a}{U}, &
+\text{precision} &= \tfrac{U_a}{U_a+A_a}, &
+\text{false abstention rate} &= \tfrac{A_a}{A}.
+\end{align}
+Recall alone is easy to game, because refusing everything scores 1.0. That is why precision and the false abstention rate are always reported beside it \ev{src/vidyarag/evaluation/abstention.py}.
+
+\begin{example}[the shipped profile, corrected]
+$U=12$, $U_a=11$, $A=46$, $A_a=6$. Recall $=11/12=0.917$; precision $=11/17=0.647$; false abstention rate $=6/46=0.130$; $F_1=0.759$. The run file as first committed said precision 0.846 and $A_a=2$, because a truncated judge was reading four prose refusals as answers (Chapter~\ref{ch:lessons}).
+\end{example}
+
+\section{Retrieval metrics}
+\label{sec:ir-metrics}
+
+For gold passages $G$ and a ranked list $R$:
+\begin{equation}
+\text{recall@}k=\frac{|G\cap R_{1..k}|}{|G|},\qquad
+\text{hit@}k=\mathbf{1}[G\cap R_{1..k}\neq\emptyset],\qquad
+\text{RR}=\frac{1}{\min\{i: R_i\in G\}},
+\end{equation}
+with RR set to $0$ if no gold passage appears. MRR is the mean RR over questions \ev{src/vidyarag/evaluation/retrieval.py}. If the first gold passage is at rank 3, RR $=0.333$. VidyaRAG computes recall twice: over the 20-candidate pool (\code{recall_at_k}) and over only the five that reached the prompt (\code{context_recall_at_context}). The gap between them is what reranking exists to close.
+
+\section{LLM-judged metrics (RAGAS)}
+
+\begin{background}
+RAGAS is an open-source library of RAG metrics. VidyaRAG uses four of them. \textbf{Faithfulness} is the fraction of answer statements inferable from the retrieved passages. \textbf{Answer relevancy} measures how well the answer addresses the question; here it is computed with the local BGE embeddings. \textbf{Context precision} asks whether passages relevant to the reference answer are ranked high. \textbf{Context recall} is the fraction of reference-answer claims that the passages support. All four use an LLM as judge, so they carry model noise. Their exact prompts depend on the pinned RAGAS 0.4.x release and are \NotDet
+\end{background}
+
+Only answerable questions that the system actually attempted are RAGAS-scored; refusals are scored by the abstention metrics instead.
+
+\section{Non-determinism and quotas}
+
+Temperature 0 is often assumed to make a model deterministic. The repository measured otherwise: three identical calls returned three different texts. Running the same profile twice moved answer relevancy by 0.043 and faithfulness by 0.006, while every metric that does not read the generated text came back bit-identical \ev{docs/EVALUATION.md}. The project therefore treats differences below about $\pm0.05$ on answer-dependent metrics as noise.
+
+Free API tiers cap requests per minute and per day, and exceeding a cap returns HTTP 429. Those caps shaped the engineering. They explain the choice of ``lite'' Gemini models: the stronger model allowed 20 requests per day, measured. They also explain the pacing between calls, the retries on transient errors, the caches that let an interrupted evaluation resume, and a rule that withholds all metrics when more than 10\% of questions fail \ev{src/vidyarag/evaluation/runner.py}.

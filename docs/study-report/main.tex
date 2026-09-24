@@ -1,0 +1,65 @@
+\documentclass[11pt,a4paper,openany]{report}
+\input{preamble}
+
+% Chapters are pulled in only if their file exists, so the report compiles at
+% every stage of writing; a missing chapter is announced in the log.
+\newcommand{\chap}[1]{\InputIfFileExists{chapters/#1}{}{\typeout{VIDYARAG-REPORT: missing chapter #1}}}
+
+\begin{document}
+
+\hypersetup{pageanchor=false}
+\begin{titlepage}
+\centering
+\vspace*{2.2cm}
+{\sffamily\bfseries\color{vrblue}\fontsize{44}{48}\selectfont VidyaRAG\par}
+\vspace{0.7cm}
+{\sffamily\LARGE A Technical Study of an Agentic,\\[2pt] Self-Correcting RAG Study Assistant\par}
+\vspace{0.9cm}
+{\color{vrblue!55}\rule{0.62\textwidth}{0.9pt}\par}
+\vspace{0.7cm}
+{\large How it works \textperiodcentered{} how it was measured \textperiodcentered{} what it got wrong \textperiodcentered{} how to explain it\par}
+\vfill
+{\small
+\begin{tabular}{@{}>{\sffamily\bfseries}r@{\hspace{1.2em}}l@{}}
+Repository & \url{https://github.com/NehaBharti08/VidyaRAG}\\
+Describes & version 1.3.0, after the measurement fixes (PR \#20)\\
+Audit baseline & commit \code{fa5164b}, version 1.2.1\\
+Live demo & \url{https://huggingface.co/spaces/nehabharti0802/VidyaRAG}\\
+Project author & Neha Bharti\\
+Written & September 2026\\
+\end{tabular}\par}
+\vspace{1.4cm}
+{\footnotesize\color{vrgray} Every statement is labelled verified, measured, inferred or recommended.\\
+The conventions are on the next page.\par}
+\end{titlepage}
+\hypersetup{pageanchor=true}
+
+\pagenumbering{roman}
+\tableofcontents
+\chap{c00_preface}
+\clearpage
+\pagenumbering{arabic}
+
+\chap{c01_overview}
+\chap{c02_concepts}
+\chap{c03_architecture}
+\chap{c04_stack}
+\chap{c05_ingestion}
+\chap{c06_retrieval}
+\chap{c07_generation}
+\chap{c08_selfcheck}
+\chap{c09_guardrails}
+\chap{c10_serving}
+\chap{c11_journey}
+\chap{c12_evaluation}
+\chap{c13_quality}
+\chap{c14_shipping}
+\chap{c15_lessons}
+\chap{c16_judgement}
+\chap{c17_interview}
+
+\appendix
+\chap{a1_glossary}
+\chap{a2_reference}
+
+\end{document}

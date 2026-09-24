@@ -395,6 +395,12 @@ Full rationale, including the alternatives rejected and why, is in
 [docs/DESIGN.md](docs/DESIGN.md). Evaluation methodology and per-phase deltas
 are in [docs/EVALUATION.md](docs/EVALUATION.md).
 
+There is also a **70-page technical study of this repository** —
+[docs/study-report/](docs/study-report/) — written from the code rather than
+from the documentation, with every statement labelled verified, measured,
+inferred or recommended. It is what found the judging bug described under
+[Results](#results); its chapter 15 records the corrections that followed.
+
 ### Configuration model
 
 Deployment concerns (secrets, endpoints) live in the environment. Pipeline

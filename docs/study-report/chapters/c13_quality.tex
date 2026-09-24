@@ -1,0 +1,88 @@
+\chapter{Testing, Performance and Security}
+\label{ch:quality}
+
+\section{Testing}
+\label{sec:testing}
+
+\begin{measured}[the suite on version 1.3.0]
+\code{pytest -m "not costly" --cov}: \textbf{466 passed, 1 skipped, 3 deselected} in 36\,s; line and branch coverage \textbf{66\%}, above the 60\% floor. At the audited commit it was 401 passed and 64\% coverage. The skipped test runs only when the evaluation group is \emph{absent}, and the three deselected tests are the live ones.
+\end{measured}
+
+\paragraph{Hermetic by default.} An autouse fixture deletes every relevant environment variable before each test, so a developer's \code{.env} cannot leak in, and CI has no real key. Qdrant runs in memory. Parser tests build small PDFs in-process with PyMuPDF. Downloads are mocked with respx, and embedders, rerankers and Gemini clients are small fakes. Three live tests, marked \code{costly}, are opt-in; they exist because ``every bug that reached the deployed Space was invisible to the hermetic suite.''
+
+\paragraph{Techniques worth recognising.} Tests are named as specifications (\code{test_exhausting_the_budget_abstains_rather_than_shipping_the_draft}). Incidents become regression tests: the cardiovascular headings, the 39-of-58 run, the smoke run in the evidence folder. \emph{Non-Python files} are tested as contracts, including the Dockerfile, \code{pyproject.toml}, the README's diagram and \code{.gitignore}. The generated Space \code{app.py} must compile and must avoid Python-3.11-only names, the two failures that once stopped the Space. And the README's abstention row is checked against the run files it cites.
+
+\paragraph{What the fixes added} is exactly the testing that the audit said was missing:
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{4.6cm}L@{}}
+\toprule
+\textbf{New module} & \textbf{Closes the gap}\\
+\midrule
+\code{test_abstention_judge.py} & The judge's parsing, tested without a network, against \code{'REF'}, \code{'REFUSED'}, empty text and prose; the output budget; failures reported as unmeasured.\\
+\code{test_query_pipeline.py} & The first test of the query pipeline at all. Every profile flag is asserted to change what runs; blocked answers are not grounded; fail-open is reported as \code{unavailable}; the total is wall clock; grading and decomposition tokens are counted.\\
+\code{test_rejudge.py} & The re-judging command: structural abstentions cost no call; truncation is unmeasured; a new refusal drops its RAGAS score.\\
+\code{test_demo_rendering.py} & The strings a visitor sees: no ``Self-check passed'' when grading failed; no exception text leaked.\\
+\bottomrule
+\end{tabularx}
+\end{center}
+Coverage of the modules where the bugs lived rose sharply: \code{pipeline.py} from 56\% to 92\%, \code{evaluation/abstention.py} from 86\% to 100\%, and \code{correct/grader.py} from 57\% to 79\% \tagM.
+
+\paragraph{Still blind spots.} \code{cli.py} (0\%) and gold-set drafting remain untested. So do concurrency and load, and adversarial inputs beyond the hand-written guard cases. Real-model behaviour can only be covered by the three live tests.
+
+\section{Performance}
+\label{sec:performance}
+
+\begin{measured}[steady-state stage costs, Intel Core i5-12450H laptop, on battery]
+\begin{center}\small
+\begin{tabular}{@{}lrr@{\qquad}lr@{}}
+\toprule
+\textbf{Stage} & \textbf{Median} & \textbf{Runs} & \textbf{One-off} & \\
+\midrule
+Input guard & 13\,µs & 1,000 & Open the index & 725\,ms\\
+Embed a question & 68\,ms & 9 & First embedding (model load) & 1,806\,ms\\
+Search 3,608 vectors, top 20 & 33\,ms & 9 & First rerank (load + 20) & 3,227\,ms\\
+Rerank 20 passages & 2,142\,ms & 9 & Generation call & 1.8--1.9\,s\\
+Rerank 5 passages & 444\,ms & 3 & Grading call (successful) & 4.6\,s\\
+Context guard, 5 passages & 2.4\,ms & 9 & Full index rebuild & 32\,min\\
+\bottomrule
+\end{tabular}
+\end{center}
+The same 20-passage rerank took 10--15\,s inside pipeline runs at other times. Laptop timings are fragile, so prefer medians of repeated runs.
+\end{measured}
+
+\paragraph{Reading the budget.} Retrieval proper is cheap: about 0.1\,s. The cross-encoder is the most expensive local stage and scales linearly, at roughly 0.1\,s per candidate. The two Gemini calls dominate the rest, and grading can take longer than generation because it reads the passages plus the draft and writes a JSON verdict. Latency by profile: baseline about 1\,s; reranking adds about 2\,s at the median; decomposition adds about 1.4\,s; the self-check adds a grading call, and one warm \code{guarded} query took 14.5\,s of wall clock.
+
+\paragraph{Cold start.} The first question of each committed reranking run was among its slowest (40--44\,s). Model loading took 5--24\,s depending on machine state, and a fresh container or Space also downloads about 290\,MB of models. Nothing pre-loads them at startup.
+
+\paragraph{Scaling} \tagI. Embedded search is a linear scan, so it should take about 0.2\,s at the 20,000-point advisory limit, beyond which a Qdrant server with an approximate index is the path. Reranking 10 candidates instead of 20 would roughly halve that stage. The demo answers one question at a time (Gradio's default concurrency, queue of 16). Throughput was never measured, and Gemini's free-tier limits are the real ceiling.
+
+\paragraph{Footprint.} Index 34.9\,MB; PDFs 415\,MB; Space payload 61 files, 35.2\,MB; model files about 210\,MB and 80\,MB (stated in code); virtual environment with all groups 903\,MB. The API image is stated as about 400\,MB, CI fails it above 900\,MB, and its actual size is \NotDet
+
+\begin{recommended}[in order of user-visible effect]
+Warm both models at startup. Measure reranking top 10 against top 20. Try a cheaper grading format (drop the evidence quotes). Cache the demo's example questions. Stream the answer while grading runs, marked ``checking''. Exclude a warm-up question from evaluation latency.
+\end{recommended}
+
+\section{Security}
+\label{sec:security}
+
+\paragraph{Assets.} The \code{GOOGLE_API_KEY} (whoever holds it spends the quota), the \code{HF_TOKEN} (write access to the Space), answer integrity, demo availability, corpus integrity, and users' questions, which may contain personal data.
+
+\paragraph{Implemented.}
+\begin{itemize}
+  \item \textbf{Secrets stay out of git.} Ignore rules cover \code{.env*} (except the example), key files and token files, because ``a token pasted into a scratch file here would otherwise be one \code{git add -A} away from history.'' gitleaks is the \emph{first} pre-commit hook, and CI scans the full history. Only placeholders are committed.
+  \item \textbf{Secrets at runtime.} Keys are \code{SecretStr}, and \code{describe_target} redacts to \code{***}; tests assert both. The deploy script sets the Gemini key as a Space secret through the API, so it is ``not written into the Space repo, not printed, and not committed.''
+  \item \textbf{The container} runs as an unprivileged user (uid 1000). It is a two-stage build without build tools, tests or eval dependencies, and the index is mounted rather than baked in.
+  \item \textbf{Inputs.} Questions are limited to 2,000 characters, \code{top_k} to 1--20, and \code{/v1/search} rejects unknown fields. Two regex guards, grounding, citation validation and the self-check follow, and there is no conversation state.
+  \item \textbf{Supply chain.} Frozen lockfile installs, pinned model ids, pinned hook revisions, HTTPS corpus downloads with recorded SHA-256, and PDFs opened to prove they are real.
+  \item \textbf{Added by the fixes:} upstream errors no longer leak exception text to anonymous visitors, quota exhaustion is a 429, and the demo tells visitors their question goes to Google's Gemini API.
+\end{itemize}
+
+\paragraph{Not implemented} (each checked and found absent): authentication, per-client rate limiting, CORS policy, output content screening, dependency or image scanning, Actions pinned by SHA, and a hardened local Qdrant (the compose file publishes ports without TLS or a key --- fine on a laptop, not on a shared network).
+
+\begin{inferred}[the risks that matter]
+\textbf{Quota exhaustion by scripted traffic} is the likeliest: there is no authentication and no rate limit, the free tier is small, and the demo would return errors until the quota resets. Injection that changes answers is low-likelihood and low-impact, because the system prompt is public and there is no state or tool access. A secret committed to git is guarded twice, by the ignore rules and by two gitleaks layers.
+\end{inferred}
+
+\begin{recommended}
+In priority order: a per-IP rate limit on \code{/v1/query} and an optional API key; Dependabot or Renovate with \code{pip-audit}; an image scanner; Actions pinned by SHA; and rotation of any credential ever handled outside a secret store.
+\end{recommended}

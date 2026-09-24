@@ -1,0 +1,135 @@
+\chapter{The Corrective Self-Check}
+\label{ch:selfcheck}
+
+The self-check is the feature behind the tagline. It is on in the \code{corrective} and \code{guarded} profiles. After a draft is written, a second model breaks it into claims and checks each against the passages the draft was written from. A policy then turns the verdicts into one of three decisions: return the draft, search again, or decline.
+
+\begin{figure}[htbp]
+\centering
+\resizebox{0.95\textwidth}{!}{%
+\begin{tikzpicture}[
+  font=\sffamily\footnotesize,
+  node distance=6mm and 8mm,
+  proc/.style={draw, rounded corners=2pt, fill=blue!6, align=center, text width=32mm, minimum height=12mm},
+  dec/.style={draw, diamond, aspect=2.2, fill=orange!12, align=center, inner sep=1pt, text width=18mm},
+  good/.style={draw, rounded corners=6pt, fill=green!10, align=center, text width=30mm, minimum height=10mm},
+  bad/.style={draw, rounded corners=6pt, fill=red!8, align=center, text width=30mm, minimum height=10mm},
+  arr/.style={-Stealth, thick}
+]
+\node[proc] (ret) {\textbf{retrieve(query)}\\full retrieval stage;\\attempt 1 uses the question};
+\node[proc, right=of ret] (gen) {\textbf{generate}\\original question\\+ these passages};
+\node[proc, right=of gen] (grade) {\textbf{\code{grade_answer}}\\claims $\rightarrow$ verdicts;\\\code{refuses} flag};
+\node[dec, right=of grade] (pol) {\code{policy}\\\code{.decide}};
+\node[good, above right=4mm and 8mm of pol] (acc) {ACCEPT\\draft + citations};
+\node[bad, below right=4mm and 8mm of pol] (abs) {ABSTAIN\\fixed text, no citations};
+\node[proc, below=14mm of gen] (ref) {\textbf{reformulate}\\question + up to 2 failed claims};
+\draw[arr] (ret) -- (gen); \draw[arr] (gen) -- (grade); \draw[arr] (grade) -- (pol);
+\draw[arr] (pol) |- (acc); \draw[arr] (pol) |- (abs);
+\draw[arr, dashed] (pol) |- node[pos=0.75, below, font=\scriptsize]{RETRY (only on attempt 1)} (ref);
+\draw[arr, dashed] (ref) -| (ret);
+\end{tikzpicture}}
+\caption{The corrective loop with the shipped budget of two attempts \ev{src/vidyarag/correct/loop.py}.}
+\label{fig:loop}
+\end{figure}
+
+\section{The grader}
+
+\paragraph{Claim-level, on purpose.} The grader's docstring gives the argument. Asking ``is this answer grounded?'' returns ``one number and nothing to act on. A score of 0.6 does not say which part was unsupported, so a retry has nothing to aim at.'' Claim-level grading names the claim that failed, ``and that claim becomes the query for the next retrieval attempt. The decomposition is not decoration --- it is the entire corrective signal'' \ev{src/vidyarag/correct/grader.py}.
+
+\paragraph{A different model, on purpose.} ``A model asked whether its own output is grounded rates it favourably, which would inflate exactly the metric this project claims to measure honestly.'' Generation uses \code{gemini-3.5-flash-lite} and grading uses \code{gemini-3.1-flash-lite}.
+
+\paragraph{Verdicts.} \code{supported} (weight 1) means stated in the passages or directly paraphrased. \code{partial} (0.5) means the topic is present but a specific detail is not. It is kept as a third category because forcing a binary choice ``biases groundedness upward precisely where the answer is weakest.'' \code{unsupported} (0) means absent from the passages: ``True in the world is not the question.'' The half weight is ``a deliberate choice rather than a tuned one.'' The score $g$ is defined in Section~\ref{sec:groundedness}.
+
+\paragraph{The prompt} asks the grader to break the answer into atomic claims, ignoring hedges and citation markers. It is told to ``judge support, not truth'' and to set \code{refuses} if the answer declines. It is also told why that flag exists: a refusal ``is trivially well supported \ldots{} this flag is the only thing that can'' tell one apart from a good answer. The response must be JSON matching a Pydantic schema: a list of claims, each with text, verdict, evidence and reason, plus \code{refuses}.
+
+\paragraph{Failures are never fatal.} Every failure --- an empty draft, no passages, an API exception, unparseable output, zero claims --- becomes a \code{Groundedness} with an \code{error} string and \code{measured=False}. As the code puts it, ``an answer whose grading failed is neither grounded nor ungrounded.'' The grading call's tokens are now recorded against the purpose \code{grading}. Before the fixes they were not recorded at all, although a grading call is larger than the generation it checks.
+
+\section{The policy}
+
+The thresholds live in their own module because ``they are the most consequential numbers in the system'' \ev{src/vidyarag/correct/policy.py}. The rules are checked in order:
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}c>{\raggedright\arraybackslash}p{3.8cm}>{\raggedright\arraybackslash}p{1.7cm}L@{}}
+\toprule
+& \textbf{Condition} & \textbf{Decision} & \textbf{Reason given in the code}\\
+\midrule
+1 & Grading failed & ACCEPT & Refusing on an API error ``would be a silent, invisible failure --- the system would look appropriately cautious while actually being broken.''\\
+2 & Draft is a refusal & ABSTAIN & Not RETRY: the generator already concluded the answer is absent, and with no failed claim a new query finds the same passages.\\
+3 & $g\ge0.8$ & ACCEPT & Grounded enough.\\
+4 & $g<0.5$ & ABSTAIN & Too little support, and no reason to expect a retry to help.\\
+5 & Last attempt & ABSTAIN & Returning a draft known to be under the bar ``would defeat the whole check.''\\
+6 & $0.5\le g<0.8$ & RETRY & The failed claims say what to search for.\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+The thresholds are \textbf{untuned}, and the docstring corrects its own history: ``This docstring previously said the thresholds had been tuned \ldots{} No sweep was run.'' The reason for not sweeping is that fitting two boundaries to twelve unanswerable questions ``would produce a number that looks tuned, generalises no better, and uses the gold set up as a development set.'' Ordering and range are validated when the profile loads.
+
+\section{The loop}
+
+\begin{lstlisting}[language=Python]
+for attempt_number in range(1, policy.max_attempts + 1):
+    context = retrieve(query)                          # full retrieval stage
+    answer_text, context_texts = generate(question, context)
+    grounded = grade_answer(llm, answer=answer_text, contexts=context_texts,
+                            model=grader_model, trace=trace)
+    decision = policy.decide(grounded, attempt=attempt_number)
+    attempts.append(Attempt(query, answer_text, grounded, decision))
+    if decision is Decision.ACCEPT:
+        return LoopOutcome(answer=answer_text, abstained=False, attempts=attempts)
+    if decision is Decision.ABSTAIN:
+        return LoopOutcome(answer=ABSTENTION_TEXT, abstained=True, attempts=attempts)
+    query = reformulate(question, grounded)   # question + up to 2 failed claims
+\end{lstlisting}
+
+\begin{description}[style=nextline]
+  \item[A retry re-retrieves.] Regenerating from the same passages at temperature 0 is ``close to a no-op''. The failed claims become the new search, ``so the second attempt searches for the thing the first attempt could not support.'' The original question stays in the query so that it cannot ``drift onto a detail.''
+  \item[The answer always addresses the original question.] Only retrieval, including reranking, sees the reformulated query.
+  \item[The bound is hard.] ``An unbounded loop is an unbounded bill and an unbounded latency.'' Each question costs at most two retrievals, two generations and two gradings.
+  \item[The abstention names its reason.] ``I could not find this in the source material\ldots{} answering from outside them would not be grounded in the sources.'' Plain ``I don't know'' invites a rephrase; this tells a student to look elsewhere.
+\end{description}
+
+\paragraph{Wiring.} \code{Pipeline._answer_corrective} supplies two closures, \code{retrieve} and \code{generate}, and records every attempt's query, decision, score, verdict counts, refusal flag, \code{measured} flag and error. An abstention returns no citations, because ``carrying the rejected draft's citations would attach page references to a refusal.'' The \code{LoopOutcome} now carries \code{graded}. From it the pipeline sets the answer's \code{SelfCheck} state: \code{passed} when the returned draft was really graded, \code{unavailable} when grading failed open, and \code{abstained} when the answer was withheld.
+
+\section{What the loop actually did}
+\label{sec:loop-evidence}
+
+\begin{verified}[decisions in the committed self-check runs]
+\code{corrective}: 42 accepted on the first attempt, 15 abstained on the first attempt, and 1 retried then accepted (\code{multi-014}: score 0.75, then 1.0 after re-retrieval). \emph{Every} abstention had \code{refuses=true}; no score fell below 0.5 (the lowest was 0.75 and the mean 0.996). No grading call failed. \code{guarded}: all 58 questions took one attempt, and all 13 abstentions were refusal-driven.
+\end{verified}
+
+\begin{keyidea}[what this means]
+Across 116 questions, the score thresholds decided exactly one: the single retry. Every abstention came from rule 2. In practice the loop is a \textbf{refusal formaliser}. It recognises drafts in which the generator has already declined, as prompt rule 3 tells it to, and replaces them with the canonical abstention: a fixed text, no citations, and a machine-readable flag. Re-judged correctly, the baseline refuses all 12 unanswerable questions without it, so the loop does not raise abstention recall. It makes refusals \emph{legible}.
+\end{keyidea}
+
+\paragraph{Did it improve the answers it kept?} The repository answers this itself. On the 43 questions both \code{corrective} and \code{rerank} answered, answer relevancy was 0.844 against 0.807 (+0.037), faithfulness 0.959 against 0.950, and context recall 0.981 in both. Every difference lies within the $\pm0.05$ run-to-run noise. ``The self-check does not make answers better.''
+
+\paragraph{The loop's false abstentions were retrieval failures.} For the three answerable questions it declined, only one of the two gold passages reached the prompt. Under \code{rerank}, the same questions had a mean context recall of 0.444, against 0.981 for the rest. No threshold can fix a missing passage.
+
+\section{Fail-open, and the badge it used to earn}
+\label{sec:failopen}
+
+\begin{measured}[observed live]
+While a trace was being captured, the grading call for ``What happens during anaphase of mitosis?'' failed with \code{503 UNAVAILABLE}. Rule 1 applied: \code{measured: false}, decision ACCEPT, and the unverified draft was returned with four citations. Before the fixes, nothing in the answer or the API showed this. The demo would have printed \textbf{``Self-check passed after 1 attempt(s)''} --- the reverse of the truth, and the one claim a reader trusts most.
+\end{measured}
+
+Fail-open is still the policy, and it is the right one: abstaining because of an outage is worse, and quieter. What changed is that the outcome is now reported. The answer's \code{self_check} is \code{unavailable}, \code{verified} is false, and the demo says ``\textbf{Not verified.} The self-check could not run \ldots{} nothing confirmed its claims.'' A hermetic test and a demo-rendering test pin both halves \ev{tests/test_query_pipeline.py}, \ev{tests/test_demo_rendering.py}.
+
+\section{Trade-offs}
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.6cm}LL@{}}
+\toprule
+\textbf{Choice} & \textbf{Benefit} & \textbf{Cost or risk}\\
+\midrule
+Fail open on grading errors & An outage never becomes mass refusals. & Unverified answers ship. They are now labelled, but nothing alerts on them.\\
+Refusal $\rightarrow$ abstain, not retry & No wasted attempt. & A refusal caused by a retrieval miss never gets a second search.\\
+Claim-level grading & Tells a retry what to search for; interpretable traces. & A second model call on every question, larger than generation: about 2.5$\times$ the cost \tagM.\\
+Separate grader model & Avoids self-grading bias. & Two quotas and two models' behaviour to manage.\\
+Untuned thresholds & The gold set is not spent as a development set. & They decided one retry in 116; their effect is unmeasured.\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{finding}[still open: a partial answer can become a full abstention]
+A draft that gives cited facts and then names a missing detail can be flagged \code{refuses=true} by the grader and replaced wholesale by the abstention text, discarding the useful part. The grader's claims could instead be used to drop only the unsupported sentences.
+\end{finding}
