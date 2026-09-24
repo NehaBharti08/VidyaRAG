@@ -157,6 +157,13 @@
         "reordered": 19,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -260,6 +267,10 @@
         "reordered": 18,
         "promoted_into_context": 2,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     },
     {
@@ -371,6 +382,13 @@
         "reordered": 20,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -481,6 +499,13 @@
         "reordered": 15,
         "promoted_into_context": 1,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -591,6 +616,13 @@
         "reordered": 18,
         "promoted_into_context": 1,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -701,6 +733,13 @@
         "reordered": 19,
         "promoted_into_context": 1,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -811,6 +850,13 @@
         "reordered": 18,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -921,6 +967,13 @@
         "reordered": 17,
         "promoted_into_context": 2,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -1032,6 +1085,13 @@
         "reordered": 15,
         "promoted_into_context": 1,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -1143,6 +1203,13 @@
         "reordered": 20,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -1254,6 +1321,13 @@
         "reordered": 17,
         "promoted_into_context": 2,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -1364,6 +1438,13 @@
         "reordered": 13,
         "promoted_into_context": 1,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -1474,6 +1555,13 @@
         "reordered": 19,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -1585,6 +1673,13 @@
         "reordered": 19,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -1697,6 +1792,13 @@
         "reordered": 17,
         "promoted_into_context": 3,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -1809,6 +1911,13 @@
         "reordered": 20,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -1919,6 +2028,13 @@
         "reordered": 19,
         "promoted_into_context": 3,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -2029,6 +2145,13 @@
         "reordered": 17,
         "promoted_into_context": 3,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -2139,6 +2262,13 @@
         "reordered": 15,
         "promoted_into_context": 0,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -2249,6 +2379,13 @@
         "reordered": 17,
         "promoted_into_context": 2,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -2359,6 +2496,13 @@
         "reordered": 17,
         "promoted_into_context": 1,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -2470,6 +2614,13 @@
         "reordered": 17,
         "promoted_into_context": 1,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -2581,6 +2732,13 @@
         "reordered": 18,
         "promoted_into_context": 1,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -2692,6 +2850,13 @@
         "reordered": 19,
         "promoted_into_context": 5,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -2802,6 +2967,13 @@
         "reordered": 17,
         "promoted_into_context": 3,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -2913,6 +3085,13 @@
         "reordered": 16,
         "promoted_into_context": 2,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -3026,6 +3205,13 @@
         "reordered": 16,
         "promoted_into_context": 1,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -3137,6 +3323,13 @@
         "reordered": 19,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -3251,6 +3444,13 @@
         "reordered": 17,
         "promoted_into_context": 1,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -3365,6 +3565,13 @@
         "reordered": 17,
         "promoted_into_context": 1,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -3372,7 +3579,7 @@
       "question": "What specific developmental and structural condition of the ovaries and reproductive anatomy would you expect in an individual with triplo-X syndrome based on the genetic requirement for ovary maturation and typical female developmental pathways?",
       "type": "multi_hop",
       "answer": "Based on the provided passages, individuals with triplo-X syndrome are phenotypically female and express developmental delays and reduced fertility [1]. \n\nHowever, the provided passages do not contain specific information regarding the exact developmental and structural condition of the ovaries in individuals with triplo-X syndrome. The text only notes generally that X chromosomes must reactivate for the proper maturation of female ovaries [1], but it does not detail the resulting ovarian condition specific to the triplo-X genotype.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "biology-p0367-06",
         "anatomy-and-physiology-p1319-00",
@@ -3409,13 +3616,10 @@
         "biology-p0367-06",
         "anatomy-and-physiology-p1319-00"
       ],
-      "ragas": {
-        "faithfulness": 1.0,
-        "answer_relevancy": 0.0,
-        "context_precision": 0.9999999999,
-        "context_recall": 1.0
+      "ragas": {},
+      "ragas_errors": {
+        "abstention": "dropped: re-judged as a refusal"
       },
-      "ragas_errors": {},
       "retrieval": {
         "recall_at_k": 1.0,
         "hit_at_k": true,
@@ -3476,6 +3680,13 @@
         "reordered": 18,
         "promoted_into_context": 2,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
       }
     },
     {
@@ -3587,6 +3798,13 @@
         "reordered": 16,
         "promoted_into_context": 2,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -3698,6 +3916,13 @@
         "reordered": 19,
         "promoted_into_context": 2,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -3705,7 +3930,7 @@
       "question": "When skeletal muscle cells undergo extensive damage that exceeds the repair capacity of their local stem cells, what specific type of tissue replaces them, and how does this replacement tissue fundamentally differ in its cellular structure regarding myoblast fusion origins?",
       "type": "multi_hop",
       "answer": "When skeletal muscle cells undergo damage to a greater extent than can be repaired by satellite cells, the muscle fibers are replaced by scar tissue in a process called fibrosis [1]. \n\nRegarding the missing information, the provided passages do not contain details explaining how this replacement scar tissue fundamentally differs in its cellular structure regarding myoblast fusion origins.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "anatomy-and-physiology-p0446-02",
         "anatomy-and-physiology-p0445-01",
@@ -3742,13 +3967,10 @@
         "anatomy-and-physiology-p0446-02",
         "anatomy-and-physiology-p0418-03"
       ],
-      "ragas": {
-        "faithfulness": 1.0,
-        "answer_relevancy": 0.0,
-        "context_precision": 0.9999999999,
-        "context_recall": 0.5
+      "ragas": {},
+      "ragas_errors": {
+        "abstention": "dropped: re-judged as a refusal"
       },
-      "ragas_errors": {},
       "retrieval": {
         "recall_at_k": 1.0,
         "hit_at_k": true,
@@ -3809,6 +4031,13 @@
         "reordered": 18,
         "promoted_into_context": 3,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
       }
     },
     {
@@ -3921,6 +4150,13 @@
         "reordered": 19,
         "promoted_into_context": 3,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -4035,6 +4271,13 @@
         "reordered": 18,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -4147,6 +4390,13 @@
         "reordered": 17,
         "promoted_into_context": 2,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -4154,7 +4404,7 @@
       "question": "Which specific skull bones that form the rigid anterior wall of the palate also provide an origin point for the primary muscle responsible for closing the mouth during mastication?",
       "type": "multi_hop",
       "answer": "Based on the provided passages, the hard palate (which serves as a rigid shelf/wall) is created by the maxillary and palatine bones of the skull [3]. However, the supplied text does not state which skull bones provide an origin point for the primary muscle responsible for closing the mouth during mastication; therefore, that specific information is missing.",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "anatomy-and-physiology-p1107-02",
         "anatomy-and-physiology-p0467-04",
@@ -4191,13 +4441,10 @@
         "anatomy-and-physiology-p0467-04",
         "anatomy-and-physiology-p1107-02"
       ],
-      "ragas": {
-        "faithfulness": 1.0,
-        "answer_relevancy": 0.0,
-        "context_precision": 0.0,
-        "context_recall": 0.3333333333333333
+      "ragas": {},
+      "ragas_errors": {
+        "abstention": "dropped: re-judged as a refusal"
       },
-      "ragas_errors": {},
       "retrieval": {
         "recall_at_k": 1.0,
         "hit_at_k": true,
@@ -4258,6 +4505,13 @@
         "reordered": 20,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
       }
     },
     {
@@ -4369,6 +4623,13 @@
         "reordered": 18,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -4376,7 +4637,7 @@
       "question": "What is the anatomical term for the large central body of the rectus abdominis muscles, and what connective tissue covering organizes the muscle fibers that form this structure?",
       "type": "multi_hop",
       "answer": "The passages do not contain the anatomical term for the large central body of the rectus abdominis muscles (though parallel muscles generally have a central body known as a belly [1], and rectus abdominis muscles are described as a pair of long, linear muscles [5]). \n\nThe connective tissue covering that organizes muscle fibers into bundles called fascicles within a skeletal muscle is the perimysium [1, 4].",
-      "abstained": false,
+      "abstained": true,
       "retrieved_chunk_ids": [
         "anatomy-and-physiology-p0476-02",
         "anatomy-and-physiology-p0474-01",
@@ -4415,13 +4676,10 @@
         "anatomy-and-physiology-p0476-02",
         "anatomy-and-physiology-p0457-03"
       ],
-      "ragas": {
-        "faithfulness": 1.0,
-        "answer_relevancy": 0.9121849927698434,
-        "context_precision": 0.9999999999,
-        "context_recall": 1.0
+      "ragas": {},
+      "ragas_errors": {
+        "abstention": "dropped: re-judged as a refusal"
       },
-      "ragas_errors": {},
       "retrieval": {
         "recall_at_k": 1.0,
         "hit_at_k": true,
@@ -4482,6 +4740,13 @@
         "reordered": 19,
         "promoted_into_context": 0,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "REFUSED",
+        "error": ""
       }
     },
     {
@@ -4594,6 +4859,13 @@
         "reordered": 16,
         "promoted_into_context": 2,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": false,
+        "raw": "",
+        "error": "RateLimitError: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https:/"
       }
     },
     {
@@ -4698,6 +4970,10 @@
         "reordered": 15,
         "promoted_into_context": 3,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     },
     {
@@ -4809,6 +5085,13 @@
         "reordered": 18,
         "promoted_into_context": 0,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": false,
+        "raw": "",
+        "error": "RateLimitError: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https:/"
       }
     },
     {
@@ -4921,6 +5204,13 @@
         "reordered": 20,
         "promoted_into_context": 1,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -5036,6 +5326,13 @@
         "reordered": 19,
         "promoted_into_context": 3,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -5148,6 +5445,13 @@
         "reordered": 19,
         "promoted_into_context": 1,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -5244,6 +5548,10 @@
         "reordered": 18,
         "promoted_into_context": 1,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     },
     {
@@ -5340,6 +5648,10 @@
         "reordered": 15,
         "promoted_into_context": 1,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     },
     {
@@ -5436,6 +5748,10 @@
         "reordered": 16,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     },
     {
@@ -5532,6 +5848,10 @@
         "reordered": 20,
         "promoted_into_context": 3,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     },
     {
@@ -5628,6 +5948,10 @@
         "reordered": 18,
         "promoted_into_context": 1,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     },
     {
@@ -5724,6 +6048,10 @@
         "reordered": 18,
         "promoted_into_context": 2,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     },
     {
@@ -5820,6 +6148,10 @@
         "reordered": 17,
         "promoted_into_context": 2,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     },
     {
@@ -5916,6 +6248,10 @@
         "reordered": 17,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     },
     {
@@ -6012,6 +6348,10 @@
         "reordered": 19,
         "promoted_into_context": 3,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     },
     {
@@ -6108,6 +6448,10 @@
         "reordered": 17,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     },
     {
@@ -6207,6 +6551,13 @@
         "reordered": 17,
         "promoted_into_context": 3,
         "top1_changed": false
+      },
+      "abstention_judge": {
+        "source": "judge",
+        "model": "gemini-3.1-flash-lite",
+        "measured": true,
+        "raw": "ANSWERED",
+        "error": ""
       }
     },
     {
@@ -6303,15 +6654,19 @@
         "reordered": 18,
         "promoted_into_context": 2,
         "top1_changed": true
+      },
+      "abstention_judge": {
+        "source": "structural",
+        "measured": true
       }
     }
   ],
   "aggregates": {
-    "faithfulness": 0.9621212121212122,
-    "answer_relevancy": 0.8204986003438225,
-    "context_precision": 0.8277462120672258,
-    "context_recall": 0.9545454545454546,
-    "graded_samples": 44.0
+    "faithfulness": 0.9583333333333334,
+    "answer_relevancy": 0.8797438355589584,
+    "context_precision": 0.8355208332814484,
+    "context_recall": 0.9791666666666666,
+    "graded_samples": 40.0
   },
   "retrieval_aggregates": {
     "recall_at_k": 0.967391304347826,
@@ -6323,11 +6678,12 @@
     "unanswerable_total": 12,
     "unanswerable_abstained": 11,
     "answerable_total": 46,
-    "answerable_abstained": 2,
-    "precision": 0.8461538461538461,
+    "answerable_abstained": 6,
+    "unmeasured": 2,
+    "precision": 0.6470588235294118,
     "recall": 0.9166666666666666,
-    "f1": 0.8799999999999999,
-    "false_abstention_rate": 0.043478260869565216
+    "f1": 0.7586206896551724,
+    "false_abstention_rate": 0.13043478260869565
   },
   "totals": {
     "questions": 58.0,

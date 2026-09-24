@@ -25,6 +25,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from vidyarag._compat import StrEnum
+from vidyarag.observe.trace import QueryTrace, record_gemini_usage
 
 
 class ClaimVerdict(StrEnum):
@@ -183,6 +184,7 @@ def grade_answer(
     answer: str,
     contexts: list[str],
     model: str,
+    trace: QueryTrace | None = None,
 ) -> Groundedness:
     """Grade an answer claim by claim against its retrieved context.
 
@@ -191,6 +193,11 @@ def grade_answer(
         answer: The draft answer.
         contexts: Passage texts placed in the prompt that produced it.
         model: Grader model id. Must differ from the generation model.
+        trace: Trace to record this call's token usage into. Optional, because
+            grading is useful without one, but the pipeline always passes it:
+            a grading call reads the same passages as the generation it checks
+            plus the draft, so leaving it out understates the cost of a
+            self-checked query by more than half.
 
     Returns:
         A :class:`Groundedness` whose ``measured`` flag is False when grading
@@ -215,6 +222,8 @@ def grade_answer(
         )
     except Exception as exc:  # noqa: BLE001 - reported to the caller, never fatal
         return Groundedness(claims=[], error=f"{type(exc).__name__}: {exc}"[:200])
+
+    record_gemini_usage(response, trace, model, purpose="grading")
 
     parsed = getattr(response, "parsed", None)
     if not isinstance(parsed, GradedAnswer):

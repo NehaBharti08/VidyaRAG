@@ -28,6 +28,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 from qdrant_client import QdrantClient
 
+from vidyarag.observe.trace import QueryTrace, record_gemini_usage
 from vidyarag.retrieve.dense import RetrievedChunk, retrieve_dense
 
 RRF_K = 60
@@ -75,13 +76,19 @@ worse than not splitting at all.
 """
 
 
-def decompose(llm: Any, question: str, *, model: str) -> Decomposition:
+def decompose(
+    llm: Any, question: str, *, model: str, trace: QueryTrace | None = None
+) -> Decomposition:
     """Split a question into sub-questions, or report that it is atomic.
 
     A failed or unparseable call returns "not multi-hop" rather than raising.
     Falling back to the undecomposed query degrades to baseline behaviour, which
     is the safe direction: the alternative is failing a question that plain
     retrieval would have answered.
+
+    The call's tokens are recorded on ``trace`` when one is given. Decomposition
+    is a model call like any other, and a profile that reported only the
+    generator's tokens charged its extra call to nobody.
     """
     try:
         response = llm.models.generate_content(
@@ -95,6 +102,8 @@ def decompose(llm: Any, question: str, *, model: str) -> Decomposition:
         )
     except Exception:  # noqa: BLE001 - degrade to baseline, never fail the query
         return Decomposition(is_multi_hop=False)
+
+    record_gemini_usage(response, trace, model, purpose="decomposition")
 
     parsed = getattr(response, "parsed", None)
     if isinstance(parsed, Decomposition):
@@ -148,6 +157,7 @@ def retrieve_decomposed(
     collection: str,
     embedding_model: str,
     limit: int,
+    book_slug: str | None = None,
 ) -> list[RetrievedChunk]:
     """Retrieve for each sub-question and fuse the results.
 
@@ -163,6 +173,7 @@ def retrieve_decomposed(
             collection=collection,
             embedding_model=embedding_model,
             limit=limit,
+            book_slug=book_slug,
         )
         for sub_question in sub_questions
     ]

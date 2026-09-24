@@ -1,9 +1,14 @@
 """The bounded corrective loop: generate, check, retry or refuse.
 
-Baseline abstention recall is 0.000 -- the pipeline answered all twelve
-unanswerable questions rather than declining any, because nothing in it could
-decline. This module is what has to move that number, and it is the project's
-headline claim made testable.
+This docstring used to say the baseline's abstention recall was 0.000 because
+"nothing in it could decline", and that this module existed to move that
+number. Both halves were wrong. The 0.000 came from a truncated judge
+(``evaluation/abstention.py``); re-judged, the baseline refuses all twelve
+unanswerable questions, in prose, because the answering prompt tells it to say
+what is missing. What this loop adds is not the ability to refuse but its
+*form*: a refusal the generator buries in a paragraph becomes an explicit
+``abstained`` flag with no citations attached, and a partly supported draft
+gets one targeted retry before it is either accepted or withheld.
 
 The loop is deliberately small:
 
@@ -30,6 +35,7 @@ from typing import Any
 
 from vidyarag.correct.grader import Groundedness, grade_answer
 from vidyarag.correct.policy import CorrectivePolicy, Decision
+from vidyarag.observe.trace import QueryTrace
 
 ABSTENTION_TEXT = (
     "I could not find this in the source material. The retrieved passages from "
@@ -89,11 +95,24 @@ class LoopOutcome:
         last = self.attempts[-1].groundedness
         return last.score if last.measured else None
 
+    @property
+    def graded(self) -> bool:
+        """Whether the returned answer was actually graded.
+
+        False when the grading call failed and the policy accepted the draft
+        unchecked. The distinction has to leave this module: an unverified
+        answer presented as a verified one is the single most damaging thing
+        this project could ship, because the self-check is the reason a reader
+        would trust it more than a plain RAG answer.
+        """
+        return bool(self.attempts) and self.attempts[-1].groundedness.measured
+
     def as_dict(self) -> dict[str, Any]:
         return {
             "attempts": self.attempt_count,
             "abstained": self.abstained,
             "fired": self.fired,
+            "graded": self.graded,
             "final_score": self.final_score,
             "trace": [a.as_dict() for a in self.attempts],
         }
@@ -121,6 +140,7 @@ def run_corrective_loop(
     llm: Any,
     grader_model: str,
     policy: CorrectivePolicy,
+    trace: QueryTrace | None = None,
 ) -> LoopOutcome:
     """Generate, check, and retry or abstain.
 
@@ -131,6 +151,7 @@ def run_corrective_loop(
         llm: Gemini client for grading.
         grader_model: Grader model id; must differ from the generation model.
         policy: Thresholds and attempt budget.
+        trace: Trace the grading calls record their token usage into.
 
     Returns:
         A :class:`LoopOutcome` carrying the final answer and every attempt made.
@@ -147,6 +168,7 @@ def run_corrective_loop(
             answer=answer_text,
             contexts=context_texts,
             model=grader_model,
+            trace=trace,
         )
         decision = policy.decide(grounded, attempt=attempt_number)
         attempts.append(

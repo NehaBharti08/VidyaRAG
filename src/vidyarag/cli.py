@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import sys
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -54,6 +55,15 @@ for _stream in (sys.stdout, sys.stderr):
             _reconfigure(encoding="utf-8", errors="replace")
 
 console = Console()
+
+
+def _advance(bar: Any, task: Any, *_: Any) -> None:
+    """Progress callback, bound with functools.partial rather than a closure.
+
+    A lambda defined inside the loop would capture the loop variable by
+    reference and advance whichever task was current when it finally ran.
+    """
+    bar.advance(task)
 
 
 def _progress_columns() -> tuple[Any, ...]:
@@ -113,6 +123,12 @@ def config(
             f"abstain<{cfg.corrective.abstain_threshold} "
             f"max_attempts={cfg.corrective.max_attempts}",
         )
+    table.add_row("grader_model", cfg.grader_model if cfg.corrective.enabled else "-")
+    # Shown unconditionally. A profile listing that omits the guardrails cannot
+    # distinguish the shipped configuration from the one without them, which is
+    # the only difference between two of the five profiles.
+    table.add_row("guard: user input", str(cfg.guardrails.check_user_input))
+    table.add_row("guard: retrieved context", str(cfg.guardrails.check_retrieved_context))
     console.print(table)
 
 
@@ -737,7 +753,7 @@ def evaluate(
         )
     baseline = latest_run(compare) if compare and compare != run.profile else None
     report_path = written.with_suffix(".md")
-    report_path.write_text(render_report(run, baseline), encoding="utf-8")
+    report_path.write_text(render_report(run, baseline), encoding="utf-8", newline="\n")
 
     if not run.is_valid:
         # Withhold the table entirely. Printing scores beside a warning invites
@@ -783,6 +799,108 @@ def evaluate(
         console.print(f"[yellow]WARN[/yellow]  {failed} question(s) failed to answer")
     console.print(f"[green]OK[/green]    results -> {written}")
     console.print(f"[green]OK[/green]    report  -> {report_path}")
+
+
+@app.command("rejudge")
+def rejudge(
+    profiles: list[str] = typer.Argument(None, help="Profiles to re-judge. Default: all."),
+    rate: float = typer.Option(6.0, "--rate", help="Judgements per minute."),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Ignore cached verdicts."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Report changes without writing."),
+) -> None:
+    """Re-establish abstention verdicts in committed runs, and rewrite them.
+
+    The judge that produced every committed run was truncated to five tokens
+    and recorded every refusal as an answer. The stored answers are unaffected,
+    so the verdicts can be rebuilt without re-running the pipeline or spending
+    generation quota -- which is the difference between correcting a result and
+    merely disowning it.
+    """
+    import asyncio
+
+    from vidyarag.evaluation.goldset import load_goldset
+    from vidyarag.evaluation.metrics import check_grading_dependencies
+    from vidyarag.evaluation.rejudge import rejudge_run
+    from vidyarag.evaluation.report import render_report
+    from vidyarag.evaluation.runner import latest_run, profiles_with_runs
+
+    try:
+        check_grading_dependencies()
+    except (ImportError, RuntimeError) as exc:
+        console.print(f"[red]FAIL[/red]  {exc}")
+        raise typer.Exit(code=1) from exc
+
+    from openai import AsyncOpenAI
+
+    from vidyarag.evaluation.metrics import GEMINI_OPENAI_BASE_URL
+
+    settings = Settings()
+    key = settings.google_api_key.get_secret_value()
+    if not key:
+        console.print("[red]FAIL[/red]  GOOGLE_API_KEY is not set")
+        raise typer.Exit(code=1)
+
+    names = profiles or profiles_with_runs()
+    if not names:
+        console.print("[red]FAIL[/red]  no committed runs to re-judge")
+        raise typer.Exit(code=1)
+
+    client = AsyncOpenAI(api_key=key, base_url=GEMINI_OPENAI_BASE_URL)
+    goldset = load_goldset()
+    table = Table(title="abstention, re-judged", header_style="bold")
+    for column in ("profile", "recall", "precision", "false abstention", "unmeasured", "changed"):
+        table.add_column(column, justify="right" if column != "profile" else "left")
+
+    for name in names:
+        run = latest_run(name)
+        if run is None:
+            console.print(f"[yellow]WARN[/yellow]  no results for profile {name!r}")
+            continue
+        before = {s.id: s.abstained for s in run.samples}
+        judge_model = run.grader_model
+
+        with Progress(*_progress_columns(), console=console) as bar:
+            task = bar.add_task(f"re-judging {name}", total=len(run.samples))
+            advance = partial(_advance, bar, task)
+            asyncio.run(
+                rejudge_run(
+                    run,
+                    client=client,
+                    judge_model=judge_model,
+                    goldset=goldset,
+                    rate=rate,
+                    use_cache=not no_cache,
+                    on_verdict=advance,
+                )
+            )
+
+        changed = sum(1 for s in run.samples if before.get(s.id) != s.abstained)
+        stats = run.abstention
+
+        def fmt(value: object) -> str:
+            return "—" if value is None else f"{float(str(value)):.3f}"
+
+        table.add_row(
+            name,
+            fmt(stats.get("recall")),
+            fmt(stats.get("precision")),
+            fmt(stats.get("false_abstention_rate")),
+            str(stats.get("unmeasured", 0)),
+            str(changed),
+        )
+
+        if not dry_run:
+            written = run.save()
+            written.with_suffix(".md").write_text(
+                render_report(run, latest_run("baseline") if name != "baseline" else None),
+                encoding="utf-8",
+                newline="\n",
+            )
+            console.print(f"[green]OK[/green]    rewrote {written.name} and its report")
+
+    console.print(table)
+    if dry_run:
+        console.print("[dim]--dry-run: nothing was written.[/dim]")
 
 
 @app.command()

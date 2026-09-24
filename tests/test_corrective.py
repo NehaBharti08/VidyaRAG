@@ -1,9 +1,13 @@
 """The corrective self-check loop.
 
-Baseline abstention recall is 0.000 across every Phase 4 profile: the pipeline
-answered all twelve unanswerable questions because nothing in it could decline.
-These tests pin the behaviour that has to change that, and in particular the
-failure modes where a self-check makes things *worse* than having none.
+These tests pin the loop's decisions -- accept, retry, abstain -- and in
+particular the failure modes where a self-check makes things *worse* than
+having none: abstaining on an API error, or accepting a refusal because it
+scores as perfectly grounded.
+
+An earlier version of this docstring said the baseline could not decline at
+all. It could; the judge that measured it was truncated (see
+``tests/test_abstention_judge.py``).
 """
 
 from __future__ import annotations

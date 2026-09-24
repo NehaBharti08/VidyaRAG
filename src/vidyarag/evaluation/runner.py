@@ -38,6 +38,7 @@ from pydantic import BaseModel, Field
 from vidyarag._compat import UTC
 from vidyarag.evaluation.abstention import (
     AbstentionStats,
+    JudgeVerdict,
     is_structural_abstention,
     judge_abstention,
     summarise_abstention,
@@ -177,6 +178,14 @@ class SampleResult(BaseModel):
     credited for it did anything. A reranker that never alters the top 5 cannot
     be the reason context precision improved, and only this would show it."""
 
+    abstention_judge: dict[str, Any] = Field(default_factory=dict)
+    """How ``abstained`` was established: structurally, or by which judgement.
+
+    Empty when the pipeline signalled the abstention itself. Otherwise carries
+    the judge's verdict, whether it could be read, and the error if not -- so a
+    run file says how its headline number was obtained rather than only what it
+    was."""
+
 
 class EvalRun(BaseModel):
     """One complete evaluation, with enough context to reproduce it."""
@@ -235,7 +244,11 @@ class EvalRun(BaseModel):
     def save(self, directory: Path | None = None) -> Path:
         target = self.path(directory)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(self.model_dump_json(indent=2) + "\n", encoding="utf-8")
+        # newline="\n" so a run written on Windows is byte-identical to one
+        # written on Linux. Without it these files land with CRLF, every
+        # re-save shows as a whole-file diff, and the commit hook rewrites
+        # them -- which hides the one line that actually changed.
+        target.write_text(self.model_dump_json(indent=2) + "\n", encoding="utf-8", newline="\n")
         return target
 
 
@@ -342,7 +355,9 @@ async def _grade_all(
 
         # Abstention is checked on every question. On answerable ones it
         # measures the cost of over-refusing, which precision alone hides.
-        if not result.abstained and result.answer:
+        if result.abstained:
+            result.abstention_judge = {"source": "structural", "measured": True}
+        elif result.answer:
             key = abstention_key(
                 judge_model=judge_model,
                 question=result.question,
@@ -350,19 +365,45 @@ async def _grade_all(
             )
             entry = verdicts.get(key)
             if entry is not None:
-                result.abstained = bool(entry["abstained"])
+                verdict = JudgeVerdict(
+                    refused=bool(entry["abstained"]),
+                    measured=bool(entry.get("measured", True)),
+                    raw=str(entry.get("raw", "")),
+                    error=str(entry.get("error", "")),
+                )
             else:
                 # Shares the grader's quota, so it shares the grader's pacing.
                 await suite.limiter.acquire()
                 started = asyncio.get_running_loop().time()
-                result.abstained = await judge_abstention(
+                verdict = await judge_abstention(
                     suite.client,
                     model=judge_model,
                     question=result.question,
                     answer=result.answer,
                 )
                 suite.limiter.observe(asyncio.get_running_loop().time() - started)
-                verdicts.put(key, {"abstained": result.abstained})
+                # A failed judgement is not cached. Caching it would turn a
+                # transient rate-limit error into a permanent gap that no
+                # later run ever retries.
+                if verdict.measured:
+                    verdicts.put(
+                        key,
+                        {
+                            "abstained": verdict.refused,
+                            "measured": True,
+                            "raw": verdict.raw,
+                        },
+                    )
+            # An unmeasured verdict leaves ``abstained`` false so the sample can
+            # still be reported, but records that the number is not evidence.
+            result.abstained = verdict.refused
+            result.abstention_judge = {
+                "source": "judge",
+                "model": judge_model,
+                "measured": verdict.measured,
+                "raw": verdict.raw,
+                "error": verdict.error,
+            }
 
         # RAGAS needs a reference and a genuine attempt. A refusal has no
         # faithfulness to measure; scoring it would invent a number.
@@ -453,12 +494,7 @@ def run_evaluation(
     try:
         for question in questions:
             key = answer_key(
-                profile=config.name,
-                generation_model=config.generation_model,
-                embedding_model=config.embedding_model,
-                temperature=config.temperature,
-                top_k_retrieve=config.retrieval.top_k_retrieve,
-                top_k_context=config.retrieval.top_k_context,
+                config=config,
                 prompt_version=ANSWER_PROMPT_VERSION,
                 collection=resolved_settings.qdrant_collection,
                 question_id=question.id,
@@ -544,12 +580,12 @@ def _aggregate(run: EvalRun, questions: dict[str, GoldQuestion]) -> None:
     present = [bool(h) for h in hits if h is not None]
     run.retrieval_aggregates["hit_rate"] = sum(present) / len(present) if present else None
 
+    judged = [s for s in run.samples if s.id in questions and s.error is None]
     stats: AbstentionStats = summarise_abstention(
-        [
-            (questions[s.id].is_answerable, s.abstained)
-            for s in run.samples
-            if s.id in questions and s.error is None
-        ]
+        [(questions[s.id].is_answerable, s.abstained) for s in judged],
+        unmeasured=sum(
+            1 for s in judged if s.abstention_judge and not s.abstention_judge.get("measured")
+        ),
     )
     run.abstention = stats.as_dict()
 

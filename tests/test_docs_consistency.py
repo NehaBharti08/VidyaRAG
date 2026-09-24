@@ -107,3 +107,54 @@ def test_every_provenance_the_gold_set_uses_is_reported_verbatim() -> None:
     assert (
         not missing
     ), f"provenance used by the gold set but not quoted in EVALUATION.md: {missing}"
+
+
+def _readme_row(label: str) -> list[str]:
+    """The cells of one row of the README results table."""
+    for line in README.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("|") and label in stripped:
+            return [cell.strip().strip("*") for cell in stripped.strip("|").split("|")]
+    raise AssertionError(f"no README results row for {label!r}")
+
+
+def test_the_readme_abstention_numbers_come_from_the_committed_runs() -> None:
+    """The headline claim must be readable out of the run files.
+
+    This is the check that was missing. The README reported abstention recall
+    "0.000" for three profiles and nobody compared it with anything, because
+    the number agreed with what a reader expected. Nothing structural stopped
+    the table from saying whatever it liked, so now something does: each cell
+    is matched against the file it claims to come from.
+    """
+    import json
+
+    profiles = ["baseline", "rerank", "decompose"]
+    recall_cells = _readme_row("Abstention recall")[1:]
+    results = REPO_ROOT / "eval" / "results"
+
+    for profile, cell in zip(profiles, recall_cells, strict=False):
+        runs = sorted(results.glob(f"{profile}__*.json"))
+        assert runs, f"no committed run for {profile}"
+        recall = json.loads(runs[-1].read_text(encoding="utf-8"))["abstention"]["recall"]
+        assert recall is not None, f"{profile} reports no abstention recall"
+        assert f"{recall:.3f}" == cell, (
+            f"README says abstention recall {cell} for {profile}, "
+            f"but {runs[-1].name} says {recall:.3f}"
+        )
+
+
+def test_the_readme_does_not_revive_the_retracted_abstention_claim() -> None:
+    """`0.000` was an artefact of a truncated judge, not a measurement.
+
+    It is the single most quotable number this project ever produced and the
+    one most likely to be pasted back in from an old draft, a CV bullet or a
+    slide, so the retraction is enforced rather than remembered.
+    """
+    text = README.read_text(encoding="utf-8")
+    row = _readme_row("Abstention recall")
+    assert "0.000" not in row[1:], (
+        "the README abstention row reports 0.000 again; that figure came from "
+        "a judge whose output was truncated to five tokens"
+    )
+    assert "rejudge" in text, "the README should point at the command that recomputes these"

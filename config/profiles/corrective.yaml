@@ -4,19 +4,18 @@
 # concluded should ship. The delta to read here is corrective-vs-rerank; the
 # comparison against baseline additionally carries reranking's contribution.
 #
-# The number this profile exists to move:
-#
-#   abstention recall   0.000   in baseline, rerank and decompose alike
-#
-# No profile before this one can decline to answer, so all twelve unanswerable
-# questions get an answer. This is the project's headline claim, and it is
-# either demonstrated here or it is not true.
+# This comment used to say the profile existed to move "abstention recall
+# 0.000 in baseline, rerank and decompose alike", because "no profile before
+# this one can decline to answer". That was a truncated judge, not a
+# measurement: re-judged, all three already refuse 12/12 unanswerable questions
+# in prose. Abstention recall is 1.000 with and without this loop. What it
+# changes is the form of a refusal -- an explicit flag with no citations -- and
+# it adds a claim-level score and one targeted retry. See docs/EVALUATION.md.
 #
 # Thresholds are untuned defaults, not the output of a sweep -- see
-# docs/DESIGN.md, "Abstention: thresholds, and why they were not swept". At
-# these values abstention recall is already 1.000, so tuning could only move
-# precision, and the three imprecise refusals were retrieval failures that no
-# threshold can fix.
+# docs/DESIGN.md, "Abstention: thresholds, and why they were not swept". Recall
+# is at ceiling for every profile, so tuning could only move precision, and the
+# imprecise refusals were retrieval failures that no threshold can fix.
 
 name: corrective
 description: "Reranking + claim-level groundedness check with bounded retry and abstention."

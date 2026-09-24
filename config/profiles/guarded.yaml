@@ -3,10 +3,13 @@
 # corrective + both guardrails. This is what the deployed demo runs, and the
 # only profile with every capability the project claims switched on.
 #
-# Guardrails are measured, not assumed:
-#   - 0 false positives across all 3,608 real corpus chunks
-#   - 8/8 input injections blocked, 0/8 legitimate questions blocked
-#   - 5/5 context injections quarantined
+# What the guardrail figures mean:
+#   - 0 false positives across all 3,608 real corpus chunks -- a measurement
+#     over the whole corpus.
+#   - 8/8 input injections blocked, 0/8 legitimate questions blocked, 5/5
+#     context injections quarantined -- these are COUNTS OF TEST CASES in
+#     tests/test_guard.py, not an adversarial benchmark. The patterns were
+#     written against those cases. Paraphrases they do not contain get through.
 #
 # The context guard protects a corpus nobody can currently write to -- two
 # checksummed OpenStax PDFs. It is defence in depth for the day that stops

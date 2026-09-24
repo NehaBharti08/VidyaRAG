@@ -125,6 +125,28 @@ class TestQuery:
         assert trace["list_price_usd"] > 0
         assert {s["name"] for s in trace["stages"]} == {"retrieve", "generate"}
 
+    def test_reports_that_no_self_check_ran(self, api: TestClient) -> None:
+        """The baseline profile has no self-check, and must not imply one."""
+        body = api.post("/v1/query", json={"question": "q"}).json()
+        assert body["self_check"] == "not_run"
+        assert body["verified"] is False
+        assert body["blocked"] is False
+
+    def test_breaks_tokens_down_by_purpose(self, api: TestClient) -> None:
+        usage = api.post("/v1/query", json={"question": "q"}).json()["trace"]["usage_by_purpose"]
+        assert usage["generation"]["input_tokens"] == 420
+        assert usage["generation"]["calls"] == 1
+
+    def test_book_slug_filters_retrieval(self, api: TestClient) -> None:
+        """The field was accepted and ignored, which is worse than not offering it."""
+        hit = api.post("/v1/query", json={"question": "q", "book_slug": "biology"}).json()
+        assert hit["context"], "the corpus chunk is from biology"
+
+        miss = api.post(
+            "/v1/query", json={"question": "q", "book_slug": "anatomy-and-physiology"}
+        ).json()
+        assert miss["context"] == []
+
     def test_rejects_an_empty_question(self, api: TestClient) -> None:
         assert api.post("/v1/query", json={"question": ""}).status_code == 422
 
@@ -142,6 +164,30 @@ class TestQuery:
         response = api.post("/v1/query", json={"question": "q"})
         assert response.status_code == 503
         assert "aistudio.google.com" in response.json()["detail"]
+
+    def test_a_quota_error_is_a_429_not_a_500(
+        self, pipeline: Pipeline, api: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A caller told "500" retries a broken service; told "429" it waits."""
+
+        def boom(*args: Any, **kwargs: Any) -> Any:
+            raise RuntimeError("429 RESOURCE_EXHAUSTED: quota exceeded")
+
+        monkeypatch.setattr(pipeline, "answer", boom)
+        response = api.post("/v1/query", json={"question": "q"})
+        assert response.status_code == 429
+
+    def test_an_upstream_failure_does_not_leak_the_message(
+        self, pipeline: Pipeline, api: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def boom(*args: Any, **kwargs: Any) -> Any:
+            raise RuntimeError("connection to internal-host-9 failed for key AQ.abc")
+
+        monkeypatch.setattr(pipeline, "answer", boom)
+        response = api.post("/v1/query", json={"question": "q"})
+        assert response.status_code == 503
+        assert "internal-host-9" not in response.json()["detail"]
+        assert "AQ.abc" not in response.json()["detail"]
 
 
 class TestHealth:

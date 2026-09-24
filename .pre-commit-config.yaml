@@ -32,14 +32,21 @@ repos:
   # ruff lints, black formats. ruff-format is deliberately NOT enabled: it and
   # black disagree on edge cases and would rewrite each other's output on every
   # commit. One formatter, one linter.
+  #
+  # These revisions must match the versions in uv.lock. They did not: the hooks
+  # ran black 24.10.0, ruff 0.8.4 and mypy 1.13.0 while the project's own
+  # environment had black 25.12.0, ruff 0.16.0 and mypy 1.20.2. Black changed
+  # how it formats assert messages between 24 and 25, so files formatted by
+  # `uv run black` were silently rewritten by the commit hook and vice versa --
+  # a loop that only shows up when a file is touched, which is why it survived.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.4
+    rev: v0.16.0
     hooks:
       - id: ruff
         args: ["--fix"]
 
   - repo: https://github.com/psf/black
-    rev: 24.10.0
+    rev: 25.12.0
     hooks:
       - id: black
 
@@ -50,7 +57,7 @@ repos:
   # not reproduce locally (e.g. typer's decorators appearing untyped). Keep this
   # list in sync with the imports in src/vidyarag/.
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.13.0
+    rev: v1.20.2
     hooks:
       - id: mypy
         files: ^src/vidyarag/

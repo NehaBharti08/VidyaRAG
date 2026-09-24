@@ -27,14 +27,30 @@ CACHE_VERSION = "1"
 """Bump to invalidate every entry at once, if the cached shape changes."""
 
 
+def config_digest(config: Any) -> str:
+    """Digest of everything in a pipeline configuration.
+
+    Named fields were listed here before, and the list was incomplete: reranking,
+    decomposition, the grader model, the self-check thresholds and both
+    guardrail switches were all absent. Any of them can change what the pipeline
+    answers, so editing a profile in place -- which costs nothing and leaves no
+    trace -- would serve the previous behaviour's answers under the new
+    profile's name, and the report would describe a configuration that never
+    produced them.
+
+    Hashing the whole serialised model removes the class of bug rather than the
+    instance: a field added later is covered without anyone remembering to add
+    it here.
+    """
+    payload = config.model_dump(mode="json") if hasattr(config, "model_dump") else dict(config)
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    ).hexdigest()[:16]
+
+
 def answer_key(
     *,
-    profile: str,
-    generation_model: str,
-    embedding_model: str,
-    temperature: float,
-    top_k_retrieve: int,
-    top_k_context: int,
+    config: Any,
     prompt_version: str,
     collection: str,
     question_id: str,
@@ -42,19 +58,15 @@ def answer_key(
 ) -> str:
     """Stable identity for one (configuration, question) pair.
 
-    Every argument is load-bearing. ``prompt_version`` in particular: editing a
+    Every component is load-bearing. ``prompt_version`` in particular: editing a
     template without bumping its version would let this cache serve answers
     from the old prompt while the report claims the new one.
     """
     payload = "\x1f".join(
         (
             CACHE_VERSION,
-            profile,
-            generation_model,
-            embedding_model,
-            f"{temperature:.4f}",
-            str(top_k_retrieve),
-            str(top_k_context),
+            str(getattr(config, "name", "")),
+            config_digest(config),
             prompt_version,
             collection,
             question_id,
@@ -64,16 +76,28 @@ def answer_key(
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]
 
 
+JUDGE_VERSION = "2"
+"""Identity of the abstention judge's own behaviour.
+
+Version 1 asked for the label with a five-token budget, which truncated it to
+``'REF'`` and recorded every refusal as an answer. Those verdicts are cached on
+disk beside the good ones and are indistinguishable from them, so the version
+enters the key: fixing the judge has to invalidate what the broken one decided,
+or the fix changes nothing on any machine that ran the old code."""
+
+
 def abstention_key(*, judge_model: str, question: str, answer: str) -> str:
     """Stable identity for one abstention verdict.
 
-    The judgement is "did this answer decline to answer?", which depends only on
-    the answer text, the question, and the model asked. Caching it matters
-    because it is the one grading call RAGAS does not cache: with 58 of them
-    paced against a free-tier quota, they alone put a ~12 minute floor under a
-    re-run whose every other call was already served from disk.
+    The judgement is "did this answer decline to answer?", which depends on the
+    answer text, the question, the model asked, and how it was asked. Caching it
+    matters because it is the one grading call RAGAS does not cache: with 58 of
+    them paced against a free-tier quota, they alone put a ~12 minute floor
+    under a re-run whose every other call was already served from disk.
     """
-    payload = "\x1f".join((CACHE_VERSION, "abstention", judge_model, question, answer))
+    payload = "\x1f".join(
+        (CACHE_VERSION, "abstention", JUDGE_VERSION, judge_model, question, answer)
+    )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]
 
 

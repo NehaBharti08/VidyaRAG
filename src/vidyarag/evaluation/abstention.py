@@ -19,14 +19,37 @@ Reporting precision alone would be easy to game: a system that refuses
 everything scores 1.0. The false abstention rate is reported beside it for
 exactly that reason -- together they describe a trade-off, separately they
 flatter.
+
+**The judge's output budget is load-bearing, which is not obvious.** It was
+``max_tokens=5`` through every committed run. Measured against the live
+endpoint, that returns ``'REF'`` with ``finish_reason='length'``: the label is
+truncated mid-word, the prefix test fails, and every refusal is silently
+recorded as an answer. Abstention recall read 0.000 for the three profiles that
+had no abstention mechanism -- which looked like the expected result and was
+therefore never questioned -- and the corrective loop appeared to lift it from
+nothing. A truncated judge cannot be distinguished from a confident one by its
+verdict alone, so this module no longer tries: an unparseable response is
+reported as *unmeasured* rather than folded into "answered".
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
 from vidyarag.generate.prompts import NO_CONTEXT_ANSWER
+
+JUDGE_MAX_TOKENS = 64
+"""Output budget for one label.
+
+The label itself is two tokens. The margin is there because the failure mode of
+too small a budget is silent and biased -- it produces a plausible verdict, not
+an error -- and because a model that prefixes its label with a courtesy word
+should cost a retry's worth of tokens, not a wrong number in a results table.
+"""
+
+_LABEL_RE = re.compile(r"\b(REFUSED|ANSWERED)\b")
 
 ABSTENTION_JUDGE_PROMPT = """\
 You are labelling one answer produced by a textbook question-answering system.
@@ -52,6 +75,24 @@ Answer: {answer}"""
 
 
 @dataclass(frozen=True, slots=True)
+class JudgeVerdict:
+    """One abstention judgement, and whether it can be believed.
+
+    ``measured`` is the point of this type. A judge call that was truncated,
+    refused or unparseable tells us nothing about the answer, and recording it
+    as "did not refuse" is how a broken judge produces a clean-looking metric.
+    """
+
+    refused: bool = False
+    measured: bool = False
+    raw: str = ""
+    error: str = ""
+
+    def __bool__(self) -> bool:  # pragma: no cover - guards accidental truthiness
+        raise TypeError("use .refused; a verdict's truth value is ambiguous when unmeasured")
+
+
+@dataclass(frozen=True, slots=True)
 class AbstentionStats:
     """How well refusal behaviour matches what the corpus can support."""
 
@@ -59,6 +100,12 @@ class AbstentionStats:
     unanswerable_abstained: int
     answerable_total: int
     answerable_abstained: int
+    unmeasured: int = 0
+    """Questions whose abstention verdict could not be established.
+
+    Reported rather than absorbed: every rate below is computed over the
+    questions that were judged, so a number derived from half a run should not
+    look like one derived from all of it."""
 
     @property
     def recall(self) -> float | None:
@@ -100,6 +147,7 @@ class AbstentionStats:
             "unanswerable_abstained": self.unanswerable_abstained,
             "answerable_total": self.answerable_total,
             "answerable_abstained": self.answerable_abstained,
+            "unmeasured": self.unmeasured,
             "precision": self.precision,
             "recall": self.recall,
             "f1": self.f1,
@@ -108,8 +156,46 @@ class AbstentionStats:
 
 
 def is_structural_abstention(answer: str, *, trace_abstained: bool = False) -> bool:
-    """Detect a refusal the pipeline signalled explicitly. Free and exact."""
-    return trace_abstained or answer.strip() == NO_CONTEXT_ANSWER.strip()
+    """Detect a refusal the pipeline signalled explicitly. Free and exact.
+
+    Both sentinels count. ``NO_CONTEXT_ANSWER`` is emitted when retrieval
+    returned nothing; ``ABSTENTION_TEXT`` is what the corrective loop returns
+    when it declines. Only the first was recognised here, so re-reading a
+    committed run file -- where the loop's flag lives in the trace rather than
+    in the text -- would send a known, fixed refusal to a model to be
+    classified, paying for a verdict the repository already knows.
+    """
+    from vidyarag.correct.loop import ABSTENTION_TEXT
+
+    stripped = answer.strip()
+    return (
+        trace_abstained
+        or stripped == NO_CONTEXT_ANSWER.strip()
+        or stripped == ABSTENTION_TEXT.strip()
+    )
+
+
+def parse_judge_label(content: str | None, *, finish_reason: str | None = None) -> JudgeVerdict:
+    """Turn a judge response into a verdict, or say it could not be read.
+
+    Kept separate from the call so the parsing can be tested without a network,
+    which is what was missing when the truncation shipped.
+
+    The label is matched as a whole word anywhere in the response, and the last
+    match wins: a model that reasons before answering ends on its conclusion,
+    and a model that restates the options ("not ANSWERED, so REFUSED") means the
+    last one. A truncated response is rejected outright -- ``'REF'`` is not a
+    label, and treating it as one is precisely the bug this replaces.
+    """
+    raw = (content or "").strip()
+    if finish_reason == "length":
+        return JudgeVerdict(raw=raw, error="truncated: raise JUDGE_MAX_TOKENS")
+    if not raw:
+        return JudgeVerdict(raw=raw, error="empty judge response")
+    matches = _LABEL_RE.findall(raw.upper())
+    if not matches:
+        return JudgeVerdict(raw=raw, error=f"no label in response: {raw[:60]!r}")
+    return JudgeVerdict(refused=matches[-1] == "REFUSED", measured=True, raw=raw)
 
 
 async def judge_abstention(
@@ -118,12 +204,13 @@ async def judge_abstention(
     model: str,
     question: str,
     answer: str,
-) -> bool:
+) -> JudgeVerdict:
     """Ask a small model whether an answer refused.
 
-    Falls back to ``False`` on any error. A failed classification should not be
-    recorded as a refusal -- inventing abstentions would inflate the headline
-    number this project is trying to establish honestly.
+    Returns an unmeasured verdict on any failure. It deliberately does not fall
+    back to "answered": that is what the previous version did, and a judge whose
+    failures all land on one label does not produce a noisy metric, it produces
+    a wrong one that looks plausible.
     """
     try:
         response = await client.chat.completions.create(
@@ -135,17 +222,21 @@ async def judge_abstention(
                 }
             ],
             temperature=0.0,
-            max_tokens=5,
+            max_tokens=JUDGE_MAX_TOKENS,
         )
-    except Exception:  # noqa: BLE001 - classification is best-effort
-        return False
+    except Exception as exc:  # noqa: BLE001 - reported to the caller, never fatal
+        return JudgeVerdict(error=f"{type(exc).__name__}: {exc}"[:200])
 
-    content = (response.choices[0].message.content or "").strip().upper()
-    return content.startswith("REFUSED")
+    choice = response.choices[0]
+    return parse_judge_label(
+        choice.message.content, finish_reason=getattr(choice, "finish_reason", None)
+    )
 
 
 def summarise_abstention(
     records: list[tuple[bool, bool]],
+    *,
+    unmeasured: int = 0,
 ) -> AbstentionStats:
     """Aggregate ``(is_answerable, abstained)`` pairs into stats."""
     unanswerable = [abstained for answerable, abstained in records if not answerable]
@@ -155,4 +246,5 @@ def summarise_abstention(
         unanswerable_abstained=sum(unanswerable),
         answerable_total=len(answerable),
         answerable_abstained=sum(answerable),
+        unmeasured=unmeasured,
     )

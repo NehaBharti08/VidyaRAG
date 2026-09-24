@@ -45,6 +45,22 @@ class RetrievedOut(BaseModel):
 class StageOut(BaseModel):
     name: str
     duration_ms: float
+    depth: int = Field(
+        default=0,
+        description=(
+            "Nesting level. Stages at depth > 0 run inside the stage above them, "
+            "so durations must not be summed -- use trace.total_ms."
+        ),
+    )
+
+
+class UsageOut(BaseModel):
+    """Tokens spent on one job within a query."""
+
+    calls: int
+    input_tokens: int
+    output_tokens: int
+    list_price_usd: float
 
 
 class TraceOut(BaseModel):
@@ -52,7 +68,7 @@ class TraceOut(BaseModel):
 
     profile: str
     prompt_version: str
-    total_ms: float
+    total_ms: float = Field(description="Wall-clock time for the whole query.")
     stages: list[StageOut]
     input_tokens: int
     output_tokens: int
@@ -61,6 +77,13 @@ class TraceOut(BaseModel):
             "What this query would cost at published Gemini rates. Actual spend "
             "is zero on the free tier."
         )
+    )
+    usage_by_purpose: dict[str, UsageOut] = Field(
+        default_factory=dict,
+        description=(
+            "Tokens per job: generation, grading, decomposition. Grading is "
+            "usually the largest, because it reads the passages and the draft."
+        ),
     )
     retrieved: int
     cited: int
@@ -73,6 +96,23 @@ class QueryResponse(BaseModel):
     answer: str
     grounded: bool = Field(
         description="False when no citation resolved -- treat the answer as unsupported."
+    )
+    verified: bool = Field(
+        description=(
+            "True only when a self-check actually ran on this text and passed. "
+            "False covers three different situations -- see self_check."
+        )
+    )
+    self_check: str = Field(
+        description=(
+            "not_run: this profile has no self-check. passed: graded and "
+            "accepted. unavailable: the grader could not be reached, so the "
+            "draft is returned unverified. abstained: the answer was withheld."
+        )
+    )
+    blocked: bool = Field(
+        default=False,
+        description="True when a guardrail refused the question before retrieval.",
     )
     citations: list[CitationOut]
     context: list[RetrievedOut]
@@ -109,6 +149,15 @@ class ConfigResponse(BaseModel):
     use_reranker: bool
     use_decomposition: bool
     corrective_enabled: bool
+    # The flags below decide whether an answer can be refused or a passage
+    # quarantined. Omitting them meant a caller could not tell a guarded
+    # response from an unguarded one, which is the distinction this endpoint
+    # exists to make.
+    accept_threshold: float
+    abstain_threshold: float
+    max_attempts: int
+    check_user_input: bool
+    check_retrieved_context: bool
 
 
 class SearchRequest(BaseModel):

@@ -159,9 +159,8 @@ QUESTION_SHAPES: tuple[str, ...] = (
     "concentration, a threshold, a duration",
     "a named regulatory mechanism or signalling pathway more advanced than an "
     "introductory text covers",
-    "a clinical management detail: a treatment protocol, a drug's action, a "
-    "diagnostic criterion",
-    "a named researcher, landmark experiment, or the history of how something " "was discovered",
+    "a clinical management detail: a treatment protocol, a drug's action, a diagnostic criterion",
+    "a named researcher, landmark experiment, or the history of how something was discovered",
     "a comparison with another species or system that the textbook does not draw",
     "a developmental detail: what happens at a particular stage, and when",
     "an evolutionary origin question -- where a structure or process came from",

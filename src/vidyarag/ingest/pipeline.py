@@ -43,6 +43,22 @@ from vidyarag.store.collection import (
 )
 
 RUN_REPORT_PATH = REPO_ROOT / "data" / "ingest_run.json"
+"""Legacy single-file location, kept for the default collection only."""
+
+
+def run_report_path(collection: str) -> Path:
+    """Where a build of ``collection`` records its provenance.
+
+    One fixed filename served every collection, so building a second index --
+    a verification rebuild, an experiment with a different chunk size --
+    overwrote the provenance of the first. The file then described an index
+    nobody was querying, while the index being queried had no record of how it
+    was built, and nothing said so.
+
+    The name carries the collection, which makes the two coexist.
+    """
+    return REPO_ROOT / "data" / f"ingest_run.{collection}.json"
+
 
 T = TypeVar("T")
 
@@ -144,10 +160,10 @@ def ingest(
         batch_size: Chunks per embedding + upsert batch.
         recreate: Drop the collection first, forcing a full re-embed.
         report_path: Where to write the run report. Defaults to
-            ``data/ingest_run.json``. Tests must pass their own path -- writing
-            to the default is a side effect on the developer's real corpus
-            metadata, and a test run would otherwise erase the provenance of
-            the actual index.
+            ``data/ingest_run.<collection>.json``, so two collections cannot
+            overwrite each other's provenance. Tests must pass their own path
+            -- writing to the default is a side effect on the developer's real
+            corpus metadata.
         progress: Optional ``(stage, done, total)`` callback.
 
     Returns:
@@ -213,5 +229,5 @@ def ingest(
         points_in_collection=count_points(client, collection),
         books=stats,
     )
-    report.write(report_path)
+    report.write(report_path or run_report_path(collection))
     return report
