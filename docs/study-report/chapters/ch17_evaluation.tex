@@ -1,0 +1,379 @@
+\chapter{The Evaluation Harness}
+\label{ch:evaluation}
+
+The README calls one of the project's three pillars \enquote{numbers, not adjectives}. This chapter explains the machinery behind the numbers: the gold set, the runner, the metrics, the caches and the rules that decide whether a run may be reported at all. It also contains the most consequential defect found during this analysis: the abstention judge that could never say \enquote{refused}.
+
+\section{Principles}
+
+\code{docs/EVALUATION.md} opens with four principles, and the code follows each:
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{4.2cm}L@{}}
+\toprule
+\textbf{Principle} & \textbf{How the code enforces it}\\
+\midrule
+One frozen control & The \code{baseline} profile is marked \enquote{DO NOT EDIT}; a test asserts it keeps every enhancement off.\\
+Ablate one thing at a time & \code{rerank} and \code{decompose} each change one flag; \code{corrective} is built on \code{rerank}; \code{guarded} adds only the guards.\\
+Report failures, never hide them & Failed questions stay in the run; a run with more than 10\% failures reports no metrics.\\
+Cache aggressively & Answers, abstention verdicts and grader responses are cached on disk so an interrupted run resumes.\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{The gold set}
+\label{sec:goldset}
+
+\subsection{Schema}
+
+\begin{lstlisting}[language=Python]
+class QuestionType(StrEnum):
+    FACTUAL = "factual"            # answerable from a single section
+    MULTI_HOP = "multi_hop"        # requires joining two or more sections
+    UNANSWERABLE = "unanswerable"  # in-domain and plausible, but absent from the corpus
+    AMBIGUOUS = "ambiguous"        # underspecified or false presupposition (none in v1)
+
+class Provenance(StrEnum):
+    HUMAN_WRITTEN = "human_written"
+    LLM_DRAFTED_HUMAN_VERIFIED = "llm_drafted_human_verified"
+    LLM_DRAFTED_RETRIEVAL_VERIFIED = "llm_drafted_retrieval_verified"
+
+class GoldQuestion(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    id: str
+    question: str
+    type: QuestionType
+    provenance: Provenance
+    reference: str | None = None         # None for unanswerable questions
+    gold_chunk_ids: list[str] = []        # empty for unanswerable questions
+    gold_pages: list[str] = []
+    books: list[str] = []
+    notes: str = ""
+\end{lstlisting}
+\vspace{-4pt}{\raggedleft\ev{src/vidyarag/evaluation/goldset.py:31-102} (docstrings removed)\par}
+
+A validator enforces that ground truth matches the type: an unanswerable question may carry neither a reference answer nor gold passages; an answerable one needs both; a multi-hop question needs at least two gold passages, because \enquote{with one it is a factual lookup and would inflate the multi-hop score} \ev{src/vidyarag/evaluation/goldset.py:113-137}. The loader rejects invalid JSON with a file and line number, duplicate ids and an empty file, and skips comment lines starting with \texttt{\#} or \code{//} \ev{src/vidyarag/evaluation/goldset.py:140-184}. The \code{provenance} field exists \enquote{so the honest answer to "is this evaluation real?" lives in the data rather than in a claim about it} \ev{src/vidyarag/evaluation/goldset.py:54-60}.
+
+\subsection{Composition}
+
+\begin{verified}[\code{eval/goldset/goldset_v1.jsonl}, parsed during this analysis]
+\begin{center}\small
+\begin{tabular}{@{}lrcll@{}}
+\toprule
+\textbf{Type} & \textbf{Count} & \textbf{Gold each} & \textbf{Provenance} & \textbf{Ids}\\
+\midrule
+Factual & 28 & 1 & drafted, human-verified & \code{fact-001}--\code{028}\\
+Multi-hop & 18 & 2 & drafted, human-verified & \code{multi-001}--\code{018}\\
+Unanswerable & 12 & 0 & drafted, retrieval-verified & \code{unans-001}--\code{012}\\
+Ambiguous & 0 & --- & --- & ---\\
+\midrule
+Total & 58 & & & \\
+\bottomrule
+\end{tabular}
+\end{center}
+No question is \code{human_written}. By book: 24 \emph{Biology} only, 19 \emph{Anatomy and Physiology} only, 3 span both, 12 have no gold passage. The file lists all factual questions first, then multi-hop, then unanswerable. Its SHA-256 prefix is \code{258cb6f9b1a2ab04}, which all five committed runs record.
+\end{verified}
+
+\paragraph{Examples.} \code{fact-001}: \enquote{What specific discovery about DNA enabled scientists to develop laboratory techniques used to identify genetic diseases and determine paternity?} (gold passage in \emph{Biology} 1.1, p.15). \code{fact-002}: \enquote{What is the term for the process by which tiny bacteria move toward or away from chemicals?} \code{multi-002} asks how intercalated discs connect cardiac muscle cells, with gold passages in A\&P 10.7 and 19.2. \code{unans-001} asks how a hummingbird's ATP turnover per gram compares with a human's during peak activity, adjacent to the metabolism material but absent from it.
+
+\begin{finding}[documented composition differs from the file]
+\code{docs/EVALUATION.md} presents a target composition of 60 questions --- 24 factual, 18 multi-hop, 12 unanswerable and 6 ambiguous --- while the committed set has 58, with 28 factual and no ambiguous questions. The document labels that table a target, but readers can take it for the actual set. Separately, \code{docs/DESIGN.md} says the general-knowledge check rejects about 80\% of single-passage candidates, while a comment in \code{cli.py} says roughly half of all drafts are dropped; the denominators differ, and neither figure is backed by a committed log.
+\end{finding}
+
+\subsection{How the questions were made}
+
+\begin{figure}[htbp]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  font=\sffamily\footnotesize,
+  node distance=5mm and 7mm,
+  proc/.style={draw, rounded corners=2pt, fill=blue!6, align=center, text width=31mm, minimum height=13mm},
+  human/.style={draw, rounded corners=2pt, fill=green!10, align=center, text width=28mm, minimum height=13mm},
+  arr/.style={-Stealth, thick}
+]
+\node[proc] (s) {\textbf{sample passages}\\$\ge$120 tokens, not glossary or index, spread over sections and books};
+\node[proc, right=of s] (d) {\textbf{draft} (Gemini, temp.\ 0.7)\\one question + reference; drop if answerable from general knowledge};
+\node[proc, right=of d] (m) {\textbf{multi-hop pairing}\\nearest passage from a \emph{different} section};
+\node[proc, right=of m] (t) {\textbf{triage} (Gemini)\\does the gold passage support the reference?};
+\node[human, right=of t] (h) {\textbf{author review}\\\code{REVIEW.md} checklist; approve or delete};
+\draw[arr] (s) -- (d); \draw[arr] (d) -- (m); \draw[arr] (m) -- (t); \draw[arr] (t) -- (h);
+\node[proc, below=10mm of d] (u1) {\textbf{propose unanswerable}\\(Gemini, temp.\ 0.9)\\8 rotating question shapes};
+\node[proc, right=of u1] (u2) {\textbf{in-domain?}\\top dense score $\ge$ 10th percentile of known answerable (0.714)};
+\node[proc, right=of u2] (u3) {\textbf{not a near-duplicate?}\\cosine $<$ 0.88 to accepted ones};
+\node[proc, right=of u3] (u4) {\textbf{grader: passages do not answer it}};
+\draw[arr] (u1) -- (u2); \draw[arr] (u2) -- (u3); \draw[arr] (u3) -- (u4); \draw[arr] (u4) -| (h);
+\end{tikzpicture}}
+\caption{Gold-set construction, from \code{evaluation/draft.py}, \code{evaluation/verify.py} and the \code{vidyarag goldset} commands. The in-domain cut-off value is reported in \code{docs/EVALUATION.md}.}
+\label{fig:goldset-build}
+\end{figure}
+
+\paragraph{Answerable questions} are drafted from sampled passages at temperature 0.7 and kept only if the drafting model judges them \emph{not} answerable from general knowledge. Multi-hop partners are the nearest passage from a different, non-reference section, because random pairing produced non-sequiturs such as muscle tone paired with plant water potential. A triage command then asks whether each gold passage really supports its reference answer; it deliberately does \emph{not} check whether retrieval finds the gold passage, because that would make the gold set easy for the baseline and turn it into a moving target.
+
+\paragraph{Unanswerable questions} are the hardest to make well: \enquote{An LLM asked plainly for unanswerable questions produces obviously out-of-domain ones, which makes refusing them trivial and the resulting metric meaningless} \ev{src/vidyarag/evaluation/goldset.py:40-48}. Each candidate must pass three checks: an in-domain similarity cut-off calibrated at the 10th percentile of known answerable questions' top retrieval scores (reported as 0.714), a near-duplicate check (cosine similarity below 0.88 to already accepted candidates), and a grader judging that the retrieved passages do not answer it. An earlier unguided attempt produced twelve questions of which eleven contained \enquote{exact} and nine opened \enquote{What is the exact\ldots}; a system could have learned to refuse that phrasing, so the drafting prompt now rotates eight question shapes and forbids \enquote{exact} and similar words. The committed \code{unans-002} still contains \enquote{exact}.
+
+\begin{inferred}[limits of the gold set]
+Fifty-eight questions, of which only 12 are unanswerable and 18 multi-hop, give coarse resolution: one question changes abstention recall by 0.083 and multi-hop recall by up to 0.056. Every question was written by a language model and approved by one person, who also built the system. There are no ambiguous questions, although the type exists. And because the question file is ordered by type, a run that dies partway through loses the hardest questions first --- the incident behind the validity rule below.
+\end{inferred}
+
+\section{The runner}
+\label{sec:runner}
+
+\subsection{Two phases}
+
+\code{run_evaluation} generates answers one at a time and then grades them concurrently. The module docstring gives the reasons: the embedded index cannot be opened concurrently and generation is the expensive half; grading is pure input/output and \enquote{the half most likely to fail partway through}, so a rate limit during grading \enquote{never destroys the generation work already paid for} \ev{src/vidyarag/evaluation/runner.py:3-12}. Before anything else it checks that RAGAS and the OpenAI client are importable, because a run without them once generated every answer --- \enquote{twenty minutes of quota} --- and then died at the first grading call \ev{src/vidyarag/evaluation/runner.py:415-419}.
+
+\begin{lstlisting}[language=Python]
+for question in questions:                                   # Phase 1, sequential
+    key = answer_key(profile=config.name, generation_model=..., embedding_model=...,
+                     temperature=..., top_k_retrieve=..., top_k_context=...,
+                     prompt_version=ANSWER_PROMPT_VERSION, collection=...,
+                     question_id=question.id, question=question.question)
+    cached = answers.get(key)
+    if cached is not None:
+        result = SampleResult.model_validate(cached["result"]); result.cached = True
+    else:
+        if answered_live:
+            time.sleep(ANSWER_GAP_SECONDS)                    # 4 s between live calls
+        answered_live += 1
+        result, passages = _answer_one(pipeline, question)    # up to 3 attempts
+        if result.error is None:
+            answers.put(key, {"result": ..., "contexts": passages})
+    _apply_retrieval_scores(result, question, config)         # outside the cache
+    ...
+asyncio.run(grade())                                          # Phase 2, concurrent
+_aggregate(run, by_id)
+\end{lstlisting}
+\vspace{-4pt}{\raggedleft\ev{src/vidyarag/evaluation/runner.py:449-530} (abridged)\par}
+
+\subsection{Incidents encoded as constants}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{4.3cm}>{\raggedright\arraybackslash}p{2.3cm}>{\raggedright\arraybackslash}p{9.0cm}@{}}
+\toprule
+\textbf{Constant} & \textbf{Value} & \textbf{The incident recorded beside it}\\
+\midrule
+\endhead
+\code{ANSWER_GAP_SECONDS} & 4.0 & Unpaced answering tripped a per-minute limit and hung inside the SDK's retry: 18 of 58 answered, no output, no error.\\
+\code{ANSWER_ATTEMPTS}, \code{ANSWER_RETRY_SECONDS} & 3; 45 & A \code{decompose} run lost 11 of 58 questions (8 to 429, 3 to 503), all transient, none retried. Retries now wait 45\,s, then 90\,s.\\
+\code{TRANSIENT_MARKERS} & 429, 500, 502, 503, 504, unavailable, timeout, deadline & Matched on the error message, because the SDK wraps status codes in generic exception classes.\\
+\code{MAX_FAILURE_RATE} & 0.10 & A run lost 39 of 58 questions to quota exhaustion and still printed a table. The survivors were 17 factual, 0 multi-hop and 2 unanswerable, so faithfulness read 0.949 --- \enquote{high \emph{because} of what was missing}.\\
+\code{SCRATCH_DIR} & \code{eval/results/scratch} & A \code{--limit 4} smoke run became \enquote{the latest guarded run} and would have been reported as if it were the full set.\\
+\code{CACHE_HIT_SECONDS} & 0.25 & A fully cached 58-question re-run took the same 50 minutes as an uncached one, because cache hits were being paced.\\
+\bottomrule
+\end{longtable}
+\vspace{-4pt}{\raggedleft\ev{src/vidyarag/evaluation/runner.py:64-121}, \ev{src/vidyarag/evaluation/metrics.py:53-75}\par}
+
+\subsection{What a run records}
+
+Each question becomes a \code{SampleResult}: its answer, whether it abstained, the candidate, ranked, context and cited chunk ids, the gold ids, RAGAS scores and errors, retrieval scores, latency, tokens, list price, any error, whether it was cached, retries, sub-questions, the corrective record and the rerank record \ev{src/vidyarag/evaluation/runner.py:124-178}. Passage \emph{text} is deliberately not saved: it would add \enquote{roughly a megabyte of copyrighted textbook prose to every committed result file}, and chunk ids are enough to re-fetch it. The \code{EvalRun} wraps the samples with the run id, time, profile, the full merged configuration, the gold-set file name and digest, per-type counts, model ids, Python version, and the aggregates \ev{src/vidyarag/evaluation/runner.py:181-239}.
+
+Aggregation skips \code{None} values rather than counting them as zero, because \enquote{treating it as zero would let a grader failure masquerade as a bad score} \ev{src/vidyarag/evaluation/runner.py:242-249}. Mean latency is the mean of each answered question's \code{latency_ms}, which is \code{trace.total_ms} \ev{src/vidyarag/evaluation/runner.py:291, 556-566}.
+
+\subsection{The answer cache}
+\label{sec:answer-cache}
+
+\begin{lstlisting}[language=Python]
+def answer_key(*, profile, generation_model, embedding_model, temperature,
+               top_k_retrieve, top_k_context, prompt_version, collection,
+               question_id, question) -> str:
+    payload = "\x1f".join((CACHE_VERSION, profile, generation_model, embedding_model,
+                           f"{temperature:.4f}", str(top_k_retrieve), str(top_k_context),
+                           prompt_version, collection, question_id, question))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]
+\end{lstlisting}
+\vspace{-4pt}{\raggedleft\ev{src/vidyarag/evaluation/answer\_cache.py:30-64} (docstring removed)\par}
+
+The module states the rule the key must satisfy: \enquote{Anything that changes what the model would answer must be part of it, or a cached answer gets attributed to a configuration that never produced it} \ev{src/vidyarag/evaluation/answer\_cache.py:12-16}. Corrupt entries count as misses, write failures are ignored, and only successful answers are cached, because caching a quota failure \enquote{would make the failure permanent}.
+
+\begin{finding}[the cache key omits settings that change answers]
+The key includes the profile name, generation and embedding models, temperature, both top-$k$ values, prompt version, collection and question. It omits \code{use_reranker}, \code{reranker_model}, \code{use_decomposition}, every corrective setting, the grader model, both guardrail flags, and the chunking parameters. Each of these changes the answer or the abstention decision. Because every profile has a distinct name and profiles are meant to be frozen, the committed runs are not affected by this in any way the analysis could detect; but editing a flag inside an existing profile and re-running would silently reuse answers produced under the old behaviour --- the exact failure the module's own docstring describes.
+\end{finding}
+
+\paragraph{Provenance consequence for the shipped profile.} In the committed \code{guarded} run, all 58 answers were served from this cache, produced by an earlier \code{guarded} generation pass \tagM. Its latency and token figures therefore come from that earlier pass, not from the run dated 31 August. The \code{decompose} run reused 47 cached answers (it was resumed); the others were generated fresh.
+
+\section{Retrieval metrics}
+\label{sec:retrieval-metrics}
+
+For one question with gold passages $G$, first-stage candidates $C$ (20 ids, best first), final ordering $R$ and context $X$ (the passages actually placed in the prompt):
+\begin{align}
+\text{recall@}k &= \frac{|G \cap C_{1..k}|}{|G|}, &
+\text{hit@}k &= \mathbb{1}\bigl[G \cap C_{1..k} \neq \emptyset\bigr],\\
+\text{RR} &= \frac{1}{\min\{\,r : R_r \in G\,\}}\ \ (0 \text{ if none}), &
+\text{recall@context} &= \frac{|G \cap X|}{|G|}.
+\end{align}
+MRR is the mean of RR over questions. All four are undefined (\code{None}) for unanswerable questions and are skipped in averages \ev{src/vidyarag/evaluation/retrieval.py:19-58}.
+
+\begin{example}[one multi-hop question --- illustrative ranks]
+Gold passages A and B. Dense retrieval ranks A 3rd and B 18th, so recall@20 $= 2/2 = 1.0$ and hit@20 is true. After reranking, A is 1st and B is 7th, so RR $= 1/1 = 1.0$. Only the first five reach the prompt, so recall@context $= 1/2 = 0.5$: retrieval succeeded, the pipeline did not.
+\end{example}
+
+\paragraph{Why three lists.} \code{score_retrieval} computes recall and hit rate from the candidate pool, MRR from the final ordering and context recall from the prompt's passages. The first rerank ablation scored everything from the pool list, so context recall and MRR came out \emph{bit-identical} to the baseline while context precision moved six points: \enquote{The reranker was working; the instrument was reading the wrong list} \ev{src/vidyarag/evaluation/retrieval.py:95-123}. Retrieval scores are also computed outside the answer cache, because a wrong context-recall formula had once been baked into cached results and could only be corrected by regenerating every answer \ev{src/vidyarag/evaluation/runner.py:304-325}.
+
+The module calls these metrics \enquote{the part of the harness worth trusting most}: they cost nothing, never rate-limit, are exactly reproducible, and isolate blame in a way the model-judged metrics cannot \ev{src/vidyarag/evaluation/retrieval.py:1-11}.
+
+\section{RAGAS metrics}
+\label{sec:ragas}
+
+\begin{background}[the four RAGAS metrics used]
+\begin{description}[style=nextline]
+  \item[Faithfulness] An LLM breaks the answer into statements and checks each against the retrieved passages; the score is the supported fraction.
+  \item[Answer relevancy] An LLM writes questions that the answer would answer; the score is their mean embedding similarity to the real question. It penalises incomplete or off-topic answers --- and refusals.
+  \item[Context precision (with reference)] An LLM judges, for each retrieved passage in order, whether it is useful given the reference answer; the score rewards useful passages ranked early.
+  \item[Context recall] An LLM checks how much of the reference answer can be attributed to the retrieved passages.
+\end{description}
+\end{background}
+
+\begin{lstlisting}[language=Python]
+jobs = {
+    "faithfulness":      {"user_input": question, "response": answer, "retrieved_contexts": contexts},
+    "answer_relevancy":  {"user_input": question, "response": answer},
+    "context_precision": {"user_input": question, "reference": reference, "retrieved_contexts": contexts},
+    "context_recall":    {"user_input": question, "retrieved_contexts": contexts, "reference": reference},
+}
+results = await asyncio.gather(*(self._score_one(name, **kwargs) for name, kwargs in jobs.items()))
+\end{lstlisting}
+\vspace{-4pt}{\raggedleft\ev{src/vidyarag/evaluation/metrics.py:385-406}\par}
+
+\begin{description}[style=nextline]
+  \item[Only one module imports RAGAS,] so that \enquote{the blast radius of the next change is one file} \ev{src/vidyarag/evaluation/metrics.py:3-5}.
+  \item[Gemini is reached through an OpenAI-compatible client.] \code{AsyncOpenAI(api_key=..., base_url="https://generativelanguage.googleapis.com/v1beta/openai/")} is passed to RAGAS's \code{llm_factory} with \code{provider="openai"}, which \enquote{describes the wire protocol, not the vendor} \ev{src/vidyarag/evaluation/metrics.py:300-323}. The grader model is \code{gemini-3.1-flash-lite}.
+  \item[Answer relevancy uses the local BGE model] through an adapter, so that relevancy is measured \enquote{in the same vector space retrieval actually searched} \ev{src/vidyarag/evaluation/metrics.py:201-252}.
+  \item[RAGAS is only run where it means something:] answerable questions with a reference, that were not counted as abstentions and had passages \ev{src/vidyarag/evaluation/runner.py:367-378}.
+  \item[Failures are retried, then recorded as missing.] Up to five attempts with linear back-off (30, 60, 90, 120\,s), because per-minute quotas recover on a clock; a final failure yields \code{None} plus the error, and NaN results are converted to \code{None} \ev{src/vidyarag/evaluation/metrics.py:341-368, 185-198}.
+  \item[Grader responses are cached on disk] through RAGAS's \code{DiskCacheBackend} in \code{.eval_cache}.
+\end{description}
+
+\subsection{Pacing that does not pace cached calls}
+
+\begin{lstlisting}[language=Python]
+class RateLimiter:
+    def __init__(self, per_minute: float) -> None:
+        self._interval = 60.0 / per_minute if per_minute > 0 else 0.0
+        self._lock = asyncio.Lock()
+        self._next_slot = 0.0
+        self._pacing = False                  # off until a call proves slow enough to be real
+
+    def observe(self, elapsed_seconds: float) -> None:
+        self._pacing = elapsed_seconds >= CACHE_HIT_SECONDS      # 0.25 s
+
+    async def acquire(self) -> None:
+        if self._interval <= 0 or not self._pacing:
+            return
+        loop = asyncio.get_running_loop()
+        async with self._lock:
+            now = loop.time()
+            slot = max(now, self._next_slot)
+            self._next_slot = slot + self._interval
+        delay = slot - loop.time()
+        if delay > 0:
+            await asyncio.sleep(delay)
+\end{lstlisting}
+\vspace{-4pt}{\raggedleft\ev{src/vidyarag/evaluation/metrics.py:110-157} (docstrings removed)\par}
+
+At the default of 6 scores per minute the interval is 10 seconds. Each caller reserves the next free slot under a lock and sleeps until it arrives, so three callers arriving together are released at 0, 10 and 20 seconds rather than in a burst. A semaphore alone \enquote{bounds how many calls are in flight, not how many happen per minute}: a six-question smoke run at concurrency 3 without pacing made about 60 requests in 163 seconds, and 7 of 24 metric calls failed with 429 \ev{src/vidyarag/evaluation/metrics.py:53-65}. Pacing switches on only after a call takes at least 0.25 seconds, so a re-run served from cache is not slowed down.
+
+\section{Abstention metrics}
+\label{sec:abstention-harness}
+
+\subsection{Definitions}
+
+With $U$ unanswerable questions of which $U_a$ were refused, and $A$ answerable questions of which $A_a$ were refused:
+\begin{equation}
+\text{recall} = \frac{U_a}{U}, \qquad \text{precision} = \frac{U_a}{U_a + A_a}, \qquad \text{false-abstention rate} = \frac{A_a}{A}, \qquad F_1 = \frac{2PR}{P+R}.
+\end{equation}
+The module explains why the false-abstention rate is reported beside precision: \enquote{a system that refuses everything scores 1.0}, and \enquote{together they describe a trade-off, separately they flatter} \ev{src/vidyarag/evaluation/abstention.py:18-21}. Chapter~\ref{ch:concepts} works through these formulas with the committed \code{guarded} numbers.
+
+\subsection{Detecting a refusal}
+
+\begin{description}[style=nextline]
+  \item[Structural.] \code{is_structural_abstention} returns true if the trace says the loop abstained, or the answer is exactly the \enquote{found nothing} text \ev{src/vidyarag/evaluation/abstention.py:110-112}. Free and exact.
+  \item[Judged.] Any other answer is sent to a language model with a prompt asking for exactly one word, \code{REFUSED} or \code{ANSWERED}. The prompt counts an answer as REFUSED if it only says the material does not cover the question, and as ANSWERED if it provides the information \enquote{even partially, even hedged} \ev{src/vidyarag/evaluation/abstention.py:31-51}. Verdicts are cached by question, answer and judge model.
+\end{description}
+
+The module docstring explains why a judge is needed: the baseline \enquote{has no abstention mechanism at all, so when it declines it does so in prose the prompt encouraged --- "the passages do not describe..."} \ev{src/vidyarag/evaluation/abstention.py:13-16}. The judge exists precisely to catch baseline prose refusals.
+
+\subsection{The judge that could never say \enquote{refused}}
+\label{sec:judge-bug}
+
+\begin{lstlisting}[language=Python]
+async def judge_abstention(client, *, model, question, answer) -> bool:
+    try:
+        response = await client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user",
+                       "content": ABSTENTION_JUDGE_PROMPT.format(question=question, answer=answer)}],
+            temperature=0.0,
+            max_tokens=5,
+        )
+    except Exception:  # noqa: BLE001 - classification is best-effort
+        return False
+    content = (response.choices[0].message.content or "").strip().upper()
+    return content.startswith("REFUSED")
+\end{lstlisting}
+\vspace{-4pt}{\raggedleft\ev{src/vidyarag/evaluation/abstention.py:115-144} (docstring removed)\par}
+
+\begin{measured}[the shipped judge call, reproduced against \code{gemini-3.1-flash-lite}]
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{4.6cm}>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{3.3cm}L@{}}
+\toprule
+\textbf{Answer judged} & \textbf{\code{max_tokens=5}} & \textbf{\code{max_tokens=50}} & \textbf{\code{judge_abstention()} as shipped}\\
+\midrule
+A baseline prose refusal (\code{unans-001}) & \code{"REF"}, finish reason \code{length} & \code{"REFUSED"}, finish reason \code{stop} & \code{False}\\
+A normal grounded answer (\code{fact-004}) & \code{"ANSWER"}, finish reason \code{length} & \code{"ANSWERED"}, finish reason \code{stop} & \code{False}\\
+The pipeline's own abstention sentence & \code{"REF"}, finish reason \code{length} & \code{"REFUSED"}, finish reason \code{stop} & \code{False}\\
+\bottomrule
+\end{tabularx}
+\end{center}
+With a five-token limit the model's reply is cut off before the label is complete, and \code{"REF"} does not start with \code{"REFUSED"}. The function therefore returns \code{False} for every input --- including the system's own canonical refusal. The local \code{.eval_cache/abstention} folder held 275 cached verdicts, all \code{{"abstained": false}}.
+\end{measured}
+
+Why five tokens yield only three or six characters is \NotDet{} One plausible cause is that the model spends part of the output budget internally before the visible text, but the repository contains nothing to confirm or rule that out. The effect does not depend on the cause.
+
+\begin{keyidea}[consequences]
+\begin{enumerate}
+  \item \textbf{Every judged abstention in the committed runs is zero.} All abstentions counted in any of the five run files are structural --- produced by the self-check loop, never by the judge.
+  \item \textbf{The reported 0.000 abstention recall for \code{baseline}, \code{rerank} and \code{decompose} is an artefact.} Their stored answers to the 12 unanswerable questions are prose refusals such as \enquote{The provided passages do not contain information comparing the ATP turnover in a hummingbird to a human\ldots}
+  \item \textbf{Their 0.000 false-abstention rate is also an artefact}, and so is part of the self-check profiles' rate: prose refusals among answered questions were counted as answers. Non-abstained answers containing \enquote{do not contain} or \enquote{does not contain} number 17 (\code{baseline}), 16 (\code{rerank}), 20 (\code{decompose}), 3 (\code{corrective}) and 4 (\code{guarded}) \tagM.
+  \item \textbf{RAGAS was run on prose refusals} in the first three profiles, because the runner scores every answer the judge did not flag.
+  \item \textbf{The headline claim built on it} --- abstention recall \enquote{0.000 in baseline, rerank and decompose alike}, raised to 0.917--1.000 by the self-check --- appears in the README, \code{docs/EVALUATION.md}, the \code{corrective} profile and the loop's docstring.
+\end{enumerate}
+\end{keyidea}
+
+\paragraph{Why the tests did not catch it.} The tests cover the abstention arithmetic and structural detection; no test calls \code{judge_abstention} with a model response \tagV. The wrong number also matched what the project expected to see.
+
+\begin{recommended}[the fix]
+Raise the output budget (for example \code{max_tokens=16}, or remove the cap), or request structured output with an enum of the two labels; match on a robust prefix; and add unit tests with a fake client returning \code{"REF"}, \code{"REFUSED"}, \code{"**REFUSED**"} and an empty string. Because answers are cached, grading can then be re-run for all five profiles without regenerating anything. Chapter~\ref{ch:results} reports what a corrected judge measured during this analysis.
+\end{recommended}
+
+\section{Reports}
+
+\code{render_report} writes a Markdown report for each run: configuration, gold-set composition and digest (with a warning if it differs from the baseline's), RAGAS averages with deltas against the baseline, retrieval metrics, abstention, cost and latency, and failures. Missing values print as a dash because \enquote{not measured} is not zero, and changes smaller than 0.0005 print as $\pm$0.000. An invalid run prints \enquote{INVALID RUN --- no metrics reported}, the failures by type and the first error, and nothing else \ev{src/vidyarag/evaluation/report.py}. \code{vidyarag report} prints a comparison table of the latest committed run of each profile, in the order baseline, rerank, decompose, corrective, guarded; its output is the README's results table.
+
+\section{Running an evaluation}
+
+\begin{lstlisting}[language=bash]
+uv sync --group eval
+uv run vidyarag eval --profile guarded                # full run; writes eval/results/
+uv run vidyarag eval --profile guarded --limit 4      # smoke run; writes eval/results/scratch/
+uv run vidyarag eval --profile rerank --no-cache      # ignore every cache
+uv run vidyarag report                                # comparison of the latest runs
+\end{lstlisting}
+
+A manually triggered GitHub Actions workflow, \code{eval.yml}, can download the corpus, build the index and run one profile, uploading the results as a build artefact rather than committing them. It requires a \code{GOOGLE_API_KEY} repository secret. It has never been run: the repository's workflow history for it is empty \tagV.
+
+\section{Findings in the harness}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{6.6cm}L@{}}
+\toprule
+\textbf{Finding} & \textbf{Effect}\\
+\midrule
+Abstention judge truncated to 5 tokens, never returns true & Invalidates committed abstention metrics for three profiles and part of them for two\\
+Latency taken from the double-counted \code{total_ms} & Self-check profiles' latency overstated (Section~\ref{sec:latency-bug})\\
+Tokens and cost taken from a trace that omits grading & Self-check profiles' cost understated (Section~\ref{sec:token-bug})\\
+Answer-cache key omits answer-changing settings & Latent misattribution risk\\
+Committed \code{guarded} run is 100\% cached & Its latency and tokens come from an earlier pass\\
+Documented gold-set composition differs from the file & Misleading description\\
+\code{pandas} and \code{datasets} declared, never imported & Dependency hygiene (Chapter~\ref{ch:dependencies})\\
+\bottomrule
+\end{tabularx}
+\end{center}

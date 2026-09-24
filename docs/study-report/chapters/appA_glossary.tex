@@ -1,0 +1,76 @@
+\chapter{Glossary}
+\label{app:glossary}
+
+Definitions are general, followed where useful by how the term applies in VidyaRAG. Chapter numbers point to the full explanation.
+
+\begin{description}[style=sameline,leftmargin=0pt,labelindent=0pt,itemsep=3pt,font=\normalfont\bfseries]
+  \item[Ablation.] Removing or adding one component to measure its effect. Each VidyaRAG profile changes one thing (Chapter~\ref{ch:config}).
+  \item[Abstention.] Declining to answer. Here, the fixed sentence returned when the self-check rejects a draft.
+  \item[Abstention precision, recall, false-abstention rate.] Correct refusals over all refusals; refused unanswerable questions over all unanswerable; refused answerable questions over all answerable (Section~\ref{sec:abstention-harness}).
+  \item[Answer relevancy.] A RAGAS metric: how well an answer addresses the question, via questions generated from the answer.
+  \item[BGE.] \code{BAAI/bge-base-en-v1.5}, the 768-dimensional embedding model used for passages and questions.
+  \item[Bi-encoder.] A model that embeds query and document separately, enabling fast vector search.
+  \item[BM25.] A classic keyword-based ranking function; reserved for hybrid search, never built.
+  \item[Chunk (passage).] One indexed piece of textbook text, at most 512 BGE tokens, within one section.
+  \item[Citation marker.] A bracketed passage number such as \code{[2]} or \code{[2, 3]} in an answer.
+  \item[Claim.] An atomic factual assertion extracted from a draft by the grader.
+  \item[Cold start.] The extra delay of the first request while models load or download.
+  \item[Context (context window).] The five passages placed in the prompt.
+  \item[Context guard.] The screen that removes retrieved passages containing directives (Chapter~\ref{ch:guardrails}).
+  \item[Context precision, context recall.] RAGAS metrics judging whether retrieved passages are useful and cover the reference answer.
+  \item[Corrective loop (self-check).] Generate, grade, then accept, retry or abstain (Chapter~\ref{ch:corrective}).
+  \item[Cosine similarity.] The cosine of the angle between two vectors; the distance used by the collection.
+  \item[Cross-encoder.] A model that reads query and passage together and outputs a relevance score; used for reranking.
+  \item[Dense retrieval.] Search by embedding similarity.
+  \item[Deterministic id.] A point id derived from the chunk id with \code{uuid5}, so rewriting overwrites.
+  \item[Embedded mode.] Qdrant running inside the Python process, storing data in a folder.
+  \item[Embedding.] A vector representation of text.
+  \item[F1.] Harmonic mean of precision and recall.
+  \item[Fail open.] Allowing an action when a check cannot run; the self-check accepts a draft when grading fails.
+  \item[Faithfulness.] A RAGAS metric: the share of an answer's statements supported by the retrieved passages.
+  \item[fastembed.] A library that runs embedding and reranking models on ONNX Runtime.
+  \item[Gold set.] The 58 evaluation questions with reference answers and gold passages.
+  \item[Gold passage (gold chunk).] A passage known to support a question's reference answer.
+  \item[Grader.] The second Gemini model that labels claims and flags refusals.
+  \item[Groundedness score.] The mean claim weight: supported 1, partial 0.5, unsupported 0.
+  \item[Hallucination.] Model output not supported by its sources.
+  \item[Hermetic test.] A test with no dependence on the network, real services or the developer's environment.
+  \item[Hit rate (hit@k).] Whether any gold passage appears in the top $k$.
+  \item[Hybrid search.] Combining keyword and dense retrieval; not implemented.
+  \item[Idempotent.] Producing the same result when run again.
+  \item[Ingestion.] Turning the PDFs into the searchable index (Chapter~\ref{ch:ingestion}).
+  \item[Input guard.] The screen that blocks manipulation attempts before any retrieval.
+  \item[Judge (LLM-as-judge).] A language model used to label or score outputs; here, the abstention judge and RAGAS.
+  \item[Lockfile.] A file recording exact dependency versions; \code{uv.lock}.
+  \item[MRR.] Mean reciprocal rank: the average of $1/\text{rank}$ of the first gold passage.
+  \item[Multi-hop question.] A question that needs information from two or more passages.
+  \item[Named vector.] A Qdrant vector stored under a name; here \code{dense}.
+  \item[Noise floor.] The variation between repeated runs, below which differences are not claimed.
+  \item[ONNX Runtime.] An inference engine for exported neural networks, used here on CPU.
+  \item[OpenAI-compatible endpoint.] Google's API surface that accepts OpenAI-style requests and serves Gemini.
+  \item[Outline (PDF).] The document's bookmarks, used to derive chapters and sections.
+  \item[Payload.] Metadata stored with each vector: text, citation, pages, licence and more.
+  \item[Pool recall (recall@k).] The share of gold passages among the 20 candidates.
+  \item[Printed page.] The page number printed in the book, read from the running head.
+  \item[Profile.] A committed YAML configuration of the pipeline: \code{baseline}, \code{rerank}, \code{decompose}, \code{corrective}, \code{guarded}.
+  \item[Prompt injection.] Text designed to override a model's instructions.
+  \item[Quarantine.] Dropping one retrieved passage and continuing with the rest.
+  \item[RAG.] Retrieval-augmented generation.
+  \item[RAGAS.] An open-source library of RAG evaluation metrics.
+  \item[Recall@context.] The share of gold passages among the five passages in the prompt.
+  \item[Reciprocal rank fusion (RRF).] Merging ranked lists by summing $1/(k+\text{rank})$.
+  \item[Refusal flag.] The grader's \code{refuses} field, marking drafts that decline to answer.
+  \item[Reranking.] Reordering candidates with a stronger, slower model.
+  \item[Running head.] The line at the top of a printed page with the page number and chapter.
+  \item[SecretStr.] A pydantic type that hides its value in representations.
+  \item[Stage.] A timed step recorded in the trace.
+  \item[Temperature.] A sampling parameter; 0 makes output as predictable as the provider allows, not deterministic.
+  \item[Token.] A unit of text as a model's tokenizer splits it.
+  \item[Top-$k$.] The $k$ highest-ranked results.
+  \item[Trace (\code{QueryTrace}).] The per-query record of stages, tokens, list price and events (Chapter~\ref{ch:observability}).
+  \item[uv.] A Python package and project manager.
+  \item[Validity rule.] Withholding metrics when more than 10\% of questions fail.
+  \item[Vector database.] A store that indexes vectors for similarity search; Qdrant.
+  \item[WordPiece.] The subword tokenization used by BERT-family models such as BGE.
+  \item[ZeroGPU.] Hugging Face Spaces hardware that attaches GPUs on demand to decorated functions.
+\end{description}

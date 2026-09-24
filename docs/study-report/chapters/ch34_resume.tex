@@ -1,0 +1,122 @@
+\chapter{What I Must Know Before Putting This Project on My Resume}
+\label{ch:resume}
+
+This chapter turns the whole report into a checklist for the résumé and the interview. It separates what you can claim from what you cannot, gives wording that survives scrutiny, and lists the questions you are most likely to be asked.
+
+\section{The project in one honest paragraph}
+
+VidyaRAG is a carefully instrumented retrieval-augmented study assistant over two open biology textbooks, with validated page-level citations, a claim-level self-check that turns unsupported or refusing drafts into an explicit abstention, regex injection guards, and an evaluation harness that ablates each component against a frozen baseline. It is deployed as a public demo and packaged as an API with CI. It is a portfolio-scale system: 3,608 passages, a 58-question gold set, single evaluation runs, free-tier models, and several measurement defects --- found by the analysis behind this report, and since fixed, with the retracted numbers stated rather than quietly replaced (Appendix~\ref{app:fixes}).
+
+\section{Claims audit}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{5.0cm}>{\raggedright\arraybackslash}p{2.0cm}>{\raggedright\arraybackslash}p{8.8cm}@{}}
+\toprule
+\textbf{Claim} & \textbf{Verdict} & \textbf{Evidence and safe wording}\\
+\midrule
+\endhead
+Answers cite printed pages & Safe & Citations are validated against supplied passages and carry printed page numbers. Say \enquote{validated page-level citations}, not \enquote{every claim is proven}.\\
+Reranking improved retrieval & Safe & recall@context 0.880 $\rightarrow$ 0.913, MRR 0.770 $\rightarrow$ 0.830, pool recall unchanged (deterministic).\\
+Decomposition was tested and rejected & Safe & Multi-hop recall@context 0.861 $\rightarrow$ 0.778; split questions 0.864 $\rightarrow$ 0.727.\\
+Self-check raised abstention recall from 0 to 0.92--1.00 & \textbf{Unsafe} & The baseline already refused 12/12; the 0.000 is a judge defect (F1, F2).\\
+Self-check makes the system abstain on unsupported answers & Safe, if phrased precisely & It returns a fixed, citation-free abstention when the grader flags a refusal or low support; say that.\\
+Self-check improves answer quality & \textbf{Unsafe} & Like-for-like differences are within noise; the repository itself says so.\\
+Guardrails block prompt injection & Rephrase & They block canonical phrasings (8/8 test cases) and are easily bypassed (10 of 11 paraphrases passed). Say \enquote{regex input and context guards with zero false positives on the corpus}.\\
+Latency around 22 seconds & \textbf{Unsafe} & Double-counted (F3).\\
+Costs \$0.00027 per question & \textbf{Unsafe} & Grading not counted (F4). Say \enquote{runs on the free tier}.\\
+Built with LlamaIndex or LangChain & \textbf{Unsafe} & Neither is used; LlamaIndex was removed.\\
+400+ tests, CI on Python 3.10 and 3.11 & Safe & 469 hermetic tests pass (401 at the analysed commit); coverage 64\%.\\
+Found and fixed a bug in my own evaluation & \textbf{Safe, and the strongest claim here} & The abstention judge was truncated to five output tokens and read every refusal as an answer; caught by re-measuring, fixed with tests, all five runs re-judged, and the retraction published in the README. See Appendix~\ref{app:fixes}.\\
+Dockerised, deployed on Hugging Face & Safe & Image built and health-checked in CI (not published); demo live on Spaces.\\
+Reproducible index & Safe & Rebuilt from the PDFs to the same 3,608 chunks.\\
+Held-out evaluation, statistically significant gains & \textbf{Unsafe} & The gold set was used throughout development; single runs, 58 questions.\\
+Production-ready, scalable & \textbf{Unsafe} & No authentication, rate limiting, monitoring or load testing.\\
+Fine-tuned models, GPU inference & \textbf{Unsafe} & Neither exists.\\
+\bottomrule
+\end{longtable}
+
+\section{Résumé bullets you can defend}
+
+\begin{recommended}[wording]
+\begin{itemize}
+  \item \textbf{System.} Built VidyaRAG, a retrieval-augmented study assistant over two OpenStax textbooks (3,608 passages): local BGE embeddings in Qdrant, cross-encoder reranking, Gemini generation with validated page-level citations, and a claim-level self-check that abstains with a fixed, citation-free response when passages do not support an answer.
+  \item \textbf{Evaluation.} Designed an ablation harness (58-question gold set; RAGAS, deterministic retrieval and abstention metrics; frozen baseline): reranking raised recall of gold passages in the prompt from 0.880 to 0.913 and MRR from 0.770 to 0.830; query decomposition was measured and rejected after multi-hop context recall fell from 0.861 to 0.778.
+  \item \textbf{Engineering.} Shipped a FastAPI service, a CLI and a Gradio demo on Hugging Face Spaces; Docker image built and health-checked in GitHub Actions; 400+ hermetic tests on Python 3.10 and 3.11 with secret scanning.
+  \item \textbf{Only after fixing and re-measuring.} Audited the evaluation pipeline and fixed a truncated LLM judge that had masked baseline refusals, double-counted latency and unrecorded grading tokens; re-measured all profiles.
+\end{itemize}
+\end{recommended}
+
+\paragraph{Technologies, comma-separated.} Python, retrieval-augmented generation, Qdrant, fastembed (ONNX Runtime), BGE embeddings, cross-encoder reranking, Google Gemini API, RAGAS, FastAPI, Pydantic, Gradio, Typer, PyMuPDF, Docker, GitHub Actions, Hugging Face Spaces, pytest, mypy, ruff, uv.
+
+\paragraph{Links.} \url{https://github.com/NehaBharti08/VidyaRAG} and \url{https://huggingface.co/spaces/nehabharti0802/VidyaRAG}.
+
+\section{The locked campus résumé}
+
+The commit that removed LlamaIndex records a note: the locked résumé bullet says \enquote{LlamaIndex + Qdrant + Gemini}; \enquote{Qdrant and Gemini are accurate. LlamaIndex is not, and the honest answer if asked is that it was planned, proved unnecessary, and was removed rather than kept for appearances} \ev{git 8fa9478}.
+
+\begin{interview}[if asked \enquote{show me where you used LlamaIndex}]
+\enquote{I planned to use it, and it is on that résumé because the résumé was locked early. When I built the pipeline, it turned out to be a few hundred lines directly over qdrant-client, fastembed and the Gemini SDK, so the framework was never imported. When I checked my documentation against the code I found it listed as a dependency doing nothing, and I removed it. I'd rather explain that than keep a dependency for appearances.}
+\end{interview}
+
+\section{Facts to have at your fingertips}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{5.2cm}L@{}}
+\toprule
+\textbf{Fact} & \textbf{Value}\\
+\midrule
+Corpus & OpenStax \emph{Biology} and \emph{Anatomy and Physiology}, first editions, CC BY 4.0; 2,900 PDF pages; 3,608 chunks\\
+Chunks & $\le$512 BGE tokens, 64 overlap, within sections; largest 487\\
+Models & \code{BAAI/bge-base-en-v1.5} (768-d), \code{Xenova/ms-marco-MiniLM-L-6-v2}, \code{gemini-3.5-flash-lite}, \code{gemini-3.1-flash-lite}\\
+Retrieval & 20 candidates $\rightarrow$ 5 in the prompt\\
+Self-check & Accept $\ge$0.8, abstain $<$0.5, retry between, at most 2 attempts; refusal flag abstains; grading errors accept\\
+Gold set & 58: 28 factual, 18 multi-hop, 12 unanswerable; LLM-drafted and verified\\
+Headline retrieval results & recall@20 0.967; recall@context 0.880 $\rightarrow$ 0.913; MRR 0.770 $\rightarrow$ 0.830\\
+Rejected & Decomposition: multi-hop recall@context 0.861 $\rightarrow$ 0.778\\
+Abstention, correctly measured & 12/12 unanswerable refused by every profile except \code{guarded} (11/12)\\
+Latency (local benchmark) & Embed 68\,ms, search 33\,ms, rerank 20 passages 2.1\,s; generation about 1.8\,s; grading about 4.6\,s\\
+Tests & 401 hermetic + 3 live; coverage 64\%\\
+Deployment & Hugging Face Space (ZeroGPU, Python 3.10, Gradio 5.50.0), embedded index; Docker tested in CI\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{The fifteen questions most likely to be asked}
+
+\begin{enumerate}
+  \item \textbf{Walk me through the architecture.} Use the 3-minute version (Chapter~\ref{ch:explaining}).
+  \item \textbf{Why RAG instead of fine-tuning?} Traceability to pages and the ability to abstain; fine-tuned knowledge cannot cite a source.
+  \item \textbf{How do you stop hallucinated citations?} Numbered markers; any marker outside the supplied passages is removed; tests cover grouped and invented markers.
+  \item \textbf{How does the self-check work, and does it help?} Claims graded against passages, a refusal flag, a policy with a bounded retry. It standardises and enforces abstention; it did not improve answer quality like for like.
+  \item \textbf{How did you evaluate?} Frozen baseline, one change per profile, 58 questions, deterministic retrieval metrics plus RAGAS plus abstention metrics, a 10\% validity rule.
+  \item \textbf{What improved, by how much?} Reranking: 0.880 $\rightarrow$ 0.913 recall@context, 0.770 $\rightarrow$ 0.830 MRR, with pool recall unchanged as predicted.
+  \item \textbf{What didn't work?} Decomposition, and why: rank fusion favours consensus passages.
+  \item \textbf{How do you know it isn't noise?} Retrieval metrics are exact; model-judged metrics move about $\pm$0.05 between runs, so smaller differences are not claimed.
+  \item \textbf{Hardest bug?} The tokenizer mismatch that silently truncated chunks, or the five Docker defects exposed by actually running the container --- or the truncated judge, once fixed.
+  \item \textbf{Limitations?} Two textbooks, definitional questions, multi-hop, small gold set, regex guards, CPU reranking, free-tier limits.
+  \item \textbf{How would you scale it?} Qdrant server with an approximate index, fewer rerank candidates or a smaller model, caching, model warm-up, rate limiting, asynchronous grading.
+  \item \textbf{How do you handle prompt injection?} Screen questions before any work and passages before the prompt; be clear that regex guards are shallow and that grounding limits the damage.
+  \item \textbf{Latency and cost?} About a second for the baseline, about two more for reranking, grading dominates the self-check; the reported 22 seconds double-counts, and cost omits grading.
+  \item \textbf{Why these technologies?} Chapter~\ref{ch:why}.
+  \item \textbf{What would you do next?} Fix the measurement defects and re-run, add integration tests, per-term glossary chunks, diversity-aware multi-hop context, a larger gold set with repeated runs.
+\end{enumerate}
+
+\section{Things never to say}
+
+\begin{itemize}
+  \item \enquote{Abstention recall went from zero to one.}
+  \item \enquote{The self-check makes answers more accurate.}
+  \item \enquote{It blocks prompt injection.}
+  \item \enquote{It answers in 22 seconds for \$0.00027.}
+  \item \enquote{Built with LlamaIndex / LangChain}, \enquote{fine-tuned}, \enquote{GPU-accelerated}, \enquote{production-ready}, \enquote{held-out test set}, \enquote{statistically significant}.
+\end{itemize}
+
+\section{Before each interview}
+
+\begin{itemize}
+  \item Open the live demo a few minutes early: the first request may load or download models, and the free tier can return transient errors. Keep a local run or screenshots as a fallback.
+  \item Decide, finding by finding, whether you have fixed it; rehearse how you will describe each (Chapter~\ref{ch:findings}).
+  \item Rehearse the 30-second, 1-minute and 3-minute versions aloud.
+  \item Be ready to open \code{pipeline.py}, \code{correct/policy.py}, \code{generate/citations.py}, \code{evaluation/retrieval.py} and \code{evaluation/abstention.py}.
+  \item Keep the results table (Chapter~\ref{ch:results}) on one page.
+  \item Re-run \code{uv run pytest -m "not costly"} so you can say the suite passes today.
+\end{itemize}

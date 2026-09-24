@@ -1,0 +1,93 @@
+\chapter{Improvements}
+\label{ch:improvements}
+
+\begin{recommended}[scope of this chapter]
+Everything in this chapter is a recommendation; none of it is implemented in the analysed repository. Each item cites the verified finding or limitation that motivates it. Effort is a rough judgement: S is under a day, M a few days, L a week or more.
+\end{recommended}
+
+\section{Priority 0: make the published claims true}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{4.4cm}>{\raggedright\arraybackslash}p{2.4cm}>{\centering\arraybackslash}p{1.0cm}>{\raggedright\arraybackslash}p{7.5cm}@{}}
+\toprule
+\textbf{Improvement} & \textbf{Motivated by} & \textbf{Effort} & \textbf{What to do and what it changes}\\
+\midrule
+\endhead
+Fix and test the abstention judge; re-grade all five runs & F1, F2 & S + M & Raise the output limit or use a structured label; add fake-client tests; re-grade from cached answers; rewrite the abstention claim everywhere it appears.\\
+Correct latency and cost accounting; re-run the self-check profiles & F3, F4 & S + M & Wall-clock totals and usage recorded for every model call; replace the README's latency and cost figures.\\
+Label unverified and blocked answers & F5, F11 & S & \code{verified}, \code{blocked} and \code{abstained} fields in the API; accurate demo messages; count unmeasured attempts in evaluation reports.\\
+Correct the documentation contradictions & F8, F9, F14, F25--F29 & S & \code{/v1/search} description, Space README numbers, guard figures described as test cases, stale counts and paths.\\
+Keep releases and versions aligned & F24 & S & Bump \code{__version__} per release; a test that the newest tag matches it.\\
+\bottomrule
+\end{longtable}
+
+\section{Priority 1: engineering robustness}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{4.4cm}>{\raggedright\arraybackslash}p{2.4cm}>{\centering\arraybackslash}p{1.0cm}>{\raggedright\arraybackslash}p{7.5cm}@{}}
+\toprule
+\textbf{Improvement} & \textbf{Motivated by} & \textbf{Effort} & \textbf{What to do and what it changes}\\
+\midrule
+\endhead
+Hermetic integration tests for every profile & F6 & M & Fake embedder, reranker and models over in-memory Qdrant; assert stage order, trace content and outcomes.\\
+Hash the whole configuration into the answer-cache key & F7 & S & Removes the misattribution risk by construction.\\
+Implement or remove \code{book_slug} on \code{/v1/query}; map provider errors & F10, F12 & S & The retrieval function already supports the filter; return 429 or 503 with a documented schema.\\
+Write the ingest report beside its index & F17 & S & Provenance can no longer be overwritten by another build.\\
+Validate thresholds at configuration load & F20 & S & A model validator on \code{CorrectiveConfig}.\\
+Remove dead settings and unused dependencies; declare \code{huggingface_hub} & F30 & S & Smaller surface, fewer questions in review.\\
+Align pre-commit tool versions with the lockfile & F31 & S & Run ruff, black and mypy through \code{uv run} in local hooks.\\
+Pre-load models at startup & Cold start & S & No visitor pays model loading.\\
+Structured per-query log line & Observability gaps & S & Question length, profile, stage timings, abstention, guard events, grader errors.\\
+\bottomrule
+\end{longtable}
+
+\section{Priority 2: answer and retrieval quality}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{4.4cm}>{\raggedright\arraybackslash}p{2.4cm}>{\centering\arraybackslash}p{1.0cm}>{\raggedright\arraybackslash}p{7.5cm}@{}}
+\toprule
+\textbf{Improvement} & \textbf{Motivated by} & \textbf{Effort} & \textbf{What to do and what it changes}\\
+\midrule
+\endhead
+Split glossaries into one chunk per term; keep a section's opening sentences with its first chunk & Definitional weakness & M & Definitions become retrievable; requires re-ingesting and re-running every ablation, as the README notes.\\
+Keep the useful part of partial answers & F15 & M & Use the grader's claims to drop unsupported sentences rather than abstaining on a draft that already names its gap; measure against abstention precision.\\
+Diversity-aware context selection for multi-hop questions & Multi-hop drop & M & Reserve a slot per sub-question, or apply maximal marginal relevance to the reranked pool; ablate against \code{rerank}.\\
+Evaluate hybrid retrieval on exact-term questions & No keyword search & M & Add sparse vectors in a new collection and a question set of rare terms, abbreviations and names.\\
+Measure the reranker's pool size and a larger cross-encoder & Unmeasured choices & M & Top 10 against top 20; \code{bge-reranker-base} where hosting allows.\\
+Rewrite very short questions before retrieval & Definitional weakness & S & For example \enquote{what is X?} $\rightarrow$ \enquote{definition of X}, measured as its own ablation.\\
+\bottomrule
+\end{longtable}
+
+\section{Priority 2: evaluation}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{4.4cm}>{\raggedright\arraybackslash}p{2.4cm}>{\centering\arraybackslash}p{1.0cm}>{\raggedright\arraybackslash}p{7.5cm}@{}}
+\toprule
+\textbf{Improvement} & \textbf{Motivated by} & \textbf{Effort} & \textbf{What to do and what it changes}\\
+\midrule
+\endhead
+Validate the judge against human labels & F1 & S & Hand-label 50 answers as refused or answered; report the judge's agreement before trusting it.\\
+Repeat runs and report spread & Single runs & M & Three runs per profile; bootstrap confidence intervals over questions.\\
+Grow and diversify the gold set & 58 questions & L & Definitional and ambiguous questions, more unanswerable ones, a second reviewer, and a held-out split never used during development.\\
+Human-grade a sample of answers & Model-judged metrics only & M & Anchors RAGAS numbers to human judgement.\\
+Record per-stage timings, cache status and the commit in every run & Evidence & S & Latency questions become answerable from the files.\\
+Test the thresholds honestly & Untuned thresholds & M & A variant that ignores the refusal flag, evaluated on a held-out set.\\
+\bottomrule
+\end{longtable}
+
+\section{Priority 3: operations and security}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{4.4cm}>{\raggedright\arraybackslash}p{2.4cm}>{\centering\arraybackslash}p{1.0cm}>{\raggedright\arraybackslash}p{7.5cm}@{}}
+\toprule
+\textbf{Improvement} & \textbf{Motivated by} & \textbf{Effort} & \textbf{What to do and what it changes}\\
+\midrule
+\endhead
+Rate limiting and an optional API key & Quota abuse risk & S & Protects the free-tier quota behind the public demo and API.\\
+Generic error messages and a privacy note & F19 & S & Stop exposing internals; tell users their question goes to Google's API.\\
+Deploy the Space and publish the image from CI & Manual deployment & M & Releases become reproducible; expose the commit in \code{/v1/config}.\\
+Dependency and image scanning; SHA-pinned Actions & Supply chain & S & Dependabot or Renovate, \code{pip-audit}, an image scanner.\\
+Model-based injection and output checks & F13 & M & Only if the corpus or users change the threat model.\\
+\bottomrule
+\end{longtable}
+
+\section{If there is only one day}
+
+\begin{recommended}
+Fix F1 and re-grade; fix F3 and F4 and re-run \code{guarded}; add the \code{verified} flag and correct the demo message; then update the README results table, the Space README and every place that states the abstention claim. Those changes turn the project's most visible numbers from questionable into defensible, and the fixes themselves make a strong interview story.
+\end{recommended}

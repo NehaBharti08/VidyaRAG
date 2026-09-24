@@ -1,0 +1,127 @@
+\chapter{Interview Question Bank}
+\label{ch:questions}
+
+Sixty-eight questions an interviewer could ask about VidyaRAG, grouped by topic, each with an answer you can give in under a minute. Answers state facts verified in this report; where an answer is opinion or proposal, it says so. The chapter references point to the full explanation.
+
+\section{Fundamentals}
+
+\begin{description}[style=nextline]
+  \item[1. What is retrieval-augmented generation, and when is it the right choice?] At question time the system retrieves relevant passages and gives them to a language model as context, so the answer comes from documents rather than from the model's memory. It fits when answers must be traceable, the corpus changes, or the model must decline when the documents are silent. VidyaRAG needs all three: page citations and the ability to say the books do not cover something.
+  \item[2. What is an embedding, and why cosine similarity?] A vector representation of text in which similar meanings lie close together. Cosine similarity compares direction regardless of vector length. VidyaRAG embeds passages and questions into 768 dimensions with BGE and searches a Qdrant collection configured for cosine distance (Chapter~\ref{ch:concepts}).
+  \item[3. Bi-encoder versus cross-encoder?] A bi-encoder embeds the question and each passage separately, so passage vectors are computed once and search is fast. A cross-encoder reads question and passage together, which judges relevance better but costs a model pass per pair. VidyaRAG uses the bi-encoder to fetch 20 candidates and the cross-encoder to choose 5 --- about 2 seconds for 20 on the development CPU.
+  \item[4. What is reciprocal rank fusion?] A way to merge ranked lists using ranks only: each item scores $\sum 1/(k+\text{rank})$ over the lists it appears in, with $k=60$. It avoids comparing raw scores from different queries, and it rewards items that several lists agree on.
+  \item[5. What do hallucination and grounding mean here?] Hallucination is content not supported by the given sources. The grader judges \emph{support, not truth}: a correct fact that is absent from the passages counts as unsupported. Note that the API's \code{grounded} flag only means at least one citation resolved.
+  \item[6. Define recall@k, hit rate and MRR.] Recall@k is the share of gold passages in the top $k$; hit rate asks whether any gold passage is there; MRR averages $1/\text{rank}$ of the first gold passage. VidyaRAG computes recall and hit rate on the 20 candidates, MRR on the final ordering, and recall@context on the five passages in the prompt.
+  \item[7. What do RAGAS faithfulness and answer relevancy measure?] Faithfulness: the share of the answer's statements supported by the retrieved passages, judged by a model. Answer relevancy: how closely questions generated from the answer resemble the real question, by embedding similarity; it penalises incomplete answers and refusals.
+  \item[8. What is prompt injection?] Text that tries to override the model's instructions. Direct injection comes from the user; indirect injection hides in retrieved content. VidyaRAG screens both with regular expressions: questions before any work, passages before the prompt.
+\end{description}
+
+\section{Architecture and design}
+
+\begin{description}[style=nextline]
+  \item[9. Walk me through a query.] Input guard; embed the question; Qdrant returns 20 passages; the cross-encoder reorders them; the top 5 are screened; Gemini writes an answer citing numbered passages; invalid markers are stripped; a second Gemini model grades the claims and flags refusals; the policy accepts, retries once with a query built from failed claims, or abstains. A trace records timings and tokens (Chapter~\ref{ch:trace}).
+  \item[10. Why one \code{Pipeline} class with flags rather than separate pipelines?] So each ablation changes exactly one flag and a difference in results can be attributed to it.
+  \item[11. Why one pipeline per process?] Embedded Qdrant takes an exclusive lock on its folder, and loading the models is slow, so the API builds the pipeline at startup and the demo keeps a singleton.
+  \item[12. What happens to a blocked question?] The input guard matches before retrieval, the fixed refusal is returned with no search and no model call, and the trace records the categories. One quirk: the API reports it as \code{grounded=true}.
+  \item[13. How is configuration organised?] Environment settings carry secrets and endpoints; committed YAML profiles carry behaviour, merged over a default file and validated so an unknown key fails at load (Chapter~\ref{ch:config}).
+  \item[14. Why ship the index inside the demo?] Free Qdrant Cloud clusters are suspended after about a week idle and deleted after about four; an embedded index cannot expire. The cost is exact search, fine at 3,608 points.
+  \item[15. What would change for 100 books?] \emph{A proposal:} a Qdrant server with an approximate index instead of embedded exact search, per-edition licence checks, a new gold set, possibly hybrid search. Reranking cost would not change, because it depends on the candidate count, not the corpus size.
+  \item[16. How would you add hybrid search?] \emph{A proposal:} add a sparse vector beside the existing named \code{dense} vector, re-index, fuse the two result lists, create a new profile and ablate it against \code{rerank}. The configuration already reserves the flag and rejects it until it is built.
+\end{description}
+
+\section{Ingestion}
+
+\begin{description}[style=nextline]
+  \item[17. How do you know the section and page of a chunk?] From the PDF's own outline, mapped to page ranges, and printed page numbers read from the running heads; both travel in every stored payload.
+  \item[18. How are layout problems handled?] Headers and footers are dropped by position; two-column pages are detected by a central gutter and read column by column; hyphenated line breaks are rejoined; question sets and answer keys are removed.
+  \item[19. How does chunking work?] Sentences are packed greedily up to 512 tokens within a section, and each new chunk starts with whole trailing sentences worth up to 64 tokens from the previous one.
+  \item[20. What was the tokenizer bug?] Chunks were sized with a tiktoken tokenizer, but the embedding model counts about 7\% more WordPiece tokens and truncates at 512, so full chunks silently lost their tails. The fix was to count with the model's own tokenizer; the largest chunk is now 487 tokens.
+  \item[21. How is ingestion idempotent and resumable?] Point ids are \code{uuid5} of the chunk id, so rewriting a chunk overwrites it; before embedding, existing ids are read back and skipped. Downloads write to a partial file and resume with HTTP range requests.
+  \item[22. Why keep glossaries, and what does that cost?] Definitions answer real questions, so they stay --- but glossary passages make up 16.5\% of the index and concatenate many terms, which is part of why short \enquote{what is X?} questions retrieve poorly.
+\end{description}
+
+\section{Retrieval}
+
+\begin{description}[style=nextline]
+  \item[23. Why retrieve 20 and keep 5?] A reranker needs a wider pool. The baseline found the gold passage among 20 candidates 96.7\% of the time but kept it in the top 5 only 88.0\% of the time.
+  \item[24. How did you know reranking was the only thing that changed?] The profile predicted that pool recall could not move, because reranking only reorders; it stayed at 0.967, while recall@context rose to 0.913 and MRR to 0.830.
+  \item[25. Why did reranking slightly hurt multi-hop questions?] The repository's explanation: a cross-encoder scores passages independently, so it promotes near-duplicates of the strongest match and can push out the second passage a hop needs. The drop, $-$0.028, is one passage, and the mechanism was not isolated experimentally.
+  \item[26. Why did decomposition fail?] Rank fusion favours passages that several sub-questions retrieve --- the generic ones --- while the passage each hop needs appears in one list. Every multi-hop gold passage reached the candidate pool, but multi-hop recall@context fell from 0.861 to 0.778.
+  \item[27. What does \enquote{what is tissue?} reveal?] Retrieval finds the right section, but the top chunk begins mid-sentence and lacks the definition, which lives in glossary passages that do not reach the top five. It is a chunking problem, documented as a limitation.
+  \item[28. Did you try BGE's query instruction prefix?] Yes, for that question; the top three results were unchanged, so it was not adopted.
+\end{description}
+
+\section{Generation and citations}
+
+\begin{description}[style=nextline]
+  \item[29. How is the prompt designed?] A system instruction with five rules --- use only the numbered passages, cite every claim with a specific marker, say what is missing rather than guess, never cite an unsupplied number, be direct --- and a user message with numbered, labelled passages. It is versioned \code{answer-v1}.
+  \item[30. How are citations validated, and what are the limits?] Markers such as \code{[2]} or \code{[2, 3]} are parsed; numbers outside the supplied passages are removed, pruning inside groups. The limit is that a valid marker does not prove the passage supports the sentence.
+  \item[31. What happens with no passages, or an empty completion?] No passages: a fixed message without calling the model. An empty completion returns the same message, which misleadingly blames the textbooks.
+  \item[32. Is temperature 0 deterministic?] No. Three identical calls returned 315, 300 and 307 characters, and in this analysis the same prompt produced 130 and 156 output tokens.
+\end{description}
+
+\section{The self-check}
+
+\begin{description}[style=nextline]
+  \item[33. How does the grader score a draft?] It returns JSON claims labelled supported (1), partial (0.5) or unsupported (0); the score is their mean, and a separate flag marks refusals.
+  \item[34. Why the refusal flag?] A refusal is fully supported by passages that lack the answer, so it scores 1.0 and would be accepted; the flag makes the loop abstain instead.
+  \item[35. What happens if grading fails?] The draft is accepted, because refusing on an API error would look cautious while actually being broken. The cost: the answer is returned unverified, and the demo still says the self-check passed --- which happened during this analysis.
+  \item[36. Did the retry help?] It fired once in 58 questions (score 0.75, then 1.0 after re-retrieval). In practice the loop is an abstention gate.
+  \item[37. Did the self-check improve answer quality?] Not measurably: on the 43 questions both profiles answered, relevancy rose by 0.037 and faithfulness by 0.009, inside the noise band. The headline gain came from removing hard questions from the average.
+  \item[38. Why weren't the thresholds tuned?] Twelve unanswerable questions are too few to fit two thresholds without overfitting and using up the gold set. In the committed runs every abstention came from the refusal flag, not from the thresholds.
+  \item[39. What do the false abstentions tell you?] They were retrieval misses: one of two gold passages absent from the prompt, or the gold passage not among the candidates at all. No threshold fixes that --- and in one case the loop discarded a useful partial answer.
+\end{description}
+
+\section{Evaluation and results}
+
+\begin{description}[style=nextline]
+  \item[40. How was the gold set built, and what are its risks?] 58 questions: factual and multi-hop drafted from passages by a model and verified by the author; unanswerable questions proposed by a model and checked for being in domain, not near-duplicates, and unanswered by the passages. Risks: small, model-written, one reviewer, passage-shaped, used throughout development.
+  \item[41. Why deterministic retrieval metrics alongside RAGAS?] They are free, exact and locate faults: a model-judged context score can be low because of retrieval or because the judge disagreed, while recall against gold ids cannot.
+  \item[42. Explain the validity rule.] If more than 10\% of questions fail, the report withholds every metric, because an earlier run that lost 39 of 58 questions reported high faithfulness measured almost only on easy questions.
+  \item[43. How do you compare profiles when abstentions change the denominator?] Compare on the questions both profiles answered --- 43 for \code{rerank} against \code{corrective}.
+  \item[44. What is your noise floor?] Model-judged metrics moved by up to about 0.05 between runs of the same profile, so smaller differences are not claimed; retrieval metrics are exact. Two functionally identical profiles refused 12 and 11 of the 12 unanswerable questions.
+  \item[45. Tell me about the abstention judge defect. How would you prevent such bugs?] The judge allowed five output tokens, the reply was cut to \enquote{REF}, and the check required \enquote{REFUSED}, so it never flagged a refusal; the baseline's reported 0.000 hid 12 of 12 prose refusals. Prevention: unit tests with realistic model outputs, validating the judge on a small hand-labelled set, and alarms on implausible label distributions --- 275 verdicts that were all \enquote{answered} was the signal.
+  \item[46. Were the latency numbers right?] Not for the self-check profiles: the trace added nested stages to the enclosing stage, overstating totals by the retrieval and generation time. Verified by timing queries: the excess equalled the nested stages.
+  \item[47. Were the cost numbers right?] No: only generation recorded tokens. One measured grading call used 2,497 input and 612 output tokens and cost more than the generation call.
+  \item[48. Which results would you publish?] The retrieval ablation and the decomposition failure, which rest on exact metrics, with the small sample stated. Not the RAGAS deltas, which are within noise, and not the abstention comparison until it is re-measured.
+\end{description}
+
+\section{Testing and engineering}
+
+\begin{description}[style=nextline]
+  \item[49. How is the test suite hermetic?] Environment variables are cleared, Qdrant runs in memory, PDFs are built in the test, HTTP is mocked, models are faked, and the three live tests are marked \code{costly} and skip without a key. 401 tests pass; coverage is 64\%.
+  \item[50. What isn't tested?] The pipeline's wiring of reranking, decomposition, guards and the self-check (only live tests reach it), the real grading and judging calls, the CLI and the demo.
+  \item[51. What did running the container in CI reveal?] Five defects: a health check that fought the index lock, a read-only mount, three different version numbers, console scripts pointing at a missing interpreter, and configuration looked up inside the virtual environment.
+  \item[52. How do you keep documents and code consistent?] Tests compare the README's diagram with the standalone copy, forbid claims of a threshold sweep, and require gold-set provenance to be quoted verbatim. They do not catch everything: the README's description of \code{/v1/search} is still wrong.
+  \item[53. How is the version managed?] One \code{__version__}, read by the build and reported by the API; CI checks that CLI and API agree. The latest release tag is one patch ahead of that version.
+  \item[54. How are secrets handled?] Ignore rules, gitleaks before every commit and over the full history in CI, \code{SecretStr} values, and the Gemini key set as a Space secret through the API, never written to a file.
+\end{description}
+
+\section{Performance and scaling}
+
+\begin{description}[style=nextline]
+  \item[55. Where does the time go?] Embedding about 70\,ms and search about 30\,ms; reranking 20 passages about 2.1\,s on the development CPU; generation about 1--2\,s; grading about 1--5\,s, with occasional free-tier spikes.
+  \item[56. How would you cut latency?] Pre-load models at startup, rerank 10 candidates instead of 20, make grading cheaper, cache common questions, and stream the answer.
+  \item[57. What about cold starts?] Models load lazily, so the first question pays: in each committed run with reranking, the first question took about 40--44 seconds. Warming the models at startup removes that.
+  \item[58. How does it handle concurrency?] The API runs handlers in a thread pool over one shared pipeline, which is untested under concurrent load; the demo answers one question at a time; the free tier caps throughput.
+\end{description}
+
+\section{Reflective questions}
+
+\begin{description}[style=nextline]
+  \item[59. Tell me about a time your measurement was wrong.] The first reranking ablation showed MRR and context recall bit-identical to the baseline while context precision moved. The metrics were reading the pre-rerank list; separating the candidate, ranked and context lists fixed it, and a test holds it.
+  \item[60. What would you do differently?] \emph{Opinion:} test the measurement code with realistic model outputs from the start, version every prompt, store per-stage timings, and write integration tests for every profile before adding features.
+  \item[61. What are you most proud of?] \emph{Opinion:} the negative result kept in the repository with its mechanism explained, and a pipeline that rebuilds from the PDFs to the same 3,608 chunks.
+  \item[62. How did you decide what not to build?] With numbers: no hybrid search because pool recall was already 0.967, no threshold sweep because it would overfit twelve questions, no larger reranker because it would not fit free hosting, and no framework because the code did not need one.
+  \item[63. What would you do with one more week?] Fix the measurement defects and re-run, add integration tests, split glossaries per term, try reserved context slots for multi-hop questions, and grow the gold set with repeated runs.
+\end{description}
+
+\section{Curveballs}
+
+\begin{description}[style=nextline]
+  \item[64. If the baseline already refused unanswerable questions, what does the project add?] Measured retrieval improvements, validated citations, a documented negative result, reproducible ingestion and deployment, and an explicit, citation-free, machine-readable abstention in place of free-text refusals. Say plainly that the self-check did not create the ability to refuse.
+  \item[65. Isn't a regex guard pointless?] It is a cheap first layer with zero false positives on the corpus that stops canonical attacks before they spend quota. It is not a defence against a determined attacker; grounding limits the damage, and a model-based classifier would be the next step if users could add documents.
+  \item[66. Fifty-eight questions is tiny. Why trust any of it?] Agree that it is small. Retrieval metrics are exact but cover a narrow distribution; model-judged differences below about 0.05 are not claimed; the next step is a larger set with repeated runs and confidence intervals.
+  \item[67. Why should I believe the citations?] Every displayed citation is guaranteed to point at a passage the model was given, and it carries a printed page you can check. Whether the passage supports the sentence is what the grader checks --- when it runs.
+  \item[68. Why not start from a LangChain RAG template?] The pipeline is a few hundred lines over three libraries, and owning them made tracing, validation and measurement straightforward. LlamaIndex was planned and removed because nothing needed it. Frameworks are reasonable for quick prototypes.
+\end{description}

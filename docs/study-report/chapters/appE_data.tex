@@ -1,0 +1,179 @@
+\chapter{Data Tables}
+\label{app:data}
+
+Reference tables behind Part III. Committed figures were recomputed from the five run files in \code{eval/results/}; figures marked as measured come from this analysis.
+
+\begin{caution}[these tables describe commit \code{fa5164b}]
+The run files have since been re-judged and rewritten, so the abstention block and the RAGAS aggregates in the repository now differ from the \enquote{committed} columns below. The corrected values are in Appendix~\ref{app:fixes}. Retrieval metrics, index statistics and stage costs are unaffected --- the judging bug never touched them.
+\end{caution}
+
+\section{Gold set composition}
+
+\begin{center}\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+& \textbf{Factual} & \textbf{Multi-hop} & \textbf{Unanswerable} & \textbf{Total}\\
+\midrule
+Questions & 28 & 18 & 12 & 58\\
+Gold passages per question & 1 & 2 & 0 & \\
+Verified by & author & author & checks + author & \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+By book: 24 \emph{Biology} only, 19 \emph{Anatomy and Physiology} only, 3 both, 12 none. Digest \code{258cb6f9b1a2ab04}. No ambiguous questions.
+
+\section{Aggregate metrics by profile}
+
+\begin{center}\footnotesize
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+& \code{baseline} & \code{rerank} & \code{decompose} & \code{corrective} & \code{guarded}\\
+\midrule
+Faithfulness & 0.9476 & 0.9498 & 0.9511 & 0.9593 & 0.9621\\
+Answer relevancy & 0.7553 & 0.7698 & 0.7089 & 0.8443 & 0.8205\\
+Context precision & 0.7322 & 0.7918 & 0.6898 & 0.8191 & 0.8277\\
+Context recall & 0.9384 & 0.9457 & 0.8732 & 0.9806 & 0.9545\\
+RAGAS-graded questions & 46 & 46 & 46 & 43 & 44\\
+\midrule
+Recall@20 & 0.9674 & 0.9674 & 0.9565 & 0.9674 & 0.9674\\
+Hit rate & 0.9783 & 0.9783 & 0.9565 & 0.9783 & 0.9783\\
+Recall@context & 0.8804 & 0.9130 & 0.8261 & 0.9130 & 0.9130\\
+MRR & 0.7697 & 0.8304 & 0.7690 & 0.8304 & 0.8304\\
+\midrule
+Input tokens (total) & 139,217 & 140,548 & 138,070 & 143,088 & 140,548\\
+Output tokens (total) & 3,427 & 3,533 & 3,671 & 3,660 & 3,851\\
+List price (total, USD) & 0.0153 & 0.0155 & 0.0153 & 0.0158 & 0.0156\\
+Answers served from cache & 0 & 0 & 47 & 0 & 58\\
+Failed questions & 0 & 0 & 0 & 0 & 0\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Metrics by question type}
+
+\begin{center}\footnotesize
+\begin{tabular}{@{}llcccccccc@{}}
+\toprule
+\textbf{Profile} & \textbf{Type} & \textbf{Faith.} & \textbf{Relev.} & \textbf{C.prec.} & \textbf{C.rec.} & \textbf{Rec@20} & \textbf{MRR} & \textbf{Rec@ctx} & \textbf{Hit}\\
+\midrule
+\code{baseline} & factual & 0.943 & 0.839 & 0.790 & 0.929 & 0.964 & 0.744 & 0.893 & 0.964\\
+& multi-hop & 0.954 & 0.625 & 0.642 & 0.954 & 0.972 & 0.810 & 0.861 & 1.000\\
+\code{rerank} & factual & 0.923 & 0.862 & 0.897 & 1.000 & 0.964 & 0.839 & 0.964 & 0.964\\
+& multi-hop & 0.992 & 0.626 & 0.628 & 0.861 & 0.972 & 0.817 & 0.833 & 1.000\\
+\code{decompose} & factual & 0.932 & 0.810 & 0.765 & 0.893 & 0.929 & 0.737 & 0.857 & 0.929\\
+& multi-hop & 0.981 & 0.552 & 0.573 & 0.843 & 1.000 & 0.819 & 0.778 & 1.000\\
+\code{corrective} & factual & 0.955 & 0.900 & 0.897 & 1.000 & 0.964 & 0.839 & 0.964 & 0.964\\
+& multi-hop & 0.967 & 0.740 & 0.673 & 0.944 & 0.972 & 0.817 & 0.833 & 1.000\\
+\code{guarded} & factual & 0.938 & 0.905 & 0.930 & 1.000 & 0.964 & 0.839 & 0.964 & 0.964\\
+& multi-hop & 1.000 & 0.687 & 0.665 & 0.882 & 0.972 & 0.817 & 0.833 & 1.000\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+RAGAS values for \code{corrective} and \code{guarded} exclude questions they abstained on (multi-hop: 15 and 17 graded; factual: 28 and 27).
+
+\section{Latency and tokens per question}
+
+\begin{center}\small
+\begin{tabular}{@{}lrrrrrr@{}}
+\toprule
+\textbf{Profile} & \textbf{Mean ms} & \textbf{Median ms} & \textbf{Min ms} & \textbf{Max ms} & \textbf{Tokens in/out} & \textbf{USD/question}\\
+\midrule
+\code{baseline} & 1,091 & 1,022 & 848 & 2,241 & 2,400 / 59 & 0.000264\\
+\code{rerank} & 6,856 & 3,100 & 2,820 & 44,109 & 2,423 / 61 & 0.000267\\
+\code{decompose} & 2,635 & 2,441 & 1,722 & 9,124 & 2,381 / 63 & 0.000263\\
+\code{corrective} & 22,031 & 21,405 & 19,534 & 45,887 & 2,467 / 63 & 0.000272\\
+\code{guarded} & 21,738 & 21,032 & 19,031 & 40,384 & 2,423 / 66 & 0.000269\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Self-check latency includes double-counted stages; self-check and decomposition tokens and prices omit grading or decomposition calls (Chapter~\ref{ch:observability}).
+
+\section{Reranking and decomposition behaviour}
+
+\begin{center}\small
+\begin{tabular}{@{}lccc@{}}
+\toprule
+& \code{rerank} & \code{corrective} & \code{guarded}\\
+\midrule
+Mean candidates reordered (of 20) & 17.7 & 17.7 & 17.7\\
+Questions whose top passage changed & 32 & 33 & 32\\
+Questions with a passage promoted into the top 5 & 55 & 55 & 55\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\code{corrective} differs by one question because its single retry re-ranked a reformulated query. Decomposition split 6 factual, 11 multi-hop and 9 unanswerable questions (26 of 58).
+
+\section{Self-check decisions}
+
+\begin{center}\small
+\begin{tabular}{@{}lcc@{}}
+\toprule
+& \code{corrective} & \code{guarded}\\
+\midrule
+Accepted on the first attempt & 42 & 45\\
+Abstained on the first attempt & 15 & 13\\
+Retried, then accepted & 1 & 0\\
+Attempts with the refusal flag set & 15 & 13\\
+Unmeasured (failed) grading attempts & 0 & 0\\
+Mean / minimum groundedness score & 0.996 / 0.75 & 1.000 / 1.00\\
+Mean claims per attempt & 2.68 & 2.64\\
+Partial verdicts, all attempts & 0 & 0\\
+Unsupported verdicts, all attempts & 1 & 0\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Abstention, committed and corrected}
+
+\begin{center}\small
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+& \multicolumn{3}{c}{\textbf{Committed}} & \multicolumn{3}{c}{\textbf{Corrected judge (measured)}}\\
+\textbf{Profile} & Unans. refused & Answ. refused & Recall & Unans. refused & Answ. refused & Recall\\
+\midrule
+\code{baseline} & 0 / 12 & 0 / 46 & 0.000 & 12 / 12 & 6 / 46 & 1.000\\
+\code{rerank} & 0 / 12 & 0 / 46 & 0.000 & 12 / 12 & 5 / 46 & 1.000\\
+\code{decompose} & 0 / 12 & 0 / 46 & 0.000 & 12 / 12 & 8 / 46 & 1.000\\
+\code{corrective} & 12 / 12 & 3 / 46 & 1.000 & 12 / 12 & 6 / 46 & 1.000\\
+\code{guarded} & 11 / 12 & 2 / 46 & 0.917 & 11 / 12 & 6 / 46 & 0.917\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Index statistics (measured)}
+
+\begin{center}\small
+\begin{tabular}{@{}lr@{\qquad}lr@{}}
+\toprule
+Chunks & 3,608 & \emph{Biology} / \emph{A\&P} & 1,765 / 1,843\\
+Mean / median tokens & 428 / 455 & Minimum / maximum & 44 / 487\\
+Over 512 tokens & 0 & Under 120 tokens & 70\\
+Without a section & 61 (1.7\%) & Without a printed page & 0\\
+From Glossary sections & 594 (16.5\%) & Spanning more than one page & 1,990 (55\%)\\
+Index size on disk & 34.9\,MB & Licence values & CC BY 4.0 only\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Stage costs on the development machine (measured)}
+
+\begin{center}\small
+\begin{tabular}{@{}lr@{}}
+\toprule
+Input guard (per question) & 13\,µs\\
+Embed question (median of 9) & 68\,ms\\
+Qdrant search, top 20 (median of 9) & 33\,ms\\
+Rerank 20 passages (median of 9) & 2,142\,ms\\
+Rerank 5 passages (median of 3) & 444\,ms\\
+Context guard, 5 passages (median of 9) & 2.4\,ms\\
+Open index / first embedding / first rerank & 725 / 1,806 / 3,227\,ms\\
+Generation call (two runs) & 1,782 and 1,902\,ms\\
+Grading call (successful) & 4,569\,ms; 2,497 in, 612 out tokens\\
+Full rebuild of the index & 1,944\,s\\
+\bottomrule
+\end{tabular}
+\end{center}

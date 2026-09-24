@@ -1,0 +1,70 @@
+\chapter{Limitations}
+\label{ch:limitations}
+
+This chapter lists what VidyaRAG cannot do, or does not do well, grouped by area. The first group in each section is verified from the code, the documents or measurements; inferred limitations are marked.
+
+\section{Scope of the corpus and the questions}
+
+\begin{itemize}
+  \item \textbf{Two introductory textbooks only.} \emph{Biology} (2016) and \emph{Anatomy and Physiology} (2013), first editions, in English. Anything outside them should be refused.
+  \item \textbf{Single-turn questions.} There is no conversation history, so follow-up questions (\enquote{and what about in plants?}) are answered without the earlier context.
+  \item \textbf{Text only.} The parser skips image blocks, so information carried only by figures is not retrievable; captions survive only as text \ev{src/vidyarag/ingest/parse.py:229-231}.
+  \item \textbf{Short definitional questions are weak}, as the README states: the defining sentence can fall into a chunk that is never retrieved, and one-line definitions live in glossary passages that rank poorly (Section~\ref{sec:chunking}).
+  \item \textbf{Multi-hop questions are harder}: the reranker slightly lowered multi-hop context recall, and decomposition made it worse.
+\end{itemize}
+
+\begin{inferred}
+Tables in the PDFs are extracted as text blocks and may lose their row and column structure. The first editions are a decade old, so some content may be superseded by later scientific consensus. Questions phrased with exact technical terms that dense retrieval misses have no fallback, because there is no keyword search.
+\end{inferred}
+
+\section{Answer quality}
+
+\begin{itemize}
+  \item \textbf{The model can still be wrong} with valid citations; the README and the demo footer say so.
+  \item \textbf{A valid citation is not proof}: the validator checks that a marker points at a supplied passage, not that the passage supports the sentence.
+  \item \textbf{Answers are not reproducible exactly}, even at temperature 0.
+  \item \textbf{Only five passages} reach the model, so broad questions get partial coverage.
+\end{itemize}
+
+\section{The self-check}
+
+\begin{itemize}
+  \item \textbf{It is mainly a refusal detector}: in the committed runs every abstention came from the refusal flag, and the thresholds decided one retry.
+  \item \textbf{It fails open}: when grading fails, the answer is returned unverified and presented as checked.
+  \item \textbf{The grader is itself a language model} and its verdicts vary between runs.
+  \item \textbf{One retry at most}, and never after a refusal.
+  \item \textbf{Its thresholds are untuned}, by design.
+\end{itemize}
+
+\section{Safety}
+
+\begin{itemize}
+  \item \textbf{Regular-expression guards} stop canonical injection phrasings and little else, and can block legitimate questions.
+  \item \textbf{No output screening}, authentication, rate limiting, or privacy notice (Chapter~\ref{ch:security}).
+\end{itemize}
+
+\section{Evaluation}
+
+\begin{itemize}
+  \item \textbf{58 questions}: 28 factual, 18 multi-hop, 12 unanswerable, no ambiguous ones. Per-type figures rest on 12--28 questions.
+  \item \textbf{Model-written questions, one reviewer}, who is also the builder.
+  \item \textbf{Passage-shaped questions}, which under-sample dictionary-style lookups (stated in the README).
+  \item \textbf{One run per profile}; the noise floor rests on two runs of the baseline, one of them uncommitted.
+  \item \textbf{Model-judged metrics} from a lite model; no human grading of answers.
+  \item \textbf{Three committed quantities are wrong}: abstention (for three profiles, partly for two), self-check latency, and self-check and decomposition cost (Chapter~\ref{ch:findings}).
+\end{itemize}
+
+\section{Performance and operations}
+
+\begin{itemize}
+  \item \textbf{CPU reranking} takes about 2 seconds for 20 passages on the development laptop, more under load.
+  \item \textbf{Cold starts} load, and in a fresh deployment download, the models on the first question.
+  \item \textbf{Free-tier model limits} cap throughput and cause transient errors; three 503 responses were observed during this analysis.
+  \item \textbf{Exact vector search} in embedded mode is suited to this corpus size, not to much larger ones.
+  \item \textbf{No concurrency or load testing}; the demo processes one question at a time.
+  \item \textbf{Manual deployment}; no monitoring, alerting or query analytics.
+\end{itemize}
+
+\begin{inferred}[what these limitations mean for claims]
+VidyaRAG demonstrates a careful, well-instrumented RAG pipeline with honest ablations over a small, curated corpus. It does not demonstrate production readiness, robustness to adversarial users, or statistically significant quality differences, and it should not be described as doing so.
+\end{inferred}

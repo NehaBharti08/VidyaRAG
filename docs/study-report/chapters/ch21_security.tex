@@ -1,0 +1,132 @@
+\chapter{Security}
+\label{ch:security}
+
+VidyaRAG is a public, unauthenticated demo backed by a free-tier model API, built by one person, with a corpus nobody else can write to. This chapter describes the security controls the repository actually implements, the ones it does not, and the ones worth adding --- kept in separate sections, as the brief requires.
+
+\section{What there is to protect}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.6cm}LL@{}}
+\toprule
+\textbf{Asset} & \textbf{Why it matters} & \textbf{Where it lives}\\
+\midrule
+\code{GOOGLE_API_KEY} & Anyone holding it can spend the account's Gemini quota & Local \code{.env}; Space secret\\
+\code{HF_TOKEN} & Write access to the Space & Local \code{.env} or the Hugging Face CLI's own store\\
+Answer integrity & A wrong but confident, cited answer is the failure the project exists to prevent & The pipeline's prompt, citations, grader and guards\\
+Demo availability & The project's public face & Hugging Face Space\\
+Corpus and index integrity & Every citation depends on them & \code{data/raw}, \code{data/index}, the Space's files\\
+Users' questions & May contain personal information & Sent to the Gemini API; not stored by VidyaRAG\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Implemented controls}
+\label{sec:sec-implemented}
+
+\subsection{Keeping secrets out of the repository}
+
+\begin{itemize}
+  \item \textbf{Ignore rules} cover \code{.env} and \code{.env.*} (except \code{.env.example}), \code{*.pem}, \code{*.key}, \code{secrets.json}, \code{.secrets/}, and token files such as \code{.hf_token}, \code{*.token} and \code{hf_token*}. The comment explains the last group: \enquote{a token pasted into a scratch file here would otherwise be one \code{git add -A} away from history, and a leaked token survives \code{git rm}} \ev{.gitignore:1-17}. \code{.dockerignore} also excludes \code{.env} and \code{.env.*}.
+  \item \textbf{Only placeholders are committed.} \code{.env.example} contains values such as \code{GOOGLE_API_KEY=AQ.xxxx...} and \code{HF_TOKEN=hf_xxxx...}.
+  \item \textbf{Secret scanning runs twice.} gitleaks is the first pre-commit hook --- \enquote{the cheap check runs before anything else} --- and a CI job runs gitleaks over the full git history on every push and pull request \ev{.pre-commit-config.yaml:3-14}, \ev{.github/workflows/ci.yml:75-85}. The CI run for the analysed commit passed \tagV.
+  \item \textbf{Two more hooks} reject private keys and files over 2\,MB; the comment on the size check says it \enquote{catches a stray PDF or a Qdrant index before it enters history} \ev{.pre-commit-config.yaml:16-30}.
+\end{itemize}
+
+\subsection{Handling secrets at runtime}
+
+\begin{itemize}
+  \item Keys are pydantic \code{SecretStr} values, so they do not appear in \code{repr} or logs (test: \code{test_secrets_are_not_exposed_by_repr}).
+  \item \code{describe_target} prints a cloud Qdrant target with the key replaced by \code{***} (test: \code{test_cloud_target_redacts_the_api_key}).
+  \item The deploy script reads the Gemini key from the local environment and sets it as a Space secret through the Hugging Face API, so \enquote{it is not written into the Space repo, not printed, and not committed here} \ev{scripts/deploy\_space.py:13-15, 156-161}.
+  \item CI has no real credentials at all, and the test fixtures delete every relevant environment variable before each test \ev{tests/conftest.py}.
+\end{itemize}
+
+\subsection{The container}
+
+\begin{itemize}
+  \item Runs as an unprivileged user (\code{vidyarag}, uid 1000): \enquote{Nothing here needs root, and a container that does not need it should not have it} \ev{Dockerfile:50-52, 89}.
+  \item A two-stage build: the runtime image receives the virtual environment and configuration, not the build tools, the source tree, the tests or the evaluation dependencies \ev{Dockerfile:47-73}.
+  \item The index is mounted, not baked in, and only the data folder is writable by the service user \ev{Dockerfile:75-87}.
+\end{itemize}
+
+\subsection{Input handling and the model}
+
+\begin{itemize}
+  \item \textbf{Request validation.} Questions must be 1--2,000 characters; \code{top_k} must be 1--20; the search request rejects unknown fields \ev{src/vidyarag/api/models.py:13-20, 114-133}.
+  \item \textbf{Injection screening} of questions and retrieved passages (Chapter~\ref{ch:guardrails}).
+  \item \textbf{Grounding as a safety property.} The prompt restricts the model to the supplied passages, the citation validator removes references to passages that were never supplied, and the self-check can replace an unsupported answer with an abstention (Chapters~\ref{ch:generation} and~\ref{ch:corrective}).
+  \item \textbf{No conversation state}: every question is answered independently, so one visitor cannot influence another's answers.
+\end{itemize}
+
+\subsection{Supply chain and data provenance}
+
+\begin{itemize}
+  \item Dependencies are installed from a committed lockfile with \code{--frozen} in CI and Docker; model identifiers are pinned rather than aliased; pre-commit hooks are pinned to exact revisions.
+  \item The evaluation stack (RAGAS and LangChain) is kept out of the runtime image.
+  \item The corpus is fetched over HTTPS from OpenStax, its SHA-256 checksums are recorded, and the PDFs are opened to prove they are real documents (Chapter~\ref{ch:ingestion}).
+\end{itemize}
+
+\subsection{Licensing and privacy}
+
+\begin{itemize}
+  \item The corpus licence was checked per edition, and CC BY attribution is carried on every stored passage, shown with every citation, and stated in the demo footer.
+  \item VidyaRAG stores nothing about a query: no request logging, no database, no analytics.
+\end{itemize}
+
+\section{Not implemented}
+\label{sec:sec-missing}
+
+Each item below was checked for in the code, configuration and workflows, and found absent.
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{4.4cm}>{\raggedright\arraybackslash}p{11.4cm}@{}}
+\toprule
+\textbf{Control} & \textbf{Current state}\\
+\midrule
+\endhead
+Authentication and authorisation & None on the API or the demo. Anyone who can reach either can use them.\\
+Rate limiting and quotas & None per client. The demo's only back-pressure is a queue of 16; the API has none. Every accepted question can spend Gemini quota.\\
+CORS policy & Not configured in the FastAPI application.\\
+Output screening & Answers are checked for grounding, never for unsafe content or leaked instructions.\\
+Error-detail hygiene & The demo shows any exception's type and message to anonymous visitors \ev{app/app.py:151-154}.\\
+Privacy notice & Questions and retrieved passages are sent to Google's Gemini API, but the demo does not say so \ev{app/app.py:187-193}.\\
+Dependency vulnerability scanning & No Dependabot, pip-audit or similar configuration in the repository.\\
+Container image scanning and SBOM & None; the image is built in CI but not scanned or published.\\
+Action pinning by commit SHA & Workflows use major-version tags such as \code{actions/checkout@v4} and \code{gitleaks/gitleaks-action@v2}.\\
+Space dependency pinning & The Space installs major-version ranges and resolves them at build time, by design (Chapter~\ref{ch:dependencies}).\\
+Local Qdrant hardening & The compose file publishes ports 6333 and 6334 with TLS disabled and no API key --- acceptable for a developer laptop, not for a shared network \ev{docker-compose.yml:11-23}.\\
+\bottomrule
+\end{longtable}
+
+\section{Risk assessment}
+
+\begin{inferred}[likelihood and impact are judgements, not measurements]
+\begin{center}\small
+\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{3.4cm}>{\centering\arraybackslash}p{1.6cm}>{\centering\arraybackslash}p{1.6cm}L@{}}
+\toprule
+\textbf{Risk} & \textbf{Likely} & \textbf{Impact} & \textbf{Reasoning}\\
+\midrule
+Quota exhaustion of the public demo by scripted traffic & Medium & Medium & No authentication or rate limit; the free tier is small. The demo would return errors until the quota resets.\\
+Prompt injection changing answers & Low & Low--medium & Regex guards are bypassable, but the model only sees the passages, the system prompt is public anyway, and there is no state or tool access to abuse.\\
+Poisoned corpus passage & Very low & High & Would require replacing the OpenStax PDFs or the index; the context guard offers partial defence.\\
+Secret committed to git & Low & High & Ignore rules plus two gitleaks layers.\\
+Personal data in questions reaching a third party & Medium & Low--medium & Inherent to using a hosted model; undisclosed in the UI.\\
+Vulnerable dependency & Medium & Medium & No automated scanning; the Space resolves fresh versions on rebuild.\\
+Information disclosure through error messages & Medium & Low & Exception text is shown in the demo.\\
+\bottomrule
+\end{tabularx}
+\end{center}
+\end{inferred}
+
+\section{Recommended controls}
+
+\begin{recommended}[in priority order]
+\begin{enumerate}
+  \item \textbf{Protect the quota}: a per-IP rate limit on \code{/v1/query}, and an optional API key for the HTTP API.
+  \item \textbf{Stop leaking internals}: show a generic message in the demo and log the exception server-side.
+  \item \textbf{Tell users where their question goes}: one sentence in the demo footer naming Google's Gemini API.
+  \item \textbf{Automate dependency hygiene}: Dependabot (or Renovate) for \code{uv.lock} and Actions, plus \code{pip-audit} in CI; pin Actions by commit SHA.
+  \item \textbf{Scan the image}: add an image scanner to the Docker workflow.
+  \item \textbf{Harden answers where it is cheap}: flag answers whose grading failed (Section~\ref{sec:trace-failopen}) instead of presenting them as verified.
+  \item \textbf{Rotate credentials} that have ever been handled outside a secret store, and keep the deploy token scoped to the one Space.
+\end{enumerate}
+\end{recommended}

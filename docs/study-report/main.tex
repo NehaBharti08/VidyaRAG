@@ -1,0 +1,99 @@
+\documentclass[11pt,a4paper,openany]{report}
+\input{preamble}
+
+% Chapters are pulled in only if their file exists, so the report compiles at
+% every stage of writing; a missing chapter is announced in the log.
+\newcommand{\chap}[1]{\InputIfFileExists{chapters/#1}{}{\typeout{VIDYARAG-REPORT: missing chapter #1}}}
+
+\begin{document}
+
+\hypersetup{pageanchor=false}
+\begin{titlepage}
+\centering
+\vspace*{2.2cm}
+{\sffamily\bfseries\color{vrblue}\fontsize{44}{48}\selectfont VidyaRAG\par}
+\vspace{0.7cm}
+{\sffamily\LARGE A Complete Technical Study of an Agentic,\\[2pt] Self-Correcting RAG Study Assistant\par}
+\vspace{0.9cm}
+{\color{vrblue!55}\rule{0.62\textwidth}{0.9pt}\par}
+\vspace{0.7cm}
+{\large Repository analysis \textperiodcentered{} learning guide \textperiodcentered{} interview preparation\par}
+\vfill
+{\small
+\begin{tabular}{@{}>{\sffamily\bfseries}r@{\hspace{1.2em}}l@{}}
+Repository & \url{https://github.com/NehaBharti08/VidyaRAG}\\
+Snapshot analysed & branch \code{main}, commit \code{fa5164b}, package version 1.2.1\\
+Live demo & \url{https://huggingface.co/spaces/nehabharti0802/VidyaRAG}\\
+Project author & Neha Bharti\\
+Analysis completed & September 2026\\
+\end{tabular}\par}
+\vspace{1.4cm}
+{\footnotesize\color{vrgray} Every statement in this report is labelled as verified, inferred or recommended.\\
+The conventions are explained in \emph{How to Read This Report}.\par}
+\end{titlepage}
+\hypersetup{pageanchor=true}
+
+\pagenumbering{roman}
+\tableofcontents
+\listoffigures
+\chap{ch00_reading_guide}
+\clearpage
+\pagenumbering{arabic}
+
+\part{Understanding the Project}
+\chap{ch01_plain_language}
+\chap{ch02_concepts}
+\chap{ch03_architecture}
+
+\part{How the Code Works}
+\chap{ch04_repository}
+\chap{ch05_environment}
+\chap{ch06_dependencies}
+\chap{ch07_configuration}
+\chap{ch08_ingestion}
+\chap{ch09_retrieval}
+\chap{ch10_generation}
+\chap{ch11_corrective}
+\chap{ch12_guardrails}
+\chap{ch13_observability}
+\chap{ch14_interfaces}
+\chap{ch15_trace}
+\chap{ch16_master_flows}
+
+\part{The Evidence}
+\chap{ch17_evaluation}
+\chap{ch18_results}
+\chap{ch19_testing}
+\chap{ch20_performance}
+\chap{ch21_security}
+
+\part{Shipping It}
+\chap{ch22_deployment}
+\chap{ch23_local_setup}
+\chap{ch24_reproducibility}
+
+\part{Critical Analysis}
+\chap{ch25_history}
+\chap{ch26_findings}
+\chap{ch27_tradeoffs}
+\chap{ch28_limitations}
+\chap{ch29_improvements}
+\chap{ch30_rebuilding}
+
+\part{Interview Preparation}
+\chap{ch31_explaining}
+\chap{ch32_why}
+\chap{ch33_questions}
+\chap{ch34_resume}
+
+\appendix
+\chap{appA_glossary}
+\chap{appB_commands}
+\chap{appC_config}
+\chap{appD_file_map}
+\chap{appE_data}
+\chap{appF_biology}
+\chap{appG_self_audit}
+\chap{appH_fixes}
+
+\end{document}

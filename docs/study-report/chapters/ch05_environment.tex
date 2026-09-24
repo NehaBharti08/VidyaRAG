@@ -1,0 +1,198 @@
+\chapter{Development Environment and Technologies}
+\label{ch:environment}
+
+This chapter lists every technology the repository actually uses. The list was built from import statements, dependency declarations, workflow files and container files. Nothing appears here merely because RAG projects often use it, and Section~\ref{sec:not-used} lists common technologies that are verifiably absent.
+
+\section{The four environments the code runs in}
+\label{sec:environments}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.5cm}>{\raggedright\arraybackslash}p{2.4cm}>{\raggedright\arraybackslash}p{4.2cm}>{\raggedright\arraybackslash}p{6.2cm}@{}}
+\toprule
+\textbf{Environment} & \textbf{Python} & \textbf{How dependencies arrive} & \textbf{What runs there}\\
+\midrule
+\endhead
+Developer machine & 3.11.15 in the project virtual environment \tagM & \code{uv sync} from \code{uv.lock} (uv 0.12.2 installed) \tagM & Everything: download, ingest, CLI, API, demo, evaluation, tests. Docker Desktop is \emph{not} installed there, which is why image builds are proven in CI \ev{.github/workflows/docker.yml:11-13}.\\
+GitHub Actions & 3.10 and 3.11 (matrix) on \code{ubuntu-latest} & \code{uv sync --frozen --python <version>} & Lint, format check, type check and tests on both versions; secret scan; Docker build, run and health checks \ev{.github/workflows/ci.yml:30-73}.\\
+Docker image & 3.11 (\code{python:3.11-slim}) & \code{uv sync --frozen --no-dev --no-editable}, uv 0.5 copied from its official image & The HTTP API only \ev{Dockerfile:12-103}.\\
+Hugging Face Space & 3.10, fixed by the ZeroGPU platform & pip installs \code{app/requirements.txt}; the builder adds Gradio at the version pinned in the Space README (5.50.0) & The Gradio demo with its own copy of the index \ev{app/requirements.txt}, \ev{app/README\_space.md}.\\
+\bottomrule
+\end{longtable}
+
+\subsection{Why Python 3.10 is the floor}
+
+\code{pyproject.toml} declares \code{requires-python = ">=3.10,<3.13"} and explains the floor: \enquote{Hugging Face ZeroGPU images are pinned to Python 3.10 and ignore \code{python_version} in the Space README, so anything the demo imports must run there} \ev{pyproject.toml:8-13}. The reason for the \code{<3.13} ceiling is not stated; \NotDet
+
+Two Python 3.11 features had crept into the code. Rather than avoid them everywhere, the project routes them through one small compatibility module:
+
+\begin{lstlisting}[language=Python]
+UTC = timezone.utc
+
+if sys.version_info >= (3, 11):
+    StrEnum = enum.StrEnum
+else:
+    class StrEnum(str, enum.Enum):
+        """Backport of enum.StrEnum for Python 3.10. ..."""
+        __str__ = str.__str__
+\end{lstlisting}
+\vspace{-4pt}{\raggedleft\ev{src/vidyarag/\_compat.py:30-47}\par}
+
+The docstring explains the one subtle line: without \code{__str__ = str.__str__}, a member such as \code{QdrantMode.EMBEDDED} would format as \code{QdrantMode.EMBEDDED} rather than \code{embedded} on Python 3.10, \enquote{the one that silently corrupts output rather than raising.} It also explains why \code{enum.auto()} is deliberately unsupported: upstream \code{StrEnum} lowercases the member name to make an automatic value, and reimplementing that rule would create behaviour that holds on one Python version and not the other. The CI matrix runs the whole test suite on 3.10 so that the claim is tested rather than asserted \ev{.github/workflows/ci.yml:39-43}. The git history shows why this matters: the Space once failed to start because of \code{StrEnum} on 3.10 (Chapter~\ref{ch:history}).
+
+\subsection{Operating systems and hardware}
+
+\begin{itemize}
+  \item The analysed checkout lives on Windows 11, and the code carries Windows-specific handling: the CLI reconfigures its output streams to UTF-8 because the Windows default code page cannot encode Rich's spinner characters \ev{src/vidyarag/cli.py}. \code{.gitattributes} forces LF line endings for every text file so that Windows checkouts and Linux CI see identical bytes.
+  \item CI, the Docker image and the Space all run Linux.
+  \item \textbf{No GPU is used anywhere.} Embedding and reranking run on the CPU through ONNX Runtime. The Space runs on ZeroGPU hardware (the deploy script's default is \code{zero-a10g}), but only because the platform requires a GPU-decorated function to exist at startup; the app declares one and never calls it \ev{app/app.py:44-55}.
+\end{itemize}
+
+\begin{inferred}
+The \code{Makefile} uses Unix tools (\code{grep}, \code{awk}, \code{rm -rf}, \code{find}). On Windows those targets need a Unix-like shell such as Git Bash; the underlying \code{uv run ...} commands work in any shell.
+\end{inferred}
+
+\section{Technology catalogue}
+\label{sec:tech-catalogue}
+
+\begin{background}[one-line definitions of the less familiar tools]
+\begin{description}[style=sameline,leftmargin=3.3cm,font=\normalfont\bfseries]
+  \item[uv] A fast Python package and project manager: it resolves dependencies, writes a lockfile, creates virtual environments, installs Python versions and runs commands inside the environment.
+  \item[hatchling] A build backend: the component that turns a \code{pyproject.toml} project into an installable wheel.
+  \item[ONNX Runtime] An inference engine that runs neural networks exported to the ONNX format, efficiently on CPU, without PyTorch.
+  \item[fastembed] A library from the Qdrant team that runs embedding and reranking models on ONNX Runtime.
+  \item[Qdrant] A vector database. Its Python client can also run an embedded, in-process version with no server.
+  \item[pydantic-settings] Pydantic models whose fields are filled from environment variables and dotenv files.
+  \item[structlog] A logging library that emits structured key--value events, for example as JSON lines.
+  \item[Typer] A library for building command-line interfaces from type-annotated Python functions.
+  \item[RAGAS] An open-source library of LLM-judged metrics for evaluating retrieval-augmented generation.
+  \item[respx] A library that mocks the HTTP transport of \code{httpx} in tests.
+  \item[gitleaks] A scanner that detects secrets such as API keys in files and git history.
+  \item[ZeroGPU] A Hugging Face Spaces hardware tier that attaches GPUs on demand to functions decorated with \code{@spaces.GPU}.
+\end{description}
+\end{background}
+
+In the tables below, the second and third columns are verified from the repository. The last column, headed \tagI, is inference about what removing the technology would break.
+
+\subsection{Language, packaging and project tooling}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.3cm}>{\raggedright\arraybackslash}p{5.0cm}>{\raggedright\arraybackslash}p{4.8cm}>{\raggedright\arraybackslash}p{3.2cm}@{}}
+\toprule
+\textbf{Technology} & \textbf{Role in VidyaRAG} & \textbf{Stated reason, alternatives recorded} & \textbf{Without it} \tagI\\
+\midrule
+\endhead
+Python & The only language in the repository: package, tests, deploy script, app. & 3.10 floor forced by the Space (above). & ---\\
+uv & Resolves and locks dependencies (\code{uv.lock}), creates the environment, runs every Makefile target, installs Python and dependencies in CI, builds the Docker virtual environment. & The Makefile header: wrappers over \code{uv run} \enquote{so that CI, the container, and a developer's shell all execute identical commands.} No alternative is recorded. & No reproducible install from the lockfile; CI and Docker steps would need rewriting.\\
+hatchling & Build backend; reads the version from \code{src/vidyarag/__init__.py}; builds the wheel installed into the Docker image. & Dynamic version adopted after three version numbers disagreed (pyproject said 0.1.0, OpenAPI said 0.3.0, releases said v1.2.0) \ev{pyproject.toml:103-108}. & The package could not be built or installed non-editable.\\
+Make & Thin convenience targets (\code{install}, \code{ingest}, \code{serve}, \code{test}, \code{check}, \ldots). & Same reason as uv. & Nothing; commands can be typed directly.\\
+Git and GitHub & Version control, pull requests, tags \code{v0.1.0}--\code{v1.2.2}, Actions. & --- & ---\\
+\bottomrule
+\end{longtable}
+
+\subsection{Data ingestion}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.3cm}>{\raggedright\arraybackslash}p{5.0cm}>{\raggedright\arraybackslash}p{4.8cm}>{\raggedright\arraybackslash}p{3.2cm}@{}}
+\toprule
+\textbf{Technology} & \textbf{Role in VidyaRAG} & \textbf{Stated reason, alternatives recorded} & \textbf{Without it} \tagI\\
+\midrule
+\endhead
+OpenStax PDFs & The corpus: \emph{Biology} (1st edition, 1,480 pages) and \emph{Anatomy and Physiology} (1st edition, 1,420 pages). & The only CC BY 4.0 biology titles; second editions and other titles are CC BY-NC-SA 4.0 \ev{src/vidyarag/ingest/corpus.py:16-26}. & No product.\\
+PyMuPDF & Reads each PDF's outline, extracts text blocks with coordinates, reads running heads, counts pages as an integrity check. & Structure is taken from the outline because font-size heuristics \enquote{misfire on pull quotes, figure captions, and section headers that happen to wrap, and\ldots fail silently} \ev{src/vidyarag/ingest/parse.py:8-11}. & No ingestion.\\
+httpx & Streams the PDF downloads with HTTP Range resumption. & Declared directly even though other packages pull it in: \enquote{an undeclared import that survives only because another package happens to pull it in is a break waiting to happen} \ev{pyproject.toml:30-34}. & Download command fails.\\
+\bottomrule
+\end{longtable}
+
+\subsection{Vector search and local models}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.3cm}>{\raggedright\arraybackslash}p{5.0cm}>{\raggedright\arraybackslash}p{4.8cm}>{\raggedright\arraybackslash}p{3.2cm}@{}}
+\toprule
+\textbf{Technology} & \textbf{Role in VidyaRAG} & \textbf{Stated reason, alternatives recorded} & \textbf{Without it} \tagI\\
+\midrule
+\endhead
+Qdrant, via \code{qdrant-client} & Stores 3,608 vectors with citation payloads. Three modes behind one client: embedded (\code{:memory:} in tests, a folder for the demo), server (docker-compose, image \code{qdrant/qdrant:v1.12.4}), cloud. & The demo is embedded because free Qdrant Cloud clusters are suspended after about a week idle and deleted after about four weeks. Trade-off: embedded mode is a linear scan, with a 20,000-point advisory threshold. Rejected: a scheduled ping to keep a cloud cluster alive (\code{docs/DESIGN.md}). & No retrieval.\\
+fastembed & Runs the embedding model and the cross-encoder; exposes the embedding model's tokenizer, which the chunker uses to measure size. & \enquote{ONNX dense embeddings, sparse (BM25), and cross-encoder reranking --- all on CPU, without dragging in torch} \ev{pyproject.toml:24-26}. The Dockerfile puts the difference at about 400\,MB against about 2.5\,GB for a torch-based stack. & A torch-based stack and a much larger image.\\
+ONNX Runtime & The inference engine underneath fastembed (installed transitively). & --- & ---\\
+\code{BAAI/bge-base-en-v1.5} & 768-dimensional embedding model for passages and questions. & Local, free, no key; its 512-token limit sets the chunk size. Rejected: OpenAI \code{text-embedding-3-small}, which needs funded billing (\code{docs/DESIGN.md}). & Any replacement requires re-indexing; the collection refuses vectors of a different width \ev{src/vidyarag/store/collection.py:75-85}.\\
+\code{Xenova/ms-marco-MiniLM-L-6-v2} & Cross-encoder reranker, about 80\,MB, ONNX. & Size and no torch. \code{BAAI/bge-reranker-base} (1.04\,GB) was considered and never measured; Jina reranker v2 was rejected for its non-commercial licence \ev{config/default.yaml:66-72}. & Profiles with reranking fall back to dense order only if the flag is switched off.\\
+\bottomrule
+\end{longtable}
+
+\subsection{Language models}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.3cm}>{\raggedright\arraybackslash}p{5.0cm}>{\raggedright\arraybackslash}p{4.8cm}>{\raggedright\arraybackslash}p{3.2cm}@{}}
+\toprule
+\textbf{Technology} & \textbf{Role in VidyaRAG} & \textbf{Stated reason, alternatives recorded} & \textbf{Without it} \tagI\\
+\midrule
+\endhead
+Google Gemini API, via \code{google-genai} & \code{gemini-3.5-flash-lite} writes answers and splits questions for decomposition; \code{gemini-3.1-flash-lite} grades answers and drives the gold-set tools. The client is built in one place with a 90-second timeout \ev{src/vidyarag/llm/provider.py:102-144}. & Free tier without a card. Model ids are pinned, never aliased. \code{gemini-2.5-*} returns 404 for newer accounts. The lite tier was chosen because \code{gemini-3.5-flash} allowed 20 requests per day, measured. Generator and grader are different models to avoid self-grading bias. Rejected: OpenAI \code{gpt-4o-mini} (needs funded billing) \ev{config/default.yaml:9-27}. & No answers or grading. Download, ingestion and \code{/v1/search} keep working, because none of them imports the SDK.\\
+OpenAI Python SDK (evaluation only) & A \emph{client library} pointed at Google's OpenAI-compatible endpoint, used by RAGAS and the abstention judge. & RAGAS decides whether a client is asynchronous by looking for \code{chat.completions.create}; a Gemini client has no such attribute. \enquote{No OpenAI account or spend is involved} \ev{pyproject.toml:84-94}. & RAGAS metrics could not be driven by Gemini.\\
+\bottomrule
+\end{longtable}
+
+\subsection{Serving and interfaces}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.3cm}>{\raggedright\arraybackslash}p{5.0cm}>{\raggedright\arraybackslash}p{4.8cm}>{\raggedright\arraybackslash}p{3.2cm}@{}}
+\toprule
+\textbf{Technology} & \textbf{Role in VidyaRAG} & \textbf{Stated reason, alternatives recorded} & \textbf{Without it} \tagI\\
+\midrule
+\endhead
+FastAPI (on Starlette) & HTTP API with four \code{/v1} routes and generated OpenAPI documentation. & Not recorded. & No HTTP API.\\
+Uvicorn & ASGI server: the Docker \code{CMD} and \code{make serve}. & Not recorded. & API cannot be served.\\
+Gradio & The demo page (a \code{Blocks} layout). Also the SDK the Space is built with. & The Space's SDK; version pinned in the Space README because the builder injects Gradio itself \ev{app/requirements.txt:15-22}. & No demo.\\
+Typer and Rich & The \code{vidyarag} command-line tool, its tables and progress bars. & Not recorded. & No CLI.\\
+Pydantic and pydantic-settings & Configuration models, API request and response schemas, the gold-set schema, and the JSON schemas Gemini must answer in. & \code{extra="forbid"} makes typos fail loudly \ev{src/vidyarag/settings.py:248-253}. & Configuration and API validation would need rewriting.\\
+PyYAML & Loads profile files with \code{yaml.safe_load}. & --- & Profiles unreadable.\\
+python-dotenv & \code{load_dotenv} in the deploy script. & The Hugging Face library reads \code{HF_TOKEN} only from the environment \ev{scripts/deploy\_space.py:113}. & Deploy script needs the token exported by hand.\\
+structlog & JSON (or console) log events at API startup and shutdown. & Not recorded. & No structured startup logs.\\
+\bottomrule
+\end{longtable}
+
+\subsection{Evaluation}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.3cm}>{\raggedright\arraybackslash}p{5.0cm}>{\raggedright\arraybackslash}p{4.8cm}>{\raggedright\arraybackslash}p{3.2cm}@{}}
+\toprule
+\textbf{Technology} & \textbf{Role in VidyaRAG} & \textbf{Stated reason, alternatives recorded} & \textbf{Without it} \tagI\\
+\midrule
+\endhead
+RAGAS 0.4 & Faithfulness, answer relevancy, context precision (with reference) and context recall, all judged by Gemini. Imported only in \code{evaluation/metrics.py}. & Established metrics are stronger evidence than hand-written ones (\code{docs/DESIGN.md}). Two upstream problems are worked around: a broken import fixed by pinning \code{langchain-community<0.4}, and the asynchronous-client detection described above \ev{pyproject.toml:69-97}. & No RAGAS columns; the deterministic retrieval metrics are separate code and would remain.\\
+LangChain packages & Pulled in only because RAGAS imports them; never imported by project code. & The pin is the upstream workaround. & ---\\
+pandas, datasets & Declared in the evaluation group. Neither is imported by any Python file in the repository; \code{datasets} is also a declared requirement of RAGAS 0.4.3 itself \tagM. & Not stated. & Probably nothing.\\
+\bottomrule
+\end{longtable}
+
+\subsection{Quality, testing and delivery}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.3cm}>{\raggedright\arraybackslash}p{5.0cm}>{\raggedright\arraybackslash}p{4.8cm}>{\raggedright\arraybackslash}p{3.2cm}@{}}
+\toprule
+\textbf{Technology} & \textbf{Role in VidyaRAG} & \textbf{Stated reason, alternatives recorded} & \textbf{Without it} \tagI\\
+\midrule
+\endhead
+pytest, pytest-asyncio, pytest-cov & 28 test modules; asynchronous tests run automatically; coverage must stay at or above 60\%. & The coverage floor is \enquote{a floor, not a target} so an untested module added in a hurry fails the build \ev{pyproject.toml:214-219}. & No automated verification.\\
+respx & Mocks HTTP for the download tests (resume, 416 handling, ignored Range). & --- & Download tests would hit the network.\\
+ruff & Linter with a broad rule selection (pycodestyle, pyflakes, isort, bugbear, comprehensions, pyupgrade, unused arguments, simplify, tidy imports, pathlib, blind except, ruff-specific). & ruff's formatter is deliberately not enabled: \enquote{One formatter, one linter} \ev{.pre-commit-config.yaml:32-34}. & Style and bug-pattern checks lost.\\
+black & The formatter. & As above. & ---\\
+mypy & Strict type checking of \code{src/vidyarag} with the pydantic plugin. & Strict only on the core package: tests and scripts are \enquote{exploratory by nature} \ev{pyproject.toml:152-160}. & Type errors reach runtime.\\
+pre-commit and gitleaks & Local hooks: secret scan first, then hygiene hooks, ruff, black, mypy. CI runs gitleaks over the full history as a separate job. & \enquote{A leaked key in git history survives \code{git rm} and has to be rotated, so the cheap check runs before anything else} \ev{.pre-commit-config.yaml:3-5}. & Secrets could enter history unnoticed.\\
+Docker & Two-stage image for the API: non-root user, HTTP health check, index mounted as a volume. & No torch; the evaluation group excluded \ev{Dockerfile:1-9}. & No container artefact.\\
+Docker Compose & Local Qdrant server for exercising server mode; CI starts it and points the image at it. & \enquote{exercise the same server-backed path that Qdrant Cloud uses} \ev{docker-compose.yml:1-9}. & Server mode untested.\\
+GitHub Actions & Three workflows: CI, Docker, and a manually triggered evaluation. & Covered in Chapter~\ref{ch:deploy}. & No automated gate.\\
+Hugging Face Spaces and \code{huggingface_hub} & Hosts the demo; the deploy script uploads the payload with \code{HfApi} and sets the secret and variables. & Free CPU Spaces for Gradio moved behind a paid plan, so the demo uses ZeroGPU \ev{app/app.py:44-55}. & No public demo.\\
+\bottomrule
+\end{longtable}
+
+\section{What the repository does not use}
+\label{sec:not-used}
+
+None of the following appears in the dependency declarations or in any import statement in the repository's Python files. The imports were searched for PyTorch, TensorFlow, \code{transformers}, \code{sentence_transformers}, SQLAlchemy, Redis, \code{boto3}, Google Cloud and Azure SDKs, LlamaIndex, LangChain, MLflow, Weights \& Biases, Celery, Kafka, JWT and authentication libraries, \code{tiktoken}, \code{requests}, \code{aiohttp} and \code{numpy}, with no matches.
+
+\begin{itemize}
+  \item \textbf{No LLM orchestration framework.} LlamaIndex was declared, advertised and never imported, and was removed \ev{git 8fa9478}. LangChain is present only as a dependency of RAGAS in the evaluation group.
+  \item \textbf{No PyTorch, no GPU code, no model training or fine-tuning.} Every model is used pre-trained, through ONNX Runtime or the Gemini API.
+  \item \textbf{No relational or document database, cache server or message queue.} Qdrant is the only data store; everything else is files.
+  \item \textbf{No authentication, user accounts or payments.}
+  \item \textbf{No frontend framework.} The only user interface is Gradio.
+  \item \textbf{No cloud infrastructure code} (Terraform, Kubernetes, AWS, GCP or Azure SDKs). The only cloud services are the Gemini API, GitHub and Hugging Face.
+  \item \textbf{No experiment tracker.} Evaluation results are JSON and Markdown files committed to git.
+\end{itemize}
+
+\begin{interview}
+\enquote{What frameworks did you use?} is a trap if you name the usual suspects. The accurate answer is that the pipeline is written directly against \code{qdrant-client}, \code{fastembed} and \code{google-genai}. A framework was planned (LlamaIndex), found to be unused, and removed, and you can explain why: the pipeline is a few hundred lines, and a framework would have added indirection without removing any of them \ev{pyproject.toml:19-23}.
+\end{interview}

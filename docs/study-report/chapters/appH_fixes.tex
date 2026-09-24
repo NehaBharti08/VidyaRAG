@@ -1,0 +1,130 @@
+\chapter{What Was Fixed After This Analysis}
+\label{app:fixes}
+
+\begin{keyidea}[read this before quoting any number in Part III]
+Everything in Chapters~\ref{ch:results} to~\ref{ch:findings} describes the repository \emph{as it stood at commit \code{fa5164b}}. After the analysis was finished, the findings were acted on. This appendix records what changed, what the corrected measurements are, and which findings remain open, so that no reader quotes a number this project has already retracted.
+
+The work is on the branch \code{fix/honest-measurement}, in seven commits. The repository's own \code{README.md} carries the corrected results.
+\end{keyidea}
+
+\section{The correction that matters most}
+\label{sec:fix-abstention}
+
+F1 and F2 were confirmed by direct measurement against the live endpoint rather than by reading the code \tagM:
+
+\begin{measured}[the judge, at three output budgets, same question and answer]
+\begin{center}\small
+\begin{tabular}{@{}rlll@{}}
+\toprule
+\code{max_tokens} & returned content & \code{finish_reason} & read as\\
+\midrule
+5 & \code{'REF'} & \code{length} & not a refusal\\
+16 & \code{'REFUSED'} & \code{stop} & a refusal\\
+50 & \code{'REFUSED'} & \code{stop} & a refusal\\
+\bottomrule
+\end{tabular}
+\end{center}
+The shipped value was 5. The label is truncated mid-word, the parser tested \code{startswith("REFUSED")}, and so every refusal in every committed run was recorded as an answer.
+\end{measured}
+
+All five runs were then re-judged from their stored answers, which costs no generation quota because the answers were already on disk. Two independent implementations --- the throwaway script used during the analysis, and the \code{vidyarag rejudge} command written afterwards --- agree cell for cell.
+
+\begin{center}\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Profile} & \textbf{Recall (committed)} & \textbf{Recall (corrected)} & \textbf{Precision} & \textbf{FAR}\\
+\midrule
+\code{baseline} & 0.000 & \textbf{1.000} & 0.667 & 0.130\\
+\code{rerank} & 0.000 & \textbf{1.000} & 0.706 & 0.109\\
+\code{decompose} & 0.000 & \textbf{1.000} & 0.600 & 0.174\\
+\code{corrective} & 1.000 & 1.000 & 0.667 & 0.130\\
+\code{guarded} & 0.917 & 0.917 & 0.647 & 0.130\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Two \code{guarded} questions could not be re-judged --- the free tier returned 429 on both attempts --- and are recorded as \code{unmeasured} rather than counted as answers.
+
+\begin{keyidea}[the claim this project can actually defend]
+The self-check did not create the ability to refuse. Told to answer only from the supplied passages, the baseline already declined when they did not support an answer --- in prose, which is exactly what a broken label reader could not see. On this gold set abstention recall is at ceiling for every profile, and the self-check does not beat plain reranking on abstention precision.
+
+What the loop contributes is the \emph{form} of the refusal: an explicit flag with no citations attached, a claim-level groundedness score, and a retry aimed at the claim that failed. That is a smaller claim than the one the README used to make, and it is the true one. Chapter~\ref{ch:resume} should be read with this substitution applied throughout.
+\end{keyidea}
+
+\section{Latency and cost, measured after the fix}
+
+One live \code{guarded} query through the corrected code \tagM:
+
+\begin{center}\small
+\begin{tabular}{@{}lrr@{}}
+\toprule
+& \textbf{Old accounting} & \textbf{Corrected}\\
+\midrule
+Latency for one query & 24,588\,ms & 14,525\,ms (wall clock)\\
+Generation tokens & 2,367 in / 132 out & 2,367 in / 132 out\\
+Grading tokens & not recorded & 2,473 in / 488 out\\
+List price per query & \$0.000289 & \$0.000732\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+So the shipped profile's latency was overstated by \textbf{1.69$\times$} and its cost understated by roughly \textbf{2.5$\times$}. Grading costs more than generation because it reads the same passages \emph{plus} the draft and writes a structured verdict --- which is the single most useful number in this appendix for an interview, because it is the kind of thing only someone who measured it would know.
+
+The committed run files still carry the old latency and token figures: restating those needs a full re-run of two profiles, which the free-tier quota did not allow. The README says so rather than quietly leaving the numbers in place.
+
+\section{Status of every finding}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{1.0cm}>{\raggedright\arraybackslash}p{7.4cm}>{\raggedright\arraybackslash}p{6.8cm}@{}}
+\toprule
+\textbf{ID} & \textbf{Finding} & \textbf{Status}\\
+\midrule
+\endhead
+F1 & Judge truncated to 5 tokens & Fixed. Budget 64, whole-word matching, unmeasured verdicts reported as such, pure-function tests.\\
+F2 & Headline abstention claim is an artefact & Fixed. All runs re-judged; README rewritten around the corrected claim.\\
+F3 & Latency double-counts nested stages & Fixed in code (stage depth plus wall clock). Committed figures still await a re-run.\\
+F4 & Grading and decomposition tokens unrecorded & Fixed in code; tokens now reported per purpose in the API and the demo.\\
+F5 & Fail-open grading shown as \enquote{Self-check passed} & Fixed. \code{SelfCheck} has four states; the demo says \enquote{Not verified} when grading could not run.\\
+F6 & No hermetic test of pipeline flag wiring & Fixed. \code{tests/test_query_pipeline.py} asserts every flag routes the query.\\
+F7 & Answer-cache key omits answer-changing settings & Fixed. The whole configuration is hashed into the key.\\
+F8 & README calls \code{/v1/search} reranked & Fixed.\\
+F9 & Space README quotes the wrong profile, claims a held-out set & Fixed.\\
+F10 & \code{book_slug} accepted and ignored & Fixed. It filters, including through decomposition.\\
+F11 & Blocked questions return \code{grounded=True} & Fixed. \code{grounded=False}, \code{blocked=True}.\\
+F12 & Provider errors become 500s & Fixed. 429 for quota, 503 otherwise, message withheld.\\
+F13 & Regex guards bypassable; false positives & \emph{Open by design.} Now documented as a limit rather than presented as a benchmark.\\
+F14 & Guard figures are test-case counts & Fixed in README, DESIGN.md and the profile comment.\\
+F15 & Self-check can turn a partial answer into an abstention & \emph{Open.} Listed in Chapter~\ref{ch:improvements}.\\
+F16 & Committed \code{guarded} run is fully cached & \emph{Open.} Needs quota for a fresh run.\\
+F17 & Ingest report written to a fixed path & Fixed. \code{data/ingest_run.<collection>.json}.\\
+F18 & Empty completion returns the \enquote{found nothing} message & \emph{Open.} Low impact, listed.\\
+F19 & Demo shows raw exception text & Fixed. Generic message, detail to the log, quota case named.\\
+F20 & Threshold ordering checked only at query time & Fixed. Validated at configuration load.\\
+F21--F23 & \code{rank_movement} hard-codes 5; fused scores; retries overwrite trace lists & \emph{Open.} Diagnostics only.\\
+F24 & Release \code{v1.2.2} ships version \code{1.2.1} & Fixed. Package is 1.3.0.\\
+F25 & Documented citation format differs from rendered & \emph{Open.}\\
+F26 & Stale figures & Fixed (3,608 chunks, 58 questions, reranker timing).\\
+F27 & Documented baseline numbers from an uncommitted run & \emph{Open.}\\
+F28 & Hyphenation comment contradicts its regex & \emph{Open.}\\
+F29--F30 & Dead config, unused and undeclared dependencies & \emph{Open.} Listed in Chapter~\ref{ch:improvements}.\\
+F31 & Pre-commit tool versions differ from the lockfile & Fixed. Hooks pinned to black 25.12.0, ruff 0.16.0, mypy 1.20.2.\\
+F32 & \code{/v1/config} omits guardrail flags and thresholds & Fixed. Both endpoints and the CLI report them.\\
+\bottomrule
+\end{longtable}
+
+\section{Two faults found while fixing the first ones}
+
+\begin{finding}[a cached failure is worse than no cache]
+The first re-judging run cached every verdict, including failures. Thirty questions hit a 429 at too high a request rate, those failures were written to disk as verdicts, and the next run read them back and never retried --- turning a transient rate limit into a permanent hole in the metric. That is the same shape as F1 one layer down: a failure that quietly becomes a number. Only measured verdicts are cached now, and the 30 poisoned entries were deleted and re-judged \tagM.
+\end{finding}
+
+\begin{finding}[one of the two refusal sentinels was unknown to the detector]
+\code{is_structural_abstention} recognised \code{NO_CONTEXT_ANSWER} but not the corrective loop's own \code{ABSTENTION_TEXT}, so re-reading a committed run would pay a model to classify a fixed string the repository already knows verbatim. Found by a test written for the re-judging command, not by reading the code \tagV.
+\end{finding}
+
+\section{What a reader should take from this}
+
+\begin{interview}
+The strongest thing to say about this project is no longer \enquote{it abstains}. It is: \emph{I built the evaluation, the evaluation lied to me in the direction I wanted, and I caught it.} The bug was invisible because its output was exactly what everyone expected --- 0.000 for pipelines with no abstention mechanism --- and it lived behind a network call that no test could reach. The fix is three lines of parsing and a page of tests that compare the judge's output against known labels without a network.
+
+That is a measurement-integrity story, and it is rarer and more valuable in an interview than a good number. It also comes with a demonstrable habit: the corrected figures are reproducible with one command, and the README states what it retracted rather than quietly replacing it.
+\end{interview}

@@ -1,0 +1,191 @@
+\chapter{Performance}
+\label{ch:performance}
+
+This chapter collects every performance measurement available --- from the committed runs, from traces returned by the live Space, and from benchmarks run during this analysis --- and explains where the time and resources go.
+
+\section{Where the numbers come from}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.8cm}L@{}}
+\toprule
+\textbf{Source} & \textbf{What it is}\\
+\midrule
+Committed run files & Per-question \code{latency_ms} (the trace total) and tokens for 58 questions per profile. The runs record Python 3.11.15, the development environment's version; the hardware they ran on is not recorded.\\
+Live Space traces & Stage timings returned by the deployed demo for individual questions. The Space's hardware beyond \enquote{ZeroGPU} is \NotDet\\
+Analysis benchmark & Repeated timings of each local stage on the development machine \tagM.\\
+Analysis traces & Full \code{Pipeline.answer} runs with wall-clock timing \tagM (Chapters~\ref{ch:observability} and~\ref{ch:trace}).\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{measured}[the benchmark machine]
+Intel Core i5-12450H (8 cores, 12 logical processors), 15.6\,GB RAM, Windows 11, running on battery at 40\% charge with the Balanced power plan. ONNX Runtime offered the CPU execution provider (and an Azure provider, unused). Memory use was not measured: \code{psutil} is not installed in the environment.
+\end{measured}
+
+\begin{caution}[laptop timings vary a lot]
+The same 20-passage rerank took a median of 2.1 seconds in the benchmark but 10.5 to 14.9 seconds inside pipeline runs at other times during the analysis. The committed \code{rerank} run's median total of 3,100\,ms is consistent with the benchmark figure. Treat any single laptop timing as indicative; prefer medians of repeated runs.
+\end{caution}
+
+\section{What each stage costs}
+
+\begin{measured}[steady-state stage costs on the development machine]
+\begin{center}
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+\textbf{Operation} & \textbf{Median} & \textbf{Min} & \textbf{Max} & \textbf{Runs}\\
+\midrule
+Input guard, one question & 13\,µs & & & 1,000\\
+Embed a question (BGE, ONNX, CPU) & 68\,ms & 14\,ms & 149\,ms & 9\\
+Search 3,608 vectors, top 20 (embedded Qdrant) & 33\,ms & 18\,ms & 56\,ms & 9\\
+Rerank 20 passages (MiniLM cross-encoder) & 2,142\,ms & 2,006\,ms & 2,445\,ms & 9\\
+Rerank 5 passages & 444\,ms & 443\,ms & 1,045\,ms & 3\\
+Context guard, 5 passages & 2.4\,ms & 2.1\,ms & 2.6\,ms & 9\\
+\midrule
+Open the index (build the pipeline) & 725\,ms & & & 1\\
+First embedding call (model load, files on disk) & 1,806\,ms & & & 1\\
+First rerank call (model load + 20 passages) & 3,227\,ms & & & 1\\
+\bottomrule
+\end{tabular}
+\end{center}
+Gemini calls, measured separately: generation took 1,782 and 1,902\,ms in two local runs (about 2,400 input tokens); one successful grading call took 4,569\,ms (2,497 input, 612 output tokens); two failed grading calls returned 503 after about 0.9 and 1.1 seconds; one grading call in an earlier run took about 67 seconds.
+\end{measured}
+
+Two live Space traces for the \code{guarded} profile, as returned by the demo: an unanswerable question with retrieve 181, rerank 3,001, context guard 2 and generate 595\,ms inside a 5,967\,ms \code{corrective} stage; and \enquote{what is tissue?} with retrieve 106, rerank 5,799, context guard 2 and generate 899\,ms inside 7,902\,ms. By subtraction, grading took roughly 2.2 and 1.1 seconds in those two queries.
+
+\begin{figure}[htbp]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[font=\sffamily\scriptsize, x=1.6cm, y=0.95cm]
+\draw[-Stealth] (0,0) -- (9.3,0) node[right] {seconds};
+\foreach \t in {0,1,2,3,4,5,6,7,8,9} { \draw (\t,0.08) -- (\t,-0.08) node[below] {\t}; }
+\node[anchor=east, align=right] at (-0.15,2.4) {composite of analysis\\measurements};
+\fill[blue!35] (0,2.1) rectangle (0.10,2.7);
+\fill[orange!45] (0.10,2.1) rectangle (2.24,2.7); \node at (1.17,2.4) {rerank 2.14};
+\fill[green!35] (2.24,2.1) rectangle (4.02,2.7); \node at (3.13,2.4) {generate 1.78};
+\fill[red!25] (4.02,2.1) rectangle (8.59,2.7); \node at (6.3,2.4) {grade 4.57};
+\node[anchor=east, align=right] at (-0.15,1.2) {live Space trace\\(\enquote{what is tissue?})};
+\fill[blue!35] (0,0.9) rectangle (0.11,1.5);
+\fill[orange!45] (0.11,0.9) rectangle (5.91,1.5); \node at (3.0,1.2) {rerank 5.80};
+\fill[green!35] (5.91,0.9) rectangle (6.81,1.5); \node at (6.36,1.2) {gen 0.90};
+\fill[red!25] (6.81,0.9) rectangle (7.90,1.5); \node at (7.36,1.2) {grade 1.1};
+\node[anchor=west] at (0,3.1) {blue: embedding and search (about 0.1 s); guards are too short to draw};
+\end{tikzpicture}}
+\caption{Where the time goes in one \code{guarded} query. The upper bar combines separately measured medians and single calls, so it is illustrative rather than one real query; the lower bar is one real query on the Space, with grading obtained by subtraction.}
+\label{fig:latency-budget}
+\end{figure}
+
+\paragraph{Reading the budget.} Retrieval proper is cheap: embedding and searching take about a tenth of a second. The cross-encoder is the most expensive local stage and scales with the number of candidates --- about 107\,ms per passage in the benchmark (444\,ms for 5, 2,142\,ms for 20). The two Gemini calls dominate the rest, and grading --- which reads the same passages as generation plus the draft, and writes a JSON verdict several times longer than the answer --- can take longer than generation.
+
+\section{Latency by profile}
+
+\begin{verified}[per-question latency in the committed runs, milliseconds]
+\begin{center}
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+\textbf{Profile} & \textbf{Mean} & \textbf{Median} & \textbf{Min} & \textbf{Max}\\
+\midrule
+\code{baseline} & 1,091 & 1,022 & 848 & 2,241\\
+\code{rerank} & 6,856 & 3,100 & 2,820 & 44,109\\
+\code{decompose} & 2,635 & 2,441 & 1,722 & 9,124\\
+\code{corrective} & 22,031\textsuperscript{*} & 21,405\textsuperscript{*} & 19,534\textsuperscript{*} & 45,887\textsuperscript{*}\\
+\code{guarded} & 21,738\textsuperscript{*} & 21,032\textsuperscript{*} & 19,031\textsuperscript{*} & 40,384\textsuperscript{*}\\
+\bottomrule
+\end{tabular}
+\end{center}
+{\footnotesize\textsuperscript{*}\,Includes the double-counted stages (Section~\ref{sec:latency-bug}).\par}
+\end{verified}
+
+\begin{itemize}
+  \item \textbf{Baseline, about 1 second}: embedding, search and one generation call.
+  \item \textbf{Reranking adds about 2 seconds} at the median. The mean is dominated by the first question, which includes model loading (44,109\,ms).
+  \item \textbf{Decomposition adds about 1.4 seconds}: one extra Gemini call plus a second search, without reranking.
+  \item \textbf{The self-check profiles} add a grading call on every question. Their reported figures also count retrieval, reranking and generation twice. The true \code{guarded} median is probably in the mid-to-high teens of seconds \tagI; the files cannot give an exact figure.
+\end{itemize}
+
+\section{Cold start}
+
+\begin{itemize}
+  \item \textbf{In the committed runs}, the first question of each run is among the slowest: 44,109\,ms (\code{rerank}), 39,047\,ms (\code{corrective}), 40,384\,ms (\code{guarded}). No warm-up question is excluded.
+  \item \textbf{On the development machine}, loading both models took about 5 seconds in the benchmark, with the model files already downloaded, and 18 to 24 seconds in earlier runs.
+  \item \textbf{In a fresh container or Space}, the first question also downloads the models: the code estimates about 210\,MB for the embedding model and 80\,MB for the reranker. The README notes that \enquote{First request after an idle period pays a cold start while the ONNX models download.}
+  \item \textbf{Nothing pre-loads the models at startup}: the API's lifespan opens the index but not the models (Section~\ref{sec:startup}).
+\end{itemize}
+
+\section{Throughput and concurrency}
+
+Throughput was never measured in the repository or in this analysis. From the code:
+
+\begin{inferred}
+\begin{itemize}
+  \item \textbf{The demo answers one question at a time}: with Gradio's default concurrency of one per event and a queue of 16, a visitor behind a full queue could wait for sixteen answers of several seconds each.
+  \item \textbf{The API runs handlers in a thread pool}, so several questions can run concurrently in one process, contending for the same CPU during reranking. Whether the shared embedded Qdrant client tolerates that is not tested (Section~\ref{sec:api}).
+  \item \textbf{Gemini's free tier is the hard ceiling.} The repository measured \code{gemini-3.5-flash} at 20 requests per day, which is why the lite models are used; the lite models' limits are not recorded, so the ceiling for the deployed demo is \NotDet
+\end{itemize}
+\end{inferred}
+
+\section{How cost scales}
+
+\begin{inferred}[extrapolations from the measured numbers]
+\begin{itemize}
+  \item \textbf{Search} in embedded mode compares the query with every stored vector, so its cost grows roughly linearly with the index: about 33\,ms at 3,608 points suggests on the order of 0.2 seconds at the 20,000-point advisory threshold. Past that, the client factory can point at a Qdrant server with an approximate index instead.
+  \item \textbf{Reranking} grows linearly with the number of candidates (about 0.1 second per passage here). Reranking 10 instead of 20 would roughly halve the stage.
+  \item \textbf{Tokens} grow with the context: five passages of about 450 tokens each make most of the 2,400 input tokens per generation, and grading reads the same passages again.
+\end{itemize}
+\end{inferred}
+
+\section{Resource footprint}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{5.2cm}>{\raggedright\arraybackslash}p{2.6cm}L@{}}
+\toprule
+\textbf{Item} & \textbf{Size} & \textbf{Status}\\
+\midrule
+Index (\code{data/index}) & 34.9\,MB & Measured\\
+Source PDFs & 415\,MB & Measured\\
+Project virtual environment, with dev and eval groups & 903\,MB & Measured\\
+Space payload & 61 files, 35.2\,MB & Measured by the deploy script's dry run (commit \code{b4213ed})\\
+Embedding and reranker model files & about 210\,MB and 80\,MB & Stated in code comments\\
+API Docker image & about 400\,MB stated; CI fails above 900\,MB & Actual size is written to the CI job summary, not to the log; \NotDet\\
+Process memory & --- & Not measured\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Offline workloads}
+
+\begin{itemize}
+  \item \textbf{Ingestion}: 1,944 seconds for 2,562 parsed pages and 3,608 chunks in the analysis rebuild, about 0.54 seconds per chunk including parsing \tagM; an earlier documented build took 3,464 seconds.
+  \item \textbf{A full evaluation}: about 50 minutes, according to the code's comments, dominated by paced grading.
+  \item \textbf{A cached re-run}: 538 seconds uncached against 52 seconds fully cached on 12 questions, after cache-aware pacing was added \ev{git 6ceb706}.
+\end{itemize}
+
+\section{Token and cost performance}
+
+\begin{center}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+\textbf{Call} & \textbf{Input tokens} & \textbf{Output tokens} & \textbf{List price}\\
+\midrule
+Generation (\code{guarded} run average, recorded) & 2,423 & 66 & \$0.00027\\
+Generation (traced anaphase question) & 2,367 & 156 & \$0.00030\\
+Grading (re-grade of the same answer, not recorded) & 2,497 & 612 & \$0.00049\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{inferred}
+On the one question where both calls were measured, the real list price was about \$0.00079, roughly 2.6 times the recorded \$0.00030. Applied to the shipped profile's reported \$0.00027 per question, the true figure is plausibly between two and three times higher. It remains a fraction of a tenth of a cent per question, and actual spend on the free tier is zero.
+\end{inferred}
+
+\section{Bottlenecks and options}
+
+\begin{recommended}[in order of expected effect on user-visible latency]
+\begin{enumerate}
+  \item \textbf{Warm the models at startup}: embed and rerank a dummy query in the API lifespan and on demo launch, so no visitor pays the load.
+  \item \textbf{Rerank fewer candidates}: measure top 10 against top 20 on the gold set; the stage cost halves.
+  \item \textbf{Grade more cheaply}: shorter JSON (no evidence quotes), or a faster grader model, measured for agreement with the current one.
+  \item \textbf{Cache answers to the demo's example questions}, which most visitors click.
+  \item \textbf{Stream the answer} to the demo, so the grading wait is visible rather than blank --- with the answer marked \enquote{checking} until the verdict arrives.
+  \item \textbf{Measure properly}: record per-stage timings in run files, exclude a warm-up question, and report medians alongside means.
+\end{enumerate}
+\end{recommended}

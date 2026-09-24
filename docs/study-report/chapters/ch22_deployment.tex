@@ -1,0 +1,243 @@
+\chapter{Build, Packaging and Deployment}
+\label{ch:deploy}
+
+VidyaRAG reaches three places: an installable Python package, a Docker image that CI builds and tests, and a public Hugging Face Space. Figure~\ref{fig:arch-deploy} in Chapter~\ref{ch:architecture} shows how they connect. This chapter explains how each is built, what protects it, and what is not automated.
+
+\section{Artefacts at a glance}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{4.2cm}>{\raggedright\arraybackslash}p{3.0cm}L@{}}
+\toprule
+\textbf{Artefact} & \textbf{Built by} & \textbf{Trigger} & \textbf{Published?}\\
+\midrule
+Python package (wheel) & hatchling, through \code{uv sync} & Any install & Not published to a package index; built inside the Docker image\\
+Docker image & \code{.github/workflows/docker.yml} & Push to \code{main} or pull request touching image inputs & No: \code{push: false}\\
+Hugging Face Space & \code{scripts/deploy_space.py}, run by hand & Manual & Yes: the live demo\\
+Evaluation results & \code{.github/workflows/eval.yml} & Manual dispatch & Uploaded as a build artefact; never run\\
+GitHub releases & By hand & --- & Seven, \code{v1.0.0} to \code{v1.2.2}\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{The Python package}
+
+\begin{lstlisting}[language=toml]
+[project]
+name = "vidyarag"
+dynamic = ["version"]
+requires-python = ">=3.10,<3.13"
+
+[project.scripts]
+vidyarag = "vidyarag.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/vidyarag/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vidyarag"]
+\end{lstlisting}
+\vspace{-4pt}{\raggedleft\ev{pyproject.toml} (excerpt)\par}
+
+The version is written once, as \code{__version__} in \code{src/vidyarag/__init__.py}. \code{pyproject.toml} reads it through hatchling, the CLI prints it, and the API reports it in its OpenAPI document. The comment beside the setting records why: before, \enquote{pyproject and \code{__version__} said 0.1.0, the OpenAPI schema said 0.3.0, and the releases said v1.2.0} \ev{pyproject.toml:103-108}. It is a literal rather than being read from installed package metadata because the Space imports the package from \code{src/} without installing it \ev{src/vidyarag/\_\_init\_\_.py}.
+
+\begin{finding}[the latest release does not match the package version]
+The tag and GitHub release \code{v1.2.2} point at the analysed commit \code{fa5164b}, but that commit's package declares \code{1.2.1}: \code{__version__} was last changed in the commit tagged \code{v1.2.1}, and \code{v1.2.2} was a documentation-only release. So \code{vidyarag version} and \code{/docs} report 1.2.1 at release v1.2.2 --- a smaller instance of the three-way disagreement the single version source was introduced to end. Before that commit, \code{__version__} read \code{0.1.0} at every tag from \code{v0.1.0} to \code{v1.2.0}.
+\end{finding}
+
+\section{The Docker image}
+\label{sec:docker}
+
+\subsection{The Dockerfile, annotated}
+
+\begin{lstlisting}[language=dockerfile]
+# --- builder ---
+FROM python:3.11-slim AS builder
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
+COPY --from=ghcr.io/astral-sh/uv:0.5 /uv /usr/local/bin/uv
+WORKDIR /app                                             # (4) build where it will run
+COPY pyproject.toml uv.lock README.md LICENSE ./          # LICENSE: hatchling reads it
+RUN uv sync --frozen --no-dev --no-install-project       # dependency layer, cached
+COPY src/ ./src/
+RUN uv sync --frozen --no-dev --no-editable              # real install into site-packages
+
+# --- runtime ---
+FROM python:3.11-slim AS runtime
+RUN useradd --create-home --uid 1000 vidyarag
+ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 \
+    QDRANT_MODE=embedded QDRANT_PATH=/app/data/index VIDYARAG_PROFILE=guarded \
+    VIDYARAG_CONFIG_DIR=/app/config \                    # (5) config outside the venv
+    FASTEMBED_CACHE_PATH=/home/vidyarag/.cache/fastembed
+WORKDIR /app
+COPY --from=builder --chown=vidyarag:vidyarag /app/.venv /app/.venv
+COPY --chown=vidyarag:vidyarag config/ /app/config/
+RUN mkdir -p /app/data/index && chown -R vidyarag:vidyarag /app/data   # (2) writable mount
+VOLUME ["/app/data/index"]
+USER vidyarag
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/v1/health', timeout=8)"]   # (1)
+CMD ["uvicorn", "vidyarag.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+\end{lstlisting}
+\vspace{-4pt}{\raggedleft\ev{Dockerfile} (comments condensed; numbers refer to the defects below)\par}
+
+\subsection{Why each unusual line is there}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{4.6cm}>{\raggedright\arraybackslash}p{11.2cm}@{}}
+\toprule
+\textbf{Line} & \textbf{The failure it prevents}\\
+\midrule
+\endhead
+\code{COPY ... LICENSE} & \code{pyproject.toml} declares \code{license = { file = "LICENSE" }}, so building the project's wheel fails without it --- a failure \enquote{that never reproduces locally, where the file is always present}.\\
+\code{uv sync --no-install-project} first & Dependencies install before the source is copied, so a code change does not rebuild the dependency layer.\\
+\code{--no-editable} & An editable install points at \code{/app/src}, which the runtime stage does not contain; \code{import vidyarag} would fail.\\
+\code{WORKDIR /app} in the builder & Console scripts record the absolute path of the interpreter. Built in \code{/build} and copied to \code{/app}, \code{uvicorn} pointed at an interpreter that did not exist, and the container could not start its own server (defect 4).\\
+\code{VIDYARAG_CONFIG_DIR=/app/config} & Installed into \code{site-packages}, the package looked for its profiles inside the virtual environment: \enquote{Unknown profile 'guarded'. Available: (none)} (defect 5).\\
+Writable, user-owned \code{/app/data} & Embedded Qdrant opens \code{.lock} in read-write mode; the documented read-only mount made startup fail (defect 2).\\
+HTTP \code{HEALTHCHECK} & The previous check ran \code{vidyarag health}, which opens the index the server has already locked, so a healthy container would have reported unhealthy forever (defect 1).\\
+\code{USER vidyarag} & No root at runtime.\\
+No index, no models in the image & The image stays a build artefact rather than a data artefact; the index is mounted and models download on first use.\\
+\bottomrule
+\end{longtable}
+
+Defect 3 was the three disagreeing version numbers described above. All five were exposed by adding a CI step that actually runs the container \ev{git 88d7969}, and \code{tests/test_container_contract.py} checks the same contracts on every commit by reading the Dockerfile and \code{pyproject.toml}.
+
+\subsection{Running it}
+
+\begin{lstlisting}[language=bash]
+docker build -t vidyarag .
+docker run -p 8000:8000 -v "$(pwd)/data/index:/app/data/index" -e GOOGLE_API_KEY=<key> vidyarag
+\end{lstlisting}
+
+The image excludes PyTorch and the evaluation group; the Dockerfile puts it near 400\,MB against about 2.5\,GB for a torch-based stack. It does include Gradio, which the API never uses (Section~\ref{sec:dep-findings}).
+
+\section{Local Qdrant server}
+
+\code{docker-compose.yml} runs \code{qdrant/qdrant:v1.12.4} with REST on port 6333 and gRPC on 6334, data in \code{./qdrant_storage}, and a health check that opens a TCP connection with bash's \code{/dev/tcp}, because the image has no \code{curl} \ev{docker-compose.yml}. It is optional; the Docker workflow uses it to prove that server mode works.
+
+\section{Continuous integration}
+
+\subsection{\code{ci.yml}: every push to \code{main} and every pull request}
+
+\begin{enumerate}
+  \item Matrix over Python 3.10 and 3.11 on \code{ubuntu-latest}; earlier runs for the same branch are cancelled.
+  \item Install uv (with a cache keyed on \code{uv.lock}), install the Python version, then \code{uv sync --frozen --python <version>} --- the comment notes that without \code{--python} \enquote{the 3.10 leg of the matrix would quietly run on 3.11 and prove nothing.}
+  \item \code{ruff check}, \code{black --check}, \code{mypy}, then \code{pytest -m "not costly" --cov}.
+  \item A separate job runs gitleaks over the full history.
+\end{enumerate}
+\vspace{-4pt}{\raggedleft\ev{.github/workflows/ci.yml}\par}
+
+\subsection{\code{docker.yml}: when image inputs change}
+
+Triggered only by changes to the Dockerfile, \code{.dockerignore}, \code{pyproject.toml}, \code{uv.lock}, \code{src/}, \code{config/}, \code{docker-compose.yml} or the workflow itself. Its comment explains why it exists: \enquote{Docker Desktop is not installed on the development machine, so CI is where the image is actually proven to build. A Dockerfile nobody has built is a claim, not a deliverable.}
+
+\begin{enumerate}
+  \item Build with Buildx and a GitHub Actions layer cache; load the image locally, never push.
+  \item Fail if the image exceeds 900\,MB (\enquote{has torch crept in?}).
+  \item Import the package and run \code{vidyarag version} inside the image.
+  \item Check that the \code{uvicorn} and \code{vidyarag} console scripts name an interpreter that exists.
+  \item Start the container on a named volume, wait for Docker to report \code{healthy}, then require \code{"profile":"guarded"} from \code{/v1/config} and \code{"status":"ok"} from \code{/v1/health}.
+  \item Require the CLI version and the OpenAPI version to match.
+  \item Start the compose Qdrant, wait for it to be healthy, and run \code{vidyarag health} in server mode against it.
+\end{enumerate}
+\vspace{-4pt}{\raggedleft\ev{.github/workflows/docker.yml}\par}
+
+\begin{verified}[the analysed commit's CI]
+Both workflows passed on \code{fa5164b}. The Docker job's log shows the running container answering \code{/v1/health} with \code{"points":0}: the volume is empty, so CI proves the server starts, reports its configuration and stays healthy --- not that it can answer a question.
+\end{verified}
+
+\subsection{\code{eval.yml}: manual only}
+
+Dispatched by hand with a profile and a grading rate. It checks for the \code{GOOGLE_API_KEY} secret \emph{before} checking out code (so a missing secret fails in seconds rather than an hour in), installs the evaluation group, downloads the corpus, builds the index (about 32 minutes), runs the evaluation, and uploads \code{eval/results/} as an artefact kept for 30 days. Results are uploaded rather than committed because \enquote{a number lands there only once a person has looked at it} \ev{.github/workflows/eval.yml}. It has never been run.
+
+\section{The Hugging Face Space}
+\label{sec:space-deploy}
+
+\subsection{What the deploy script does}
+
+\begin{lstlisting}[language=Python]
+PAYLOAD = (
+    ("app/requirements.txt", "requirements.txt"),
+    ("app/README_space.md", "README.md"),
+    ("src/vidyarag", "src/vidyarag"),
+    ("config", "config"),
+    ("data/index", "data/index"),
+    ("LICENSE", "LICENSE"),
+    ("ATTRIBUTION.md", "ATTRIBUTION.md"),
+)
+
+def main() -> int:
+    load_dotenv(REPO_ROOT / ".env")          # before HfApi: the hub library reads HF_TOKEN from env only
+    api = HfApi(); api.whoami()
+    with tempfile.TemporaryDirectory() as tmp:
+        stage(staged)                         # copy payload; skip __pycache__, *.pyc and Qdrant's .lock;
+                                              # write app.py with the sys.path shim after the future import
+        api.create_repo(repo_id=args.repo_id, repo_type="space", space_sdk="gradio",
+                        space_hardware=args.hardware, exist_ok=True)       # default zero-a10g
+        api.upload_folder(repo_id=args.repo_id, repo_type="space", folder_path=str(staged),
+                          commit_message="Deploy VidyaRAG demo")
+    api.add_space_secret(repo_id=args.repo_id, key="GOOGLE_API_KEY", value=key)  # from local env
+    for name, value in (("VIDYARAG_PROFILE", "guarded"), ("QDRANT_MODE", "embedded")):
+        api.add_space_variable(repo_id=args.repo_id, key=name, value=value)
+\end{lstlisting}
+\vspace{-4pt}{\raggedleft\ev{scripts/deploy\_space.py:31-167} (abridged)\par}
+
+The docstring states two guarantees: the index ships with the Space, so the demo never depends on a hosted vector store that a free tier would suspend; and \enquote{the API key never enters a file} \ev{scripts/deploy\_space.py:7-15}. \code{--dry-run} stages the payload and reports its size without uploading; the commit that fixed the \code{.env} loading records 61 files and 35.2\,MB.
+
+\subsection{The Space's own configuration}
+
+\begin{lstlisting}[language=yaml]
+---
+title: VidyaRAG
+emoji: <books emoji>
+sdk: gradio
+sdk_version: 5.50.0
+app_file: app.py
+license: mit
+short_description: Cited textbook answers, and abstention when there are none
+---
+\end{lstlisting}
+\vspace{-4pt}{\raggedleft\ev{app/README\_space.md:1-12} (colour and pin fields omitted)\par}
+
+\code{sdk_version} is where Gradio's version is pinned, because the builder installs Gradio itself; \code{short_description} must be at most 60 characters or the upload is rejected \ev{git 4edff86}. The platform runs Python 3.10 on ZeroGPU hardware.
+
+\subsection{What is and is not automated}
+
+\begin{inferred}
+Nothing connects the GitHub repository to the Space: no workflow calls the Hugging Face Hub, and the upload's commit message is the same constant every time. The Space can therefore run a different revision from \code{main}, and which git commit it runs is not recorded anywhere except, indirectly, in the package version it reports. Rolling back means re-running the script from an older checkout, or reverting in the Space's own git history.
+\end{inferred}
+
+\begin{finding}[the Space describes another profile's results]
+The Space README says the demo refuses \enquote{12/12} held-out unanswerable questions \enquote{where the baseline refused 0/12}, with abstention recall 1.000 and precision 0.800. Those are the \code{corrective} run's numbers; the Space runs \code{guarded} (11 of 12, 0.917, 0.846). The baseline's \enquote{0/12} is the judge artefact, and \enquote{held-out} overstates the separation: the same 12 questions evaluated every profile during development.
+\end{finding}
+
+\section{The four runtime environments compared}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.3cm}>{\raggedright\arraybackslash}p{2.9cm}>{\raggedright\arraybackslash}p{3.0cm}>{\raggedright\arraybackslash}p{3.0cm}>{\raggedright\arraybackslash}p{3.0cm}@{}}
+\toprule
+& \textbf{Developer machine} & \textbf{CI} & \textbf{Docker image} & \textbf{Space}\\
+\midrule
+\endhead
+Python & 3.11.15 & 3.10 and 3.11 & 3.11 & 3.10\\
+Dependencies & \code{uv.lock} & \code{uv.lock}, frozen & \code{uv.lock}, frozen, runtime only & Major-version ranges, resolved at build\\
+Profile & \code{.env}, default \code{guarded} & tests choose & \code{guarded} (image env) & \code{guarded} (Space variable)\\
+Configuration directory & repository \code{config/} & repository & \code{/app/config} & uploaded \code{config/}\\
+Index & \code{data/index} & in-memory & mounted volume & uploaded files\\
+Models & fastembed cache & stubbed & downloaded at first use & downloaded at first use\\
+Gemini key & \code{.env} & none & \code{-e} at run time & Space secret\\
+Entry point & CLI, uvicorn, \code{app.py} & pytest & uvicorn & \code{app.py}\\
+\bottomrule
+\end{longtable}
+
+\section{How a change reaches users, in practice}
+
+\begin{inferred}[reconstructed from the history]
+A change is made on a branch, opened as a pull request, checked by CI (and the Docker workflow when image inputs change), and merged. A tag and a GitHub release with a one-line title follow --- for example \enquote{v1.2.1 --- the Docker image can actually start}. When the change affects the demo, the author runs \code{scripts/deploy_space.py} locally. The seven releases, \code{v1.0.0} (\enquote{deployed and measured}) to \code{v1.2.2}, were all published between 10 and 14 September.
+\end{inferred}
+
+\begin{recommended}
+Bump \code{__version__} with every release and add a test that the latest tag matches it. Publish the image to GitHub Container Registry on tags. Deploy the Space from a workflow on release, and expose the git commit in \code{/v1/config} and the demo footer. Pin base images and the uv image by digest. Correct the Space README's numbers.
+\end{recommended}

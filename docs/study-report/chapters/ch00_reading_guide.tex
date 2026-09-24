@@ -1,0 +1,111 @@
+\chapter*{How to Read This Report}
+\addcontentsline{toc}{chapter}{How to Read This Report}
+\markboth{How to Read This Report}{}
+
+\section*{What this report is}
+
+This report explains the VidyaRAG repository completely: what the project does, how every part of the code works, how it was measured, how it is deployed, where it is weak, and how to talk about it in a technical interview.
+
+It was produced in two stages. First, the whole repository was analysed: every source file, configuration file, test, workflow, document, committed result file and the full git history. Parts of the system were also executed --- ingestion, live queries, the HTTP API, the test suite, and a re-scoring of the stored evaluation answers --- and the public demo was exercised. Second, this document was written from that analysis. Wherever the code and the documentation disagree, the code is treated as the source of truth and the disagreement is recorded in Chapter~\ref{ch:findings}.
+
+\begin{caution}[the repository has moved since this snapshot --- read Appendix~\ref{app:fixes} first]
+This report describes commit \code{fa5164b}. The findings in Chapter~\ref{ch:findings} were afterwards acted on, and the most important of them changed the project's headline result: the abstention figures in Chapter~\ref{ch:results} came from a judging model whose output was truncated, and the corrected numbers are different. Appendix~\ref{app:fixes} gives those numbers, the status of every finding, and the claim the project can now actually defend. Nothing in Part~III should be quoted without it.
+\end{caution}
+
+\section*{What exactly was analysed}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}>{\sffamily\bfseries}p{3.4cm}L@{}}
+\toprule
+Repository & \url{https://github.com/NehaBharti08/VidyaRAG}, branch \code{main}\\
+Snapshot & commit \code{fa5164b} of 14 September 2026. The git tag \code{v1.2.2} points at this commit, while the package itself declares version \code{1.2.1}.\\
+History & 31 commits from 30 July to 14 September 2026; tags \code{v0.1.0} to \code{v1.2.2}\\
+Size & 8,549 lines of source code under \code{src/vidyarag}; 4,066 lines of tests\\
+Live system & the Hugging Face Space \url{https://huggingface.co/spaces/nehabharti0802/VidyaRAG}\\
+Local runs & a Windows 11 development machine without a GPU; Python 3.11.15 in the project's virtual environment; the Gemini API on the free tier\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section*{The kinds of statement}
+
+The report never mixes kinds of statement in one sentence. The kind is shown by \emph{where} a statement appears.
+
+\begin{description}[style=nextline]
+  \item[Verified --- ordinary text, tables and figures.] Checked against the source code, configuration, committed data or git history, or confirmed by running the code. Non-obvious claims carry a grey evidence reference such as \ev{src/vidyarag/settings.py:35-47}.
+  \item[Measured during this analysis --- teal boxes, or the tag \tagM.] Numbers obtained by running something while preparing this report rather than read from a committed file. They are facts about the snapshot, but they are \emph{not} in the repository. Treat them as your own new measurements, not as the project's published results.
+  \item[Inferred --- orange boxes, or the tag \tagI.] Conclusions reasoned from the code that the repository neither states nor measures.
+  \item[Recommended --- purple boxes, or the tag \tagR.] Suggestions that are \emph{not} implemented in the repository.
+\end{description}
+
+Two further box types mark material that is not about the repository at all, or that is new:
+
+\begin{description}[style=nextline]
+  \item[Background --- grey boxes.] General knowledge that the repository does not contain, such as how cosine similarity works or what the word \emph{Vidy\=a} means. Chapter~\ref{ch:concepts} is mostly this kind of material, applied to the project's actual parameters.
+  \item[Finding --- red boxes.] A defect, contradiction or unsupported claim discovered during this analysis. Every finding is collected in Chapter~\ref{ch:findings}.
+\end{description}
+
+When the repository does not contain enough information to answer a question, the report says exactly: \NotDet{} It does not guess.
+
+The remaining boxes are teaching aids (\emph{Key idea}, \emph{Analogy}, \emph{Worked example}, \emph{Interview angle}). Their contents follow the same rules. Worked examples use small made-up numbers to show arithmetic and say so.
+
+\begin{inferred}[what this box looks like]
+This is the style used for an inferred statement. Nothing in this particular box is a claim about the project.
+\end{inferred}
+
+\begin{recommended}[what this box looks like]
+This is the style used for a recommendation. Nothing in this particular box is a claim about the project.
+\end{recommended}
+
+\section*{Evidence references}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}p{6.4cm}L@{}}
+\toprule
+\textbf{Form} & \textbf{Meaning}\\
+\midrule
+\ev{src/vidyarag/pipeline.py:155-171} & A file and line range at commit \code{fa5164b}. Line numbers drift as code changes; the file and symbol names are the stable part.\\
+\ev{src/vidyarag/ingest/corpus.py} & A whole file, or a symbol that is easy to find in it.\\
+\ev{eval/results/guarded\_\_20260831T064335Z.json} & A committed evaluation result file. The \code{.md} file beside it is the rendered report.\\
+\ev{git 88d7969} & A commit. Its message and diff are the evidence.\\
+\ev{measured} & A run performed during this analysis, described where the number is used.\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section*{Rules about numbers}
+
+\begin{itemize}
+  \item No number is invented. Every number is quoted from a named committed file, computed from committed files by a method that is described, or measured during this analysis and labelled as such.
+  \item Where the project's own documents quote a number that the committed result files do not support, both numbers are shown and the discrepancy is recorded.
+  \item The evaluation results are single runs over a 58-question set. Chapter~\ref{ch:results} explains which differences exceed the measured run-to-run noise and which do not.
+\end{itemize}
+
+\section*{What this analysis changed}
+
+No tracked file in the repository was modified to produce this report, and nothing was committed or pushed. Commands run during the analysis did rewrite untracked local files under the git-ignored \code{data/} folder; the one that matters is the ingestion run report \code{data/ingest_run.json}, which now describes a scratch rebuild rather than the working index (Section~\ref{sec:finding-ingest-report}). The working index in \code{data/index} was not modified.
+
+\section*{Notation}
+
+\begin{itemize}
+  \item \code{Monospace} marks code identifiers, file paths, commands and exact strings.
+  \item A \emph{profile} is one of the five committed pipeline configurations: \code{baseline}, \code{rerank}, \code{decompose}, \code{corrective} and \code{guarded}. The deployed demo runs \code{guarded}.
+  \item \emph{Chunk} and \emph{passage} both mean one indexed piece of textbook text.
+  \item $g$ is the groundedness score from the self-check, and $k$ is a cut-off rank.
+  \item Latency is in milliseconds (ms). Costs are US dollars at the list prices written in the code, not money actually spent.
+\end{itemize}
+
+\section*{Suggested reading paths}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}p{4.2cm}L@{}}
+\toprule
+\textbf{If you have\ldots} & \textbf{Read}\\
+\midrule
+One hour & Chapters~\ref{ch:plain} and~\ref{ch:architecture}, then Chapters~\ref{ch:explaining} and~\ref{ch:resume}.\\
+One evening & Part~I, Chapter~\ref{ch:trace} (one question from end to end), Chapter~\ref{ch:results} and Chapter~\ref{ch:findings}.\\
+The day before an interview & Part~VI, then Chapters~\ref{ch:findings}, \ref{ch:tradeoffs} and~\ref{ch:limitations}.\\
+A plan to rebuild or extend it & Part~II in order, then Part~IV and Chapter~\ref{ch:rebuilding}.\\
+\bottomrule
+\end{tabularx}
+\end{center}

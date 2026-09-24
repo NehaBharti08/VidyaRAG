@@ -1,0 +1,241 @@
+\chapter{Answer Generation and Citation Validation}
+\label{ch:generation}
+
+After retrieval, the pipeline has at most five passages. This chapter follows them into the prompt, through the Gemini call, and back out as an answer whose citations have been checked against the passages that were actually supplied.
+
+\begin{figure}[htbp]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  font=\sffamily\footnotesize,
+  node distance=5mm and 6mm,
+  proc/.style={draw, rounded corners=2pt, fill=blue!6, align=center, text width=27mm, minimum height=13mm},
+  data/.style={draw, fill=yellow!12, align=center, text width=25mm, minimum height=10mm},
+  ext/.style={draw, dashed, rounded corners=2pt, fill=gray!8, align=center, text width=22mm, minimum height=13mm},
+  bad/.style={draw, rounded corners=6pt, fill=red!8, align=center, text width=27mm, minimum height=9mm},
+  arr/.style={-Stealth, thick}
+]
+\node[data] (ctx) {up to 5\\\code{RetrievedChunk}s};
+\node[proc, right=of ctx] (fmt) {\code{build_answer_prompt}\\numbered passages + rules};
+\node[ext, right=of fmt] (gem) {Gemini\\\code{gemini-3.5-flash-lite}\\temperature 0};
+\node[proc, right=of gem] (ext) {\code{_extract_text}\\\code{_record_usage}};
+\node[proc, right=of ext] (cit) {\code{resolve_citations}\\\code{strip_invalid_markers}};
+\node[data, right=of cit] (out) {\code{GeneratedAnswer}\\text, citations, grounded};
+\node[bad, below=of ctx] (nc) {no passages: fixed \enquote{found nothing} text, no model call};
+\node[bad, below=of ext] (emp) {empty completion: the same fixed text};
+\draw[arr] (ctx) -- (fmt); \draw[arr] (fmt) -- (gem); \draw[arr] (gem) -- (ext); \draw[arr] (ext) -- (cit); \draw[arr] (cit) -- (out);
+\draw[arr] (ctx) -- (nc); \draw[arr] (ext) -- (emp);
+\end{tikzpicture}}
+\caption{Answer generation as implemented in \code{generate/answer.py}, \code{generate/prompts.py} and \code{generate/citations.py}.}
+\label{fig:generation}
+\end{figure}
+
+\section{The prompt}
+\label{sec:prompt}
+
+\subsection{The system instruction and user message}
+
+The answering prompt has two parts, sent separately: a \emph{system instruction} holding the rules, and a \emph{user message} holding the passages and the question. This is the text as the model receives it, with the Python line continuations joined \ev{src/vidyarag/generate/prompts.py:29-53}:
+
+\begin{lstlisting}[language=plain, frame=single, backgroundcolor=\color{blue!3}]
+[system instruction]
+You are a study assistant that answers questions strictly from supplied textbook passages.
+
+Rules:
+1. Use ONLY the numbered passages provided. Do not add facts from memory, even if you are
+   confident they are correct.
+2. Cite every factual claim with the marker of the passage supporting it, like [1] or [3].
+   Cite the specific passage, not the whole context.
+3. If the passages do not contain the answer, say exactly what is missing rather than
+   guessing. A partial answer that names its gap is more useful than a complete-sounding
+   one that invents the rest.
+4. Never cite a number that was not provided to you.
+5. Answer in clear prose for a student revising the topic. Be direct; do not restate the
+   question or describe what you are about to do.
+
+[user message]
+Passages:
+
+{context}
+
+Question: {question}
+
+Answer using only the passages above, citing each claim with its marker.
+\end{lstlisting}
+
+The \code{{context}} placeholder is filled by \code{format_context}, which numbers the passages from 1 and puts each passage's citation on the line above its text \ev{src/vidyarag/generate/citations.py:54-64}:
+
+\begin{lstlisting}[language=plain]
+[1] Biology, 10.2. The Cell Cycle*, p.274
+<text of the first passage>
+
+[2] Biology, 10.2. The Cell Cycle*, p.276
+<text of the second passage>
+...
+\end{lstlisting}
+
+\subsection{Why each rule is there}
+
+\begin{description}[style=nextline]
+  \item[Rule 1 --- passages only.] This is what makes the system retrieval-augmented rather than a chatbot that happens to see some text. \enquote{Even if you are confident they are correct} closes the most common loophole: a model supplying a true fact it remembers, which would then be uncitable.
+  \item[Rule 2 --- cite the specific passage.] Numbered markers make every sentence checkable. The citation module's comment explains why numbers are used rather than chunk ids: models reliably reproduce small numbers but \enquote{mangle} identifiers \ev{src/vidyarag/generate/citations.py:21-23}.
+  \item[Rule 3 --- name the gap.] The model is told to say what is missing instead of guessing, and that a partial answer naming its gap beats a complete-sounding invention. \textbf{This rule makes the generator refuse on its own.} Chapter~\ref{ch:results} shows it did so for every unanswerable question, in every profile.
+  \item[Rule 4 --- no invented markers.] A defence in words; the citation validator below is the defence in code.
+  \item[Rule 5 --- direct prose.] Keeps answers short, and keeps the grader from having to classify filler sentences as claims.
+\end{description}
+
+\subsection{Prompt versioning}
+
+Every rendered prompt carries the version string \code{answer-v1}, which is written into the query trace, the evaluation run files and the answer-cache key. The module docstring states the rule: \enquote{Changing a template's text means bumping its version. Editing in place silently invalidates every number measured with the previous wording} \ev{src/vidyarag/generate/prompts.py:1-9}. Only one version has ever existed.
+
+\section{Calling the model}
+
+\begin{lstlisting}[language=Python]
+def generate_answer(client, question, chunks, *, model, temperature=0.0,
+                    max_output_tokens=2048, trace=None) -> GeneratedAnswer:
+    trace = trace or QueryTrace(query=question)
+
+    if not chunks:
+        return GeneratedAnswer(text=NO_CONTEXT_ANSWER, citations=[], grounded=False)
+
+    prompt = build_answer_prompt(question, chunks)
+    trace.prompt_version = prompt.version
+
+    with trace.stage("generate"):
+        response = client.models.generate_content(
+            model=model,
+            contents=prompt.user,
+            config={"system_instruction": prompt.system,
+                    "temperature": temperature,
+                    "max_output_tokens": max_output_tokens})
+
+    _record_usage(response, trace, model)
+    raw = _extract_text(response)
+    if not raw:
+        # An empty completion is a failure to answer, not an answer.
+        return GeneratedAnswer(text=NO_CONTEXT_ANSWER, citations=[], grounded=False)
+
+    citations = resolve_citations(raw, chunks)
+    text = strip_invalid_markers(raw, chunks)
+    trace.cited_chunk_ids = [c.chunk_id for c in citations]
+    return GeneratedAnswer(text=text, citations=citations, grounded=bool(citations))
+\end{lstlisting}
+\vspace{-4pt}{\raggedleft\ev{src/vidyarag/generate/answer.py:73-128} (docstring removed)\par}
+
+\paragraph{No context, no call.} If retrieval produced nothing, the model is never asked: \enquote{asking a model to answer with no context is asking it to hallucinate} \ev{src/vidyarag/generate/prompts.py:80-81}. The fixed reply is \enquote{I could not find anything about that in Biology or Anatomy and Physiology, so I have nothing to answer from. Try rephrasing, or ask about a topic these textbooks cover.}
+
+\paragraph{Temperature 0.} The parameter's docstring justifies it: \enquote{a benchmark that moves between runs cannot support a claim about a change} \ev{src/vidyarag/generate/answer.py:90-91}. The repository also measured that zero temperature is \emph{not} determinism: three identical calls to \code{gemini-3.5-flash-lite} returned answers of 315, 300 and 307 characters (\code{docs/EVALUATION.md}). Chapter~\ref{ch:results} uses this to separate real differences from noise.
+
+\paragraph{Robust text extraction.} The SDK's \code{response.text} accessor returns \code{None} when a response was cut short, so \code{_extract_text} falls back to walking \code{candidates[].content.parts[].text}, rather than letting a truncated answer \enquote{surface as the string "None"} \ev{src/vidyarag/generate/answer.py:41-59}.
+
+\paragraph{Token accounting.} \code{_record_usage} reads \code{prompt_token_count} and \code{candidates_token_count} from the response's usage metadata and adds a \code{generation} entry to the trace \ev{src/vidyarag/generate/answer.py:62-70}. This is the \emph{only} place in the package that records token usage, which matters for Section~\ref{sec:token-bug}.
+
+\begin{verified}[typical size of one generation call, from the committed \code{baseline} run]
+Mean 2,400 input tokens and 59 output tokens per question. The configuration comment estimates a five-passage context at about 2.6 thousand tokens \ev{config/default.yaml:44-46}.
+\end{verified}
+
+\begin{inferred}[three behaviours worth knowing]
+\begin{enumerate}
+  \item \textbf{Two different failures share one message.} An empty completion --- for example a response blocked or cut off by the provider --- returns the same \enquote{I could not find anything about that\ldots} text as an empty retrieval. A reader, or an evaluator, is told the textbooks lack the topic when the real cause was the model call.
+  \item \textbf{API errors are not caught here.} There is no \code{try} around \code{generate_content}, so a rate-limit or network error propagates to the caller: a 500 response from the API, the \enquote{Something went wrong} message in the demo, or a retry in the evaluation runner (Chapter~\ref{ch:interfaces}).
+  \item \textbf{\enquote{Grounded} means \enquote{has at least one valid citation}.} \code{GeneratedAnswer.grounded} is \code{bool(citations)}. It says nothing about whether the cited passages support the claims; that is what the grader in Chapter~\ref{ch:corrective} checks.
+\end{enumerate}
+\end{inferred}
+
+\section{Citation validation}
+\label{sec:citations}
+
+\subsection{The threat}
+
+\enquote{A language model asked to cite its sources will occasionally produce a plausible-looking marker for a passage it never saw --- and a fabricated citation is worse than none, because it is more convincing} \ev{src/vidyarag/generate/citations.py:7-11}. The validator guarantees that every citation a reader sees points at a passage the system really supplied.
+
+\subsection{Recognising markers}
+
+\begin{lstlisting}[language=Python]
+_MARKER_GROUP = re.compile(r"\[\s*(\d{1,2}(?:\s*[,;]\s*\d{1,2})*)\s*\]")
+_NUMBER = re.compile(r"\d{1,2}")
+\end{lstlisting}
+\vspace{-4pt}{\raggedleft\ev{src/vidyarag/generate/citations.py:31-32}\par}
+
+A marker is a bracket containing one or more one- or two-digit numbers separated by commas or semicolons, with optional spaces. The comment above it records a real bug: the first version accepted only the single form \code{[1]}, while the model writes \code{[1, 2]} \enquote{at least as often as} \code{[1][2]}, so every grouped citation was silently dropped and \enquote{an answer resting on five passages displayed two references and looked less grounded than it was.} The comment's conclusion is worth quoting in an interview: \enquote{Losing a real citation is the same class of failure as inventing one: the reference list stops matching the answer} \ev{src/vidyarag/generate/citations.py:25-30}.
+
+\subsection{Resolving and stripping}
+
+\begin{lstlisting}[language=Python]
+def resolve_citations(answer, chunks) -> list[Citation]:
+    resolved = []
+    for marker in sorted(extract_markers(answer)):     # unique markers
+        if not 1 <= marker <= len(chunks):
+            continue                                   # hallucinated: drop it
+        chunk = chunks[marker - 1]
+        resolved.append(Citation(marker=marker, chunk_id=chunk.chunk_id,
+                                 citation=chunk.citation, ...))
+    return resolved
+
+def strip_invalid_markers(answer, chunks) -> str:
+    limit = len(chunks)
+    def keep(match):
+        valid = [n for n in _NUMBER.findall(match.group(1)) if 1 <= int(n) <= limit]
+        return f"[{', '.join(valid)}]" if valid else ""
+    cleaned = _MARKER_GROUP.sub(keep, answer)
+    return re.sub(r" {2,}", " ", cleaned).replace(" .", ".").replace(" ,", ",").strip()
+\end{lstlisting}
+\vspace{-4pt}{\raggedleft\ev{src/vidyarag/generate/citations.py:81-132} (abridged)\par}
+
+Out-of-range markers are dropped rather than mapped to something nearby: \enquote{\code{[7]} against five chunks is a hallucinated reference, and mapping it to something nearby would manufacture false provenance.} Inside a group, only the invalid numbers are removed: \code{[2, 9]} with three passages becomes \code{[2]}, \enquote{because the claim really is supported by passage 2.}
+
+\begin{measured}[the functions run on constructed inputs, with five passages supplied]
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{5.6cm}L@{}}
+\toprule
+\textbf{Model output} & \textbf{Result}\\
+\midrule
+\code{Glucose enters by facilitated diffusion [2, 7] through GLUT proteins [3]. [9]} & Citations for passages 2 and 3; displayed text \code{Glucose enters by facilitated diffusion [2] through GLUT proteins [3].}\\
+\bottomrule
+\end{tabularx}
+\end{center}
+The edge cases in Section~\ref{sec:citation-edges} were run the same way.
+\end{measured}
+
+\subsection{Edge cases}
+\label{sec:citation-edges}
+
+\begin{itemize}
+  \item \textbf{Ranges and three-digit numbers are not markers.} Text such as \code{[1-3]} or \code{[100]} does not match the pattern, so it produces no citation and is left in the answer unchanged.
+  \item \textbf{Adjacent markers work.} \code{[1][2]} yields citations 1 and 2, and spaced semicolon groups such as \code{[ 4 ; 5 ]} are recognised and normalised to \code{[4, 5]}.
+  \item \textbf{A valid marker is not a supported claim.} The validator proves a citation points at a supplied passage, not that the passage says what the sentence says. That second check is the grader's job (Chapter~\ref{ch:corrective}).
+\end{itemize}
+
+\subsection{What the reader sees}
+
+Each \code{Citation} carries the marker, chunk id, citation string, book title, section, printed page, first PDF page, source URL and licence \ev{src/vidyarag/generate/citations.py:35-51}. The three interfaces render these fields themselves: the demo as a \enquote{Sources} list with the licence, the API as \code{CitationOut} objects, and the CLI as \code{[n] citation (licence)} lines (Chapter~\ref{ch:interfaces}). A real rendered source from the live demo reads \code{[2] Biology, 10.2. The Cell Cycle*, p.274}.
+
+\begin{finding}[the documented citation format is idealised]
+The README and \code{ATTRIBUTION.md} show citations in the form \texttt{Biology, \textsection 7.3, p.214}. The code produces \code{Biology, 7.3. <section title>*, p.214}: there is no section sign, the section title is included, and the title carries the asterisk from the PDF outline. The documents describe a cleaner format than the one users see.
+\end{finding}
+
+\section{How generation and citations are tested}
+
+\code{tests/test_citations.py} (26 collected tests) and \code{tests/test_generate.py} (12) use fake model clients and constructed passages. Representative names: \code{test_drops_markers_beyond_the_supplied_context}, \code{test_prunes_invalid_numbers_out_of_a_group}, \code{test_strips_citations_the_model_invented}, \code{test_empty_context_never_reaches_the_model} and \code{test_every_citation_resolves_to_a_real_page_and_section}, whose docstring calls it \enquote{the assertion the whole project's credibility rests on}.
+
+\section{Summary}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{6.6cm}L@{}}
+\toprule
+\textbf{Property} & \textbf{Status}\\
+\midrule
+Answers use only supplied passages & Instructed by the prompt; checked afterwards only when the self-check is on\\
+Every displayed citation resolves to a supplied passage & Guaranteed by code and tested\\
+Prompt wording is versioned & Yes, \code{answer-v1}\\
+Generation is reproducible & No: temperature 0 still varies (measured in the repository)\\
+Empty retrieval never reaches the model & Guaranteed and tested\\
+API errors are handled in the generator & No; they propagate to the interface\\
+Token usage recorded & For generation calls only\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{recommended}
+Return a distinct message, and a distinct flag, when the model returns nothing, instead of reusing the empty-retrieval text. Rename \code{grounded} to something like \code{has_citations} to stop it being read as a verdict. Update the documented citation format to match the rendered one, or strip the outline asterisk at ingestion.
+\end{recommended}

@@ -1,0 +1,425 @@
+\chapter{Configuration}
+\label{ch:config}
+
+Every behavioural difference between the five measured variants of VidyaRAG, and every difference between a laptop, a container and the hosted demo, is expressed as configuration rather than as code. This chapter explains the two configuration layers, every key and variable, how the files are merged and validated, and the traps that are easy to fall into.
+
+\section{Two layers, deliberately separated}
+\label{sec:config-layers}
+
+The module docstring of \code{settings.py} states the design in one paragraph \ev{src/vidyarag/settings.py:1-14}:
+
+\begin{lstlisting}[language=Python]
+"""Runtime configuration.
+
+Two layers, deliberately separated:
+
+* Settings -- *deployment* concerns that vary by environment and
+  include secrets. Sourced from environment variables / .env.
+* PipelineConfig -- *behavioural* concerns that define what the RAG
+  pipeline actually does. Sourced from config/default.yaml overlaid with
+  config/profiles/<profile>.yaml.
+
+The split matters for evaluation: a profile is a reproducible description of a
+pipeline variant that can be committed, diffed, and cited in a results table.
+Secrets must never end up in one.
+"""
+\end{lstlisting}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.3cm}LL@{}}
+\toprule
+\textbf{Aspect} & \textbf{\code{Settings} (deployment)} & \textbf{\code{PipelineConfig} (behaviour)}\\
+\midrule
+Question it answers & Where am I running, and with which credentials? & What does the pipeline do?\\
+Source & Environment variables and a \code{.env} file & \code{config/default.yaml} overlaid with one file from \code{config/profiles/}\\
+Holds secrets & Yes: \code{GOOGLE_API_KEY}, \code{QDRANT_API_KEY} & Never\\
+Committed to git & No. \code{.env} is ignored; only \code{.env.example} is committed & Yes, every file\\
+Unknown entries & Ignored (\code{extra="ignore"}) & Rejected (\code{extra="forbid"})\\
+Stored with evaluation results & Only indirectly (the collection name is part of the answer-cache key) & The full merged configuration is dumped into every run file\\
+Implemented by & \code{Settings} (pydantic-settings) & \code{PipelineConfig} and four nested pydantic models\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{figure}[htbp]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  font=\sffamily\footnotesize,
+  src/.style={draw, dashed, rounded corners=2pt, fill=gray!8, align=center, text width=42mm, minimum height=10mm},
+  obj/.style={draw, rounded corners=2pt, fill=blue!6, align=center, text width=42mm, minimum height=10mm},
+  file/.style={draw, fill=yellow!12, align=center, text width=36mm, minimum height=9mm},
+  arr/.style={-Stealth, thick}
+]
+\node[src] (env) at (0,1.2) {Process environment\\\code{GOOGLE_API_KEY}, \code{QDRANT_*},\\\code{VIDYARAG_PROFILE}, \code{LOG_*}};
+\node[src] (dotenv) at (0,-1.2) {\code{.env} file, looked up in\\the current working directory};
+\node[obj] (settings) at (5.3,0) {\textbf{\code{Settings()}}\\validated at construction};
+\node[obj] (prof) at (5.3,-2.5) {\code{settings.profile}\\(default \code{guarded})};
+\node[src] (cfgdir) at (10.6,2.3) {\code{resolve_config_dir()}\\\code{VIDYARAG_CONFIG_DIR}\\or \code{<repo>/config}};
+\node[file] (default) at (10.6,0.1) {\code{default.yaml}};
+\node[file] (pfile) at (10.6,-2.5) {\code{profiles/<profile>.yaml}};
+\node[obj] (merge) at (15.6,-1.2) {\code{_deep_merge(base, overlay)}\\then \code{setdefault("name")}};
+\node[obj] (pc) at (15.6,-3.8) {\textbf{\code{PipelineConfig}}\\\code{model_validate}, extra keys rejected};
+\node[obj] (pipe) at (5.3,-5.2) {\textbf{\code{Pipeline(settings, config)}}};
+\draw[arr] (env) -- (settings);
+\draw[arr] (dotenv) -- node[below right, font=\scriptsize, align=left]{fills variables\\not already set} (settings);
+\draw[arr] (settings) -- (prof);
+\draw[arr] (prof) -- node[above, font=\scriptsize]{selects} (pfile);
+\draw[arr] (cfgdir) -- (default);
+\draw[arr] (cfgdir.east) to[bend left=40] (pfile.east);
+\draw[arr] (default) -- (merge);
+\draw[arr] (pfile) -- (merge);
+\draw[arr] (merge) -- (pc);
+\draw[arr] (pc) |- (pipe);
+\draw[arr] (settings.west) -- ++(-0.5,0) |- (pipe.west);
+\end{tikzpicture}}
+\caption{Where every configuration value comes from, as implemented in \code{settings.py}. The two layers meet only when a \code{Pipeline} is constructed.}
+\label{fig:config-flow}
+\end{figure}
+
+\begin{background}[precedence in pydantic-settings]
+When a field can come from several places, pydantic-settings uses, from highest to lowest priority: values passed to the constructor, environment variables, the dotenv file, then the field default. So an exported shell variable wins over the same name in \code{.env}.
+\end{background}
+
+\section{The deployment layer: Settings}
+\label{sec:settings}
+
+\begin{lstlisting}[language=Python]
+class Settings(BaseSettings):
+    """Environment-sourced configuration. Contains secrets; never serialise it."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        case_sensitive=False,
+    )
+
+    google_api_key: SecretStr = Field(default=SecretStr(""), validation_alias="GOOGLE_API_KEY")
+    qdrant_mode: QdrantMode = Field(default=QdrantMode.EMBEDDED, validation_alias="QDRANT_MODE")
+    qdrant_url: str | None = Field(default=None, validation_alias="QDRANT_URL")
+    qdrant_api_key: SecretStr | None = Field(default=None, validation_alias="QDRANT_API_KEY")
+    qdrant_path: str = Field(default="data/index", validation_alias="QDRANT_PATH")
+    qdrant_collection: str = Field(default="vidyarag_biology_v1", validation_alias="QDRANT_COLLECTION")
+    profile: str = Field(default="guarded", validation_alias="VIDYARAG_PROFILE")
+    log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
+    log_format: Literal["json", "console"] = Field(default="json", validation_alias="LOG_FORMAT")
+\end{lstlisting}
+\vspace{-4pt}{\raggedleft\ev{src/vidyarag/settings.py:76-113} (docstrings removed)\par}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{2.9cm}>{\raggedright\arraybackslash}p{2.2cm}>{\raggedright\arraybackslash}p{6.9cm}@{}}
+\toprule
+\textbf{Variable} & \textbf{Field and type} & \textbf{Default} & \textbf{Purpose and rules}\\
+\midrule
+\endhead
+\code{GOOGLE_API_KEY} & \code{google_api_key}: \code{SecretStr} & empty & Gemini key for generation, grading, decomposition, the gold-set tools and evaluation. Not needed to download, ingest or run the retrieval-only endpoint. \code{SecretStr} keeps the value out of \code{repr} and logs, which a test asserts \ev{tests/test\_settings.py}.\\
+\code{QDRANT_MODE} & \code{qdrant_mode}: \code{QdrantMode} & \code{embedded} & \code{embedded} (in-process), \code{server} (HTTP to a local Qdrant, for example docker-compose) or \code{cloud} (Qdrant Cloud).\\
+\code{QDRANT_URL} & \code{qdrant_url}: \code{str} or \code{None} & none & Required when the mode is \code{server} or \code{cloud}.\\
+\code{QDRANT_API_KEY} & \code{qdrant_api_key}: \code{SecretStr} or \code{None} & none & Required when the mode is \code{cloud}.\\
+\code{QDRANT_PATH} & \code{qdrant_path}: \code{str} & \code{data/index} & Folder of the embedded index, or \code{:memory:} for a throw-away in-process index (used by tests and CI). A relative path is resolved against the repository root, not the working directory.\\
+\code{QDRANT_COLLECTION} & \code{qdrant_collection}: \code{str} & \code{vidyarag_biology_v1} & Collection name. Also part of the evaluation answer-cache key.\\
+\code{VIDYARAG_PROFILE} & \code{profile}: \code{str} & \code{guarded} & Which profile file to load. The docstring explains that the default used to be the frozen \code{baseline}, which meant a fresh clone, the API and the CLI all ran with the guardrails down \ev{src/vidyarag/settings.py:100-110}.\\
+\code{LOG_LEVEL} & \code{log_level}: \code{str} & \code{INFO} & structlog level. Read only by the API at startup \ev{src/vidyarag/api/main.py:34}.\\
+\code{LOG_FORMAT} & \code{log_format}: \code{json} or \code{console} & \code{json} & Log renderer. Read only by the API at startup.\\
+\bottomrule
+\end{longtable}
+
+\paragraph{Variables read outside \code{Settings}.}
+\begin{itemize}
+  \item \code{VIDYARAG_CONFIG_DIR} is read directly from \code{os.environ} by \code{resolve_config_dir()}, at call time rather than import time \ev{src/vidyarag/settings.py:35-47}. The Docker image sets it to \code{/app/config} \ev{Dockerfile:59-66}.
+  \item \code{HF_TOKEN} is read only by the \code{huggingface_hub} library inside \code{scripts/deploy_space.py}, after that script loads \code{.env} into the environment \ev{scripts/deploy\_space.py:113-117}. The running system never uses it.
+  \item \code{FASTEMBED_CACHE_PATH} is set in the Docker image to a folder the non-root user owns \ev{Dockerfile:66}. It is consumed by the fastembed library, not by project code.
+  \item \code{OPENAI_API_KEY} is set to a fake value in the CI workflow \ev{.github/workflows/ci.yml:26}. No file in the repository reads it (Section~\ref{sec:config-findings}).
+\end{itemize}
+
+On the Hugging Face Space the deploy script sets the secret \code{GOOGLE_API_KEY} (read from the local environment, never written to a file) and the variables \code{VIDYARAG_PROFILE=guarded} and \code{QDRANT_MODE=embedded} \ev{scripts/deploy\_space.py}.
+
+\subsection{Validation at startup}
+
+\begin{lstlisting}[language=Python]
+@model_validator(mode="after")
+def _check_mode_requirements(self) -> Settings:
+    """Fail at startup rather than at first query."""
+    if self.qdrant_mode in (QdrantMode.SERVER, QdrantMode.CLOUD) and not self.qdrant_url:
+        raise ValueError(f"QDRANT_URL is required when QDRANT_MODE={self.qdrant_mode.value}")
+    if self.qdrant_mode is QdrantMode.CLOUD and not self.qdrant_api_key:
+        raise ValueError("QDRANT_API_KEY is required when QDRANT_MODE=cloud")
+    return self
+\end{lstlisting}
+\vspace{-4pt}{\raggedleft\ev{src/vidyarag/settings.py:115-126}\par}
+
+The docstring gives the reason: a missing URL would otherwise surface as a confusing connection error deep inside a retrieval call.
+
+\subsection{Three path subtleties}
+\label{sec:config-paths}
+
+\begin{enumerate}
+  \item \textbf{\code{.env} is relative.} The model config says \code{env_file=".env"}, with no directory.
+  \item \textbf{\code{QDRANT_PATH} is resolved against the repository root.} The \code{resolved_qdrant_path} property joins a relative path onto \code{REPO_ROOT}, so \code{data/index} names the same folder whichever directory a command is started from \ev{src/vidyarag/settings.py:128-134}.
+  \item \textbf{\code{REPO_ROOT} is computed from the file's own location}: \code{Path(__file__).resolve().parents[2]} \ev{src/vidyarag/settings.py:28}. In a checkout, and on the Space, \code{settings.py} sits at \code{<repo>/src/vidyarag/settings.py}, so two levels up is the repository. After a non-editable install, as in the Docker image, the file sits in \code{site-packages}, and two levels up is \code{/app/.venv/lib/python3.11}. The Dockerfile records the resulting incident --- the server refused to start with \enquote{Unknown profile 'guarded'. Available: (none)} --- and therefore sets both \code{VIDYARAG_CONFIG_DIR=/app/config} and an absolute \code{QDRANT_PATH=/app/data/index} \ev{Dockerfile:54-66}.
+\end{enumerate}
+
+\begin{background}[relative dotenv paths]
+pydantic-settings opens a relative \code{env_file} path relative to the process's current working directory.
+\end{background}
+
+\begin{inferred}[consequence of the first subtlety]
+Running \code{vidyarag} from any directory other than the repository root does not load \code{.env}. No error is raised: the key is simply empty, so retrieval works but the first Gemini call fails with the ``no API key'' \code{ValueError} from \code{llm/provider.py}. The profile still defaults to \code{guarded}, and the index path still resolves correctly, which makes the partial failure easy to misread.
+\end{inferred}
+
+\section{The behavioural layer: PipelineConfig}
+\label{sec:pipelineconfig}
+
+\begin{lstlisting}[language=Python]
+class ChunkingConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    chunk_size: int = 512
+    chunk_overlap: int = 64
+    respect_sentence_boundaries: bool = True
+
+class RetrievalConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    top_k_retrieve: int = 20
+    top_k_context: int = 5
+    use_hybrid: bool = False
+    use_reranker: bool = False
+    use_decomposition: bool = False
+    reranker_model: str = "Xenova/ms-marco-MiniLM-L-6-v2"
+    sparse_model: str = "Qdrant/bm25"
+    # + validator rejecting use_hybrid=True
+
+class CorrectiveConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool = False
+    accept_threshold: float = 0.8
+    abstain_threshold: float = 0.5
+    max_attempts: int = 2
+
+class GuardrailConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    check_user_input: bool = False
+    check_retrieved_context: bool = False
+
+class PipelineConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = "baseline"
+    description: str = ""
+    generation_model: str = "gemini-3.5-flash-lite"
+    grader_model: str = "gemini-3.1-flash-lite"
+    temperature: float = 0.0
+    embedding_model: str = "BAAI/bge-base-en-v1.5"
+    embedding_dim: int = 768
+    embedding_max_tokens: int = 512
+    chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
+    retrieval: RetrievalConfig = Field(default_factory=RetrievalConfig)
+    corrective: CorrectiveConfig = Field(default_factory=CorrectiveConfig)
+    guardrails: GuardrailConfig = Field(default_factory=GuardrailConfig)
+\end{lstlisting}
+\vspace{-4pt}{\raggedleft\ev{src/vidyarag/settings.py:137-222} (docstrings removed)\par}
+
+\subsection{Every key, and the code that reads it}
+
+The ``read by'' column was established by searching \code{src/}, \code{app/} and \code{scripts/} for each attribute. A key with no reader changes nothing when edited.
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{4.1cm}>{\raggedright\arraybackslash}p{2.8cm}>{\raggedright\arraybackslash}p{8.5cm}@{}}
+\toprule
+\textbf{Key} & \textbf{Default} & \textbf{Read by (verified) and effect}\\
+\midrule
+\endhead
+\code{name} & \code{baseline} in code; every profile sets its own & Trace \code{profile}, evaluation run files and the answer-cache key.\\
+\code{description} & empty & \code{vidyarag config} and \code{GET /v1/config}.\\
+\code{generation_model} & \code{gemini-3.5-flash-lite} & Answer generation \ev{src/vidyarag/pipeline.py:181,223}; \emph{also} query decomposition \ev{src/vidyarag/pipeline.py:94}; drafting candidate unanswerable questions \ev{src/vidyarag/cli.py:549}; evaluation metadata and cache key.\\
+\code{grader_model} & \code{gemini-3.1-flash-lite} & The corrective loop's grader \ev{src/vidyarag/pipeline.py:236}; RAGAS and the abstention judge \ev{src/vidyarag/evaluation/runner.py:501,521}; gold-set drafting and triage \ev{src/vidyarag/cli.py:392,413,550,663}.\\
+\code{temperature} & \code{0.0} & Answer generation only \ev{src/vidyarag/pipeline.py:182,224}, plus the answer-cache key. The grader and decomposer set their own temperature of 0.\\
+\code{embedding_model} & \code{BAAI/bge-base-en-v1.5} & Dense retrieval \ev{src/vidyarag/pipeline.py:104,112}; ingestion \ev{src/vidyarag/cli.py:204}; \code{/v1/search}; RAGAS answer-relevancy embeddings; gold-set tools; cache key.\\
+\code{embedding_dim} & \code{768} & Collection creation and its dimension check during ingestion \ev{src/vidyarag/cli.py:205}; \code{/v1/config}.\\
+\code{embedding_max_tokens} & \code{512} & \textbf{Read by no code.}\\
+\code{chunking.chunk_size} & \code{512} & Ingestion \ev{src/vidyarag/cli.py:206}; displayed by \code{config} and \code{/v1/config}.\\
+\code{chunking.chunk_overlap} & \code{64} & Ingestion \ev{src/vidyarag/cli.py:207}; displayed.\\
+\code{chunking.respect_sentence_boundaries} & \code{true} & \textbf{Read by no code.} The chunker always packs whole sentences.\\
+\code{retrieval.top_k_retrieve} & \code{20} & Candidate pool size \ev{src/vidyarag/pipeline.py:105-113}; the $k$ of recall@$k$ in evaluation \ev{src/vidyarag/evaluation/runner.py:321}; cache key.\\
+\code{retrieval.top_k_context} & \code{5} & How many passages reach the prompt \ev{src/vidyarag/pipeline.py:131}; recall@context \ev{src/vidyarag/evaluation/runner.py:322}; cache key.\\
+\code{retrieval.use_hybrid} & \code{false} & Must stay false: a validator raises if it is true \ev{src/vidyarag/settings.py:164-181}. Otherwise only displayed (CLI, \code{/v1/config}, evaluation report).\\
+\code{retrieval.use_reranker} & \code{false} & Switches reranking on \ev{src/vidyarag/pipeline.py:120}.\\
+\code{retrieval.use_decomposition} & \code{false} & Switches decomposition on \ev{src/vidyarag/pipeline.py:92}.\\
+\code{retrieval.reranker_model} & \code{Xenova/ms-marco-MiniLM-L-6-v2} & The cross-encoder loaded by the reranker \ev{src/vidyarag/pipeline.py:125}.\\
+\code{retrieval.sparse_model} & \code{Qdrant/bm25} & \textbf{Read by no code.} Documented as reserved for hybrid search, which was never built.\\
+\code{corrective.enabled} & \code{false} & Routes \code{Pipeline.answer} through the corrective loop.\\
+\code{corrective.accept_threshold} & \code{0.8} & \code{CorrectivePolicy}, built per query \ev{src/vidyarag/pipeline.py:205}.\\
+\code{corrective.abstain_threshold} & \code{0.5} & \code{CorrectivePolicy} \ev{src/vidyarag/pipeline.py:206}.\\
+\code{corrective.max_attempts} & \code{2} & \code{CorrectivePolicy} and the loop bound \ev{src/vidyarag/correct/loop.py:141}.\\
+\code{guardrails.check_user_input} & \code{false} & Input guard before any retrieval \ev{src/vidyarag/pipeline.py:159}.\\
+\code{guardrails.check_retrieved_context} & \code{false} & Context guard on the final passages \ev{src/vidyarag/pipeline.py:136}.\\
+\bottomrule
+\end{longtable}
+
+Neither \code{vidyarag config} nor \code{GET /v1/config} displays the grader model's thresholds together with the guardrail flags: the CLI table has no guardrail rows, and the API response has no threshold or guardrail fields \ev{src/vidyarag/cli.py:96-114}, \ev{src/vidyarag/api/routes\_v1.py:180-193}. From those two views, \code{corrective} and \code{guarded} differ only by name.
+
+\section{The five profiles}
+\label{sec:profiles}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  font=\sffamily\small,
+  node distance=6mm and 17mm,
+  p/.style={draw, rounded corners=3pt, fill=blue!6, align=center, minimum width=26mm, minimum height=10mm},
+  arr/.style={-Stealth, thick}
+]
+\node[p, fill=gray!12] (base) {\code{baseline}\\\scriptsize frozen control};
+\node[p, right=of base] (rr) {\code{rerank}};
+\node[p, right=of rr] (corr) {\code{corrective}};
+\node[p, right=of corr, fill=green!10] (guard) {\code{guarded}\\\scriptsize shipped};
+\node[p, below=10mm of rr, fill=red!6] (dec) {\code{decompose}\\\scriptsize rejected};
+\draw[arr] (base) -- node[above, font=\scriptsize]{+ reranker} (rr);
+\draw[arr] (rr) -- node[above, font=\scriptsize]{+ self-check} (corr);
+\draw[arr] (corr) -- node[above, font=\scriptsize]{+ both guards} (guard);
+\draw[arr] (base) |- node[near end, above, font=\scriptsize]{+ decomposition} (dec);
+\end{tikzpicture}
+\caption{How the profiles build on each other. \code{rerank} and \code{decompose} each change exactly one flag from \code{baseline}.}
+\label{fig:profiles}
+\end{figure}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{4.5cm}*{5}{>{\centering\arraybackslash}X}@{}}
+\toprule
+\textbf{Setting} & \code{baseline} & \code{rerank} & \code{decompose} & \code{corrective} & \code{guarded}\\
+\midrule
+\code{use_reranker} & \no & \yes & \no & \yes & \yes\\
+\code{use_decomposition} & \no & \no & \yes & \no & \no\\
+\code{corrective.enabled} & \no & \no & \no & \yes & \yes\\
+\code{check_user_input} & \no & \no & \no & \no & \yes\\
+\code{check_retrieved_context} & \no & \no & \no & \no & \yes\\
+Development phase (from comments) & 2 & 4 & 4 & 5 & 6\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Everything not in the table --- models, temperature, chunking, top-$k$ values, thresholds --- is identical across all five profiles. \code{corrective.yaml} restates the thresholds with the default values; \code{guarded.yaml} does not restate them and inherits the same values from \code{default.yaml}.
+
+\subsection{What each profile file says it is for}
+
+Each profile opens with a comment block recording its purpose and what it was expected to change. These comments are part of the evidence trail.
+
+\begin{description}[style=nextline]
+  \item[\code{baseline} --- the frozen control.] \enquote{This profile is the control group for every measurement in this project. Once Phase 2 ships, DO NOT EDIT IT. Changing it silently invalidates every reported delta\ldots{} To try a variation, add a new profile.} A test asserts that the baseline keeps every enhancement switched off.
+  \item[\code{rerank} --- one flag.] \enquote{Reranking finds nothing new. It reorders what dense retrieval already found, so recall @k must NOT change --- the candidate pool is identical. If it does, something other than the reranker moved and the run is not measuring what it claims to.} This built-in sanity check is used again in Chapter~\ref{ch:results}.
+  \item[\code{decompose} --- one flag, reranker deliberately off.] \enquote{Running both would leave that unattributable.} The comment records the per-type numbers from the rerank run that motivated it: factual recall@context $0.893 \rightarrow 0.964$, multi-hop $0.861 \rightarrow 0.833$.
+  \item[\code{corrective} --- built on \code{rerank}.] \enquote{The delta to read here is corrective-vs-rerank; the comparison against baseline additionally carries reranking's contribution.}
+  \item[\code{guarded} --- the shipped configuration.] \enquote{corrective + both guardrails. This is what the deployed demo runs.} It also states that the context guard is \enquote{defence in depth for the day that stops being true, not mitigation of a live hole.}
+\end{description}
+
+\begin{finding}[a profile comment the stored answers contradict]
+The header of \code{config/profiles/corrective.yaml} says the profile exists to move \enquote{abstention recall 0.000 in baseline, rerank and decompose alike} and that \enquote{No profile before this one can decline to answer, so all twelve unanswerable questions get an answer.} The stored answers in the committed run files show that \code{baseline}, \code{rerank} and \code{decompose} each declined all twelve unanswerable questions in prose. The 0.000 comes from a scoring bug, explained in Section~\ref{sec:judge-bug}.
+\end{finding}
+
+\section{How a profile is loaded}
+\label{sec:config-loading}
+
+\begin{lstlisting}[language=Python]
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Recursively overlay override onto base without mutating either."""
+    merged = dict(base)
+    for key, value in override.items():
+        existing = merged.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            merged[key] = _deep_merge(existing, value)
+        else:
+            merged[key] = value
+    return merged
+
+def load_pipeline_config(profile: str, config_dir: Path | None = None) -> PipelineConfig:
+    directory = config_dir or resolve_config_dir()
+    base = _read_yaml(directory / "default.yaml")
+    profile_path = directory / "profiles" / f"{profile}.yaml"
+    if not profile_path.exists():
+        available = sorted(p.stem for p in (directory / "profiles").glob("*.yaml"))
+        raise FileNotFoundError(
+            f"Unknown profile {profile!r} in {directory}. "
+            f"Available: {', '.join(available) or '(none)'}"
+        )
+    merged = _deep_merge(base, _read_yaml(profile_path))
+    merged.setdefault("name", profile)
+    return PipelineConfig.model_validate(merged)
+\end{lstlisting}
+\vspace{-4pt}{\raggedleft\ev{src/vidyarag/settings.py:225-267}\par}
+
+Step by step:
+\begin{enumerate}
+  \item Pick the directory: an explicit argument (tests pass one), else \code{VIDYARAG_CONFIG_DIR}, else \code{<repo>/config}.
+  \item Read \code{default.yaml} with \code{yaml.safe_load}. A missing file becomes \code{{}}, an empty file becomes \code{{}}, and a file whose top level is not a mapping raises \code{TypeError} \ev{src/vidyarag/settings.py:237-245}.
+  \item Refuse unknown profile names with a message that names the directory searched. The inline comment explains why: \enquote{Available: (none)} alone gave no hint that the search was looking in the wrong place, \enquote{which cost a CI round to see.}
+  \item Overlay the profile onto the defaults. Nested mappings merge key by key; any other value, including a list or \code{None}, replaces the default outright.
+  \item Use the file name as the \code{name} if the profile does not set one. All five profiles set it explicitly.
+  \item Validate. Because every model has \code{extra="forbid"}, a misspelt key is an error rather than a silently ignored setting.
+\end{enumerate}
+
+\begin{example}[merging \code{guarded.yaml} onto \code{default.yaml}]
+\code{default.yaml} contains \code{corrective: {enabled: false, accept_threshold: 0.8, abstain_threshold: 0.5, max_attempts: 2}}, and \code{guarded.yaml} contains \code{corrective: {enabled: true}}. Both values are mappings, so they are merged rather than replaced, giving \code{{enabled: true, accept_threshold: 0.8, abstain_threshold: 0.5, max_attempts: 2}}. Had the merge been shallow, the thresholds would have vanished and the pydantic defaults (which happen to be the same numbers) would have filled them in --- an equivalence that would silently break if either file changed.
+\end{example}
+
+\subsection{What goes wrong, and when it surfaces}
+
+\begin{center}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{5.0cm}>{\raggedright\arraybackslash}p{5.3cm}L@{}}
+\toprule
+\textbf{Mistake} & \textbf{Error} & \textbf{When it surfaces}\\
+\midrule
+\code{VIDYARAG_PROFILE=gaurded} & \code{FileNotFoundError}, listing available profiles & At startup\\
+Misspelt key, e.g.\ \code{use_rerankr: true} & pydantic \code{ValidationError} (extra input not permitted) & At startup\\
+\code{use_hybrid: true} & \code{ValueError}: reserved but not implemented & At startup\\
+A profile file containing a YAML list & \code{TypeError}: must contain a YAML mapping & At startup\\
+\code{QDRANT_MODE=server} without \code{QDRANT_URL} & \code{ValueError} from \code{Settings} & When \code{Settings()} is built\\
+\code{abstain_threshold} greater than \code{accept_threshold} & \code{ValueError} from \code{CorrectivePolicy} & Only when the first corrective query builds the policy \ev{src/vidyarag/correct/policy.py:96-104}\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{inferred}[why the last row matters]
+\code{CorrectiveConfig} has no validator of its own, and \code{CorrectivePolicy} is constructed inside \code{_answer_corrective} for each query \ev{src/vidyarag/pipeline.py:203-208}. A profile with inverted thresholds therefore loads, passes \code{vidyarag health} (which reports the pipeline configuration as valid), and fails on the first real question.
+\end{inferred}
+
+\section{Recipes}
+
+\begin{lstlisting}[language=bash]
+# Inspect the merged configuration of a profile
+uv run vidyarag config --profile guarded
+curl http://localhost:8000/v1/config        # the profile the API was started with
+
+# Run one command under a different profile
+uv run vidyarag ask "What is osmosis?" --profile rerank
+VIDYARAG_PROFILE=baseline uv run vidyarag ask "What is osmosis?"
+
+# Use a local Qdrant server instead of the embedded index
+docker compose up -d
+QDRANT_MODE=server QDRANT_URL=http://localhost:6333 uv run vidyarag health
+\end{lstlisting}
+
+To add a new variant, create \code{config/profiles/<name>.yaml} containing only the keys that differ, give it a \code{name} and \code{description}, and never edit \code{baseline.yaml}. Evaluate it with \code{vidyarag eval --profile <name>}.
+
+\begin{caution}[changing an existing profile]
+The evaluation answer cache is keyed on the profile \emph{name} plus a subset of settings that does not include the reranker, decomposition, corrective or guardrail flags (Section~\ref{sec:answer-cache}). Editing those flags inside an existing profile and re-running the evaluation can reuse answers generated under the old behaviour. Create a new profile, or run with \code{--no-cache}.
+\end{caution}
+
+\section{Configuration findings}
+\label{sec:config-findings}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.5cm}>{\raggedright\arraybackslash}p{9.3cm}>{\raggedright\arraybackslash}p{5.9cm}@{}}
+\toprule
+\textbf{\#} & \textbf{Finding (verified)} & \textbf{Evidence}\\
+\midrule
+\endhead
+1 & \code{chunking.respect_sentence_boundaries} exists, appears in every run file, and is read by no code. & \ev{src/vidyarag/settings.py:144}; search of \code{src/}\\
+2 & \code{embedding_max_tokens} is read by no code; the 512-token limit is honoured only because \code{chunk_size} is also 512. & \ev{src/vidyarag/settings.py:218}; search of \code{src/}\\
+3 & \code{retrieval.sparse_model} is read by no code. This one is openly documented as reserved. & \ev{config/default.yaml:73-77}\\
+4 & Threshold ordering is validated per query, not at configuration load. & \ev{src/vidyarag/correct/policy.py:96-104}\\
+5 & In \code{.env.example}, the description of the \code{cloud} mode says \code{QDRANT_MODE=embedded}; it should say \code{cloud}. & \ev{.env.example}\\
+6 & CI sets \code{OPENAI_API_KEY: test-key-not-real}, read by nothing. Its comment presents fake credentials as one of two safeguards, but the key the code uses, \code{GOOGLE_API_KEY}, is simply absent in CI, and the test fixtures delete it. & \ev{.github/workflows/ci.yml:14-28}; \ev{tests/conftest.py}\\
+7 & \code{GET /v1/config} and \code{vidyarag config} omit the guardrail flags and thresholds, so the two self-check profiles are indistinguishable except by name. & \ev{src/vidyarag/api/routes\_v1.py:180-193}\\
+8 & The \code{corrective.yaml} header claims no earlier profile can decline to answer; the stored answers contradict it. & Section~\ref{sec:judge-bug}\\
+\bottomrule
+\end{longtable}
+
+\begin{recommended}
+Delete the three dead keys, or make them do what their names say. Add a \code{model_validator} to \code{CorrectiveConfig} so inverted thresholds fail at load time. Either anchor \code{env_file} to \code{REPO_ROOT} or document that commands must be run from the repository root. Fix the \code{.env.example} line, replace the CI \code{OPENAI_API_KEY} with an explicit empty \code{GOOGLE_API_KEY}, add the guardrail flags and thresholds to \code{/v1/config}, and correct the \code{corrective.yaml} comment.
+\end{recommended}

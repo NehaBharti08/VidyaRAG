@@ -1,0 +1,155 @@
+% ---------------------------------------------------------------------------
+% preamble.tex -- VidyaRAG study report (compile with XeLaTeX / Tectonic)
+% ---------------------------------------------------------------------------
+\usepackage[a4paper,top=2.4cm,bottom=2.4cm,left=2.2cm,right=2.2cm,headheight=15pt]{geometry}
+
+% --- Fonts (loaded by file name so the build does not depend on fontconfig) --
+\usepackage{fontspec}
+\setmainfont{texgyrepagella}[Extension=.otf,UprightFont=*-regular,BoldFont=*-bold,ItalicFont=*-italic,BoldItalicFont=*-bolditalic]
+\setsansfont{texgyreheros}[Extension=.otf,UprightFont=*-regular,BoldFont=*-bold,ItalicFont=*-italic,BoldItalicFont=*-bolditalic]
+\setmonofont{DejaVuSansMono}[Extension=.ttf,BoldFont=*-Bold,ItalicFont=*-Oblique,BoldItalicFont=*-BoldOblique,Scale=0.84]
+\newfontfamily\symbolfont{DejaVuSans}[Extension=.ttf,BoldFont=*-Bold]
+
+\usepackage[protrusion=true,expansion=false]{microtype}
+\usepackage[dvipsnames,table]{xcolor}
+\definecolor{vrblue}{HTML}{1F4E79}
+\definecolor{vrlink}{HTML}{1A5C9E}
+\definecolor{vrgray}{HTML}{5F6B73}
+
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs,tabularx,longtable,array,multirow,makecell}
+\usepackage{enumitem}
+\usepackage[autostyle=false,style=english]{csquotes}
+\usepackage[skip=0.55em plus 0.1em]{parskip}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{etoolbox}
+\usepackage[most]{tcolorbox}
+\usepackage{listings}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,shapes.geometric,shapes.misc,fit,calc,backgrounds,matrix}
+\usepackage[font=small,labelfont={bf,sf},margin=4mm]{caption}
+\usepackage[section]{placeins}
+\usepackage{xurl}
+\usepackage[colorlinks=true,linkcolor=vrlink,urlcolor=vrlink,citecolor=vrlink]{hyperref}
+\usepackage{bookmark}
+\hypersetup{
+  pdftitle={VidyaRAG: A Complete Technical Study},
+  pdfsubject={Repository analysis, learning guide and interview preparation},
+  pdfkeywords={RAG, retrieval, reranking, self-correction, evaluation, Qdrant, Gemini}
+}
+
+% --- Layout ------------------------------------------------------------------
+\setlength{\emergencystretch}{3em}
+\renewcommand{\arraystretch}{1.15}
+\setlength{\LTpre}{6pt}
+\setlength{\LTpost}{6pt}
+\setlist{itemsep=2pt,topsep=3pt,parsep=1pt}
+\newcolumntype{L}{>{\raggedright\arraybackslash}X}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\sffamily\color{vrgray}\nouppercase{\leftmark}}
+\fancyhead[R]{\small\sffamily\color{vrgray}\thepage}
+\renewcommand{\headrulewidth}{0.3pt}
+\fancypagestyle{plain}{%
+  \fancyhf{}%
+  \fancyfoot[C]{\small\sffamily\color{vrgray}\thepage}%
+  \renewcommand{\headrulewidth}{0pt}}
+\renewcommand{\chaptermark}[1]{\markboth{\ifnum\value{chapter}>0 \thechapter.\ \fi #1}{}}
+\renewcommand{\sectionmark}[1]{}
+
+\titleformat{\chapter}[display]
+  {\sffamily\bfseries\color{vrblue}}
+  {\large\chaptertitlename\ \thechapter}
+  {0.5ex}
+  {\huge\raggedright}
+  [\vspace{0.4ex}{\color{vrblue!45}\titlerule[0.8pt]}]
+\titlespacing*{\chapter}{0pt}{0pt}{16pt}
+\titleformat{\section}{\sffamily\Large\bfseries\color{vrblue}\raggedright}{\thesection}{0.7em}{}
+\titleformat{\subsection}{\sffamily\large\bfseries\raggedright}{\thesubsection}{0.7em}{}
+\titleformat{\subsubsection}{\sffamily\normalsize\bfseries\raggedright}{\thesubsubsection}{0.7em}{}
+\titleformat{\paragraph}[runin]{\sffamily\normalsize\bfseries}{}{0em}{}[]
+\titlespacing*{\paragraph}{0pt}{0.8ex plus 0.3ex}{0.6em}
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{1}
+
+% --- Inline code and evidence references ---------------------------------------
+% \code{...} and \ev{...} take their argument verbatim-like: raw underscores are
+% allowed, "\_" is treated as "_", and line breaks are permitted after "_", "/"
+% and "." so long identifiers and paths never overflow a table cell.
+\ExplSyntaxOn
+\cs_generate_variant:Nn \tl_replace_all:Nnn { NVn , NVV }
+\tl_const:Nx \c_vr_us_tl { \tl_to_str:n { _ } }
+\tl_const:Nx \c_vr_escus_tl { \c_backslash_str \tl_to_str:n { _ } }
+\tl_new:N \l_vr_code_tl
+\cs_new_protected:Npn \vr_breakable_string:n #1
+  {
+    \tl_set:Nx \l_vr_code_tl { \tl_to_str:n {#1} }
+    \tl_replace_all:NVV \l_vr_code_tl \c_vr_escus_tl \c_vr_us_tl
+    \tl_replace_all:NVn \l_vr_code_tl \c_vr_us_tl { \textunderscore \allowbreak }
+    \tl_replace_all:Nnn \l_vr_code_tl { / } { / \allowbreak }
+    \tl_replace_all:Nnn \l_vr_code_tl { . } { . \allowbreak }
+    \tl_replace_all:Nnn \l_vr_code_tl { - } { - \allowbreak }
+    \tl_use:N \l_vr_code_tl
+  }
+\NewDocumentCommand \code { m } { \texttt { \vr_breakable_string:n {#1} } }
+\NewDocumentCommand \ev { m }
+  { { \small \textsf { \color { vrgray } [ \vr_breakable_string:n {#1} ] } } }
+\ExplSyntaxOff
+\pdfstringdefDisableCommands{\def\code#1{\detokenize{#1}}\def\ev#1{}}
+
+\newcommand{\NotDet}{\emph{Not determinable from the repository.}}
+\newcommand{\tagV}{\textsf{\scriptsize\bfseries\color{green!45!black}[Verified]}}
+\newcommand{\tagM}{\textsf{\scriptsize\bfseries\color{teal!70!black}[Measured in this analysis]}}
+\newcommand{\tagI}{\textsf{\scriptsize\bfseries\color{orange!80!black}[Inferred]}}
+\newcommand{\tagR}{\textsf{\scriptsize\bfseries\color{violet!70!black}[Recommended]}}
+\newcommand{\yes}{{\symbolfont\char"2713}}
+\newcommand{\no}{{\symbolfont\char"2717}}
+
+% --- Boxes -----------------------------------------------------------------------
+\tcbset{vrbase/.style={enhanced, breakable, boxrule=0.6pt, arc=1.2mm,
+  left=2.2mm, right=2.2mm, top=1.2mm, bottom=1.2mm,
+  fonttitle=\sffamily\bfseries\small, before skip=8pt, after skip=8pt}}
+\DeclareTColorBox{keyidea}{O{Key idea}}{vrbase, colback=vrblue!5, colframe=vrblue!80!black, title={#1}}
+\DeclareTColorBox{background}{O{}}{vrbase, colback=gray!6, colframe=gray!55!black,
+  title={Background --- general knowledge, not taken from the repository\ifstrempty{#1}{}{: #1}}}
+\DeclareTColorBox{analogy}{O{}}{vrbase, colback=teal!4, colframe=teal!60!black,
+  title={Analogy\ifstrempty{#1}{}{: #1}}}
+\DeclareTColorBox{example}{O{}}{vrbase, colback=vrblue!3, colframe=vrblue!45!black,
+  title={Worked example\ifstrempty{#1}{}{: #1}}}
+\DeclareTColorBox{finding}{O{}}{vrbase, colback=red!4, colframe=red!65!black,
+  title={Finding from this analysis\ifstrempty{#1}{}{: #1}}}
+\DeclareTColorBox{inferred}{O{}}{vrbase, colback=orange!6, colframe=orange!80!black,
+  title={Inferred --- reasoned from the code, not stated or measured\ifstrempty{#1}{}{: #1}}}
+\DeclareTColorBox{recommended}{O{}}{vrbase, colback=violet!5, colframe=violet!70!black,
+  title={Recommended --- not implemented in the repository\ifstrempty{#1}{}{: #1}}}
+\DeclareTColorBox{verified}{O{}}{vrbase, colback=green!5, colframe=green!45!black,
+  title={Verified\ifstrempty{#1}{}{: #1}}}
+\DeclareTColorBox{measured}{O{}}{vrbase, colback=teal!5, colframe=teal!70!black,
+  title={Measured during this analysis\ifstrempty{#1}{}{: #1}}}
+\DeclareTColorBox{interview}{O{}}{vrbase, colback=cyan!5, colframe=cyan!55!black,
+  title={Interview angle\ifstrempty{#1}{}{: #1}}}
+\DeclareTColorBox{caution}{O{}}{vrbase, colback=yellow!8, colframe=yellow!45!black,
+  title={Caution\ifstrempty{#1}{}{: #1}}}
+
+% --- Code listings -------------------------------------------------------------
+\lstdefinelanguage{yaml}{keywords={true,false,null},sensitive=false,comment=[l]{\#},morestring=[b]',morestring=[b]"}
+\lstdefinelanguage{dockerfile}{keywords={FROM,AS,RUN,COPY,ENV,WORKDIR,USER,EXPOSE,HEALTHCHECK,CMD,VOLUME,ARG,ENTRYPOINT},sensitive=true,comment=[l]{\#},morestring=[b]"}
+\lstdefinelanguage{json}{sensitive=true,morestring=[b]",keywords={true,false,null}}
+\lstdefinelanguage{toml}{sensitive=true,comment=[l]{\#},morestring=[b]",morestring=[b]',keywords={true,false}}
+\lstdefinelanguage{plain}{}
+\lstset{
+  basicstyle=\ttfamily\small,
+  columns=fullflexible, keepspaces=true,
+  breaklines=true, breakatwhitespace=false,
+  postbreak=\mbox{\textcolor{vrgray}{$\hookrightarrow$}\space},
+  frame=single, framerule=0.4pt, rulecolor=\color{gray!40},
+  backgroundcolor=\color{gray!4},
+  xleftmargin=3pt, xrightmargin=3pt, framesep=4pt,
+  numbers=none, showstringspaces=false, tabsize=4, upquote=true,
+  keywordstyle=\color{vrblue}\bfseries,
+  commentstyle=\color{gray!65!black}\itshape,
+  stringstyle=\color{OliveGreen!80!black},
+  aboveskip=6pt, belowskip=6pt, extendedchars=true
+}

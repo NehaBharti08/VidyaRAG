@@ -1,0 +1,97 @@
+\chapter{Configuration, Environment and Constants Reference}
+\label{app:config}
+
+Chapter~\ref{ch:config} explains how configuration is loaded and which code reads each key. This appendix is the compact lookup table, plus the tunable constants that live in code rather than in configuration.
+
+\section{Environment variables}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{4.2cm}>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{8.3cm}@{}}
+\toprule
+\textbf{Variable} & \textbf{Default} & \textbf{Meaning}\\
+\midrule
+\endhead
+\code{GOOGLE_API_KEY} & empty & Gemini key for answering, grading, decomposition, gold-set tools and evaluation\\
+\code{QDRANT_MODE} & \code{embedded} & \code{embedded}, \code{server} or \code{cloud}\\
+\code{QDRANT_PATH} & \code{data/index} & Embedded index folder, or \code{:memory:}; relative to the repository root\\
+\code{QDRANT_URL} & none & Required for \code{server} and \code{cloud}\\
+\code{QDRANT_API_KEY} & none & Required for \code{cloud}\\
+\code{QDRANT_COLLECTION} & \code{vidyarag_biology_v1} & Collection name\\
+\code{VIDYARAG_PROFILE} & \code{guarded} & Profile to load\\
+\code{VIDYARAG_CONFIG_DIR} & repository \code{config/} & Where profiles are found; set to \code{/app/config} in Docker\\
+\code{LOG_LEVEL} & \code{INFO} & API log level\\
+\code{LOG_FORMAT} & \code{json} & \code{json} or \code{console}\\
+\code{HF_TOKEN} & none & Used only by the deploy script\\
+\code{FASTEMBED_CACHE_PATH} & library default & Model cache folder (set in Docker)\\
+\bottomrule
+\end{longtable}
+
+\section{Pipeline configuration keys}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{5.0cm}>{\raggedright\arraybackslash}p{4.4cm}>{\raggedright\arraybackslash}p{6.4cm}@{}}
+\toprule
+\textbf{Key} & \textbf{Default} & \textbf{Notes}\\
+\midrule
+\endhead
+\code{generation_model} & \code{gemini-3.5-flash-lite} & Also used for decomposition\\
+\code{grader_model} & \code{gemini-3.1-flash-lite} & Grading, RAGAS, abstention judge\\
+\code{temperature} & 0.0 & Generation only\\
+\code{embedding_model} & \code{BAAI/bge-base-en-v1.5} & Must match the index\\
+\code{embedding_dim} & 768 & Checked when the collection exists\\
+\code{embedding_max_tokens} & 512 & Read by no code\\
+\code{chunking.chunk_size} & 512 & Ingestion\\
+\code{chunking.chunk_overlap} & 64 & Ingestion\\
+\code{chunking.respect_sentence_boundaries} & true & Read by no code\\
+\code{retrieval.top_k_retrieve} & 20 & Candidate pool\\
+\code{retrieval.top_k_context} & 5 & Passages in the prompt\\
+\code{retrieval.use_hybrid} & false & Must be false; true is rejected\\
+\code{retrieval.use_reranker} & false & true in \code{rerank}, \code{corrective}, \code{guarded}\\
+\code{retrieval.use_decomposition} & false & true in \code{decompose}\\
+\code{retrieval.reranker_model} & \code{Xenova/ms-marco-MiniLM-L-6-v2} & \\
+\code{retrieval.sparse_model} & \code{Qdrant/bm25} & Reserved; read by no code\\
+\code{corrective.enabled} & false & true in \code{corrective}, \code{guarded}\\
+\code{corrective.accept_threshold} & 0.8 & \\
+\code{corrective.abstain_threshold} & 0.5 & \\
+\code{corrective.max_attempts} & 2 & \\
+\code{guardrails.check_user_input} & false & true in \code{guarded}\\
+\code{guardrails.check_retrieved_context} & false & true in \code{guarded}\\
+\bottomrule
+\end{longtable}
+
+\section{Constants in code}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{5.2cm}>{\raggedright\arraybackslash}p{2.6cm}>{\raggedright\arraybackslash}p{8.0cm}@{}}
+\toprule
+\textbf{Constant} & \textbf{Value} & \textbf{Where and what for}\\
+\midrule
+\endhead
+\code{_STREAM_CHUNK_BYTES}, \code{_TIMEOUT} & 1\,MiB; 30\,s, read 120\,s & \code{ingest/download.py:41-43}: download streaming\\
+\code{_HEADER_BAND}, \code{_FOOTER_BAND} & 0.06, 0.94 & \code{ingest/parse.py:41-42}: running heads and footers\\
+\code{_COLUMN_GAP_RATIO}, \code{_COLUMN_CENTRE_TOLERANCE} & 0.04, 0.18 & \code{ingest/parse.py:46-47}: two-column detection\\
+\code{_MIN_OPTIONS_FOR_QUESTION_PAGE} & 4 & \code{ingest/parse.py:84}: question-page detection\\
+\code{batch_size} (ingest) & 64 & \code{ingest/pipeline.py:128}: embed and upsert batch\\
+\code{RUN_REPORT_PATH} & \code{data/ingest_run.json} & \code{ingest/pipeline.py:45}\\
+\code{LOCAL_MODE_POINT_ADVISORY} & 20,000 & \code{store/client.py:25}\\
+\code{POINT_NAMESPACE}, \code{DENSE_VECTOR} & fixed UUID; \code{dense} & \code{store/collection.py:27-29}\\
+\code{REQUEST_TIMEOUT_MS} & 90,000 & \code{llm/provider.py:102}: every Gemini call\\
+\code{RRF_K}, \code{MAX_SUB_QUESTIONS} & 60, 3 & \code{retrieve/decompose.py:33-41}\\
+\code{max_output_tokens} & 2,048 & \code{generate/answer.py:80}\\
+\code{reformulate(max_claims)} & 2 & \code{correct/loop.py:102}\\
+\code{MAX_MATCH_CHARS} & 120 & \code{guard/patterns.py:130}\\
+\code{GEMINI_PRICING}, fallback & per model; 0.30 / 2.50 & \code{observe/trace.py:28-34}: USD per million tokens\\
+\code{ANSWER_GAP_SECONDS} & 4.0 & \code{evaluation/runner.py:85}\\
+\code{ANSWER_ATTEMPTS}, \code{ANSWER_RETRY_SECONDS} & 3; 45 & \code{evaluation/runner.py:97-98}\\
+\code{MAX_FAILURE_RATE} & 0.10 & \code{evaluation/runner.py:112}\\
+\code{DEFAULT_CONCURRENCY}, \code{DEFAULT_SCORES_PER_MINUTE} & 3; 6.0 & \code{evaluation/metrics.py:64-65}\\
+\code{MAX_ATTEMPTS}, \code{BACKOFF_SECONDS} & 5; 30 & \code{evaluation/metrics.py:69-70}: RAGAS retries\\
+\code{CACHE_HIT_SECONDS} & 0.25 & \code{evaluation/metrics.py:73}\\
+Judge \code{max_tokens} & 5 & \code{evaluation/abstention.py:138}: the defect in Section~\ref{sec:judge-bug}\\
+\code{CACHE_VERSION} & \code{"1"} & \code{evaluation/answer_cache.py:26}\\
+Gold-set tooling & 7\,s gap; 2 retries; 45\,s wait; abort after 3 failures; context 5; duplicate cosine 0.88; in-domain 10th percentile & \code{evaluation/verify.py}\\
+Drafting & passages $\ge$120 tokens; seed 20260813; temperature 0.7 & \code{evaluation/draft.py}, \code{cli.py}\\
+Question length; \code{top_k} & 1--2,000 characters; 1--20, default 5 & \code{api/models.py:16, 129}\\
+Demo queue; port & 16; 7860 & \code{app/app.py:204-206}\\
+Container health check & every 30\,s, timeout 10\,s, start 60\,s, 3 retries & \code{Dockerfile:100-101}\\
+Image size budget & 900\,MB & \code{.github/workflows/docker.yml:41}\\
+Coverage floor & 60\% & \code{pyproject.toml:219}\\
+\bottomrule
+\end{longtable}

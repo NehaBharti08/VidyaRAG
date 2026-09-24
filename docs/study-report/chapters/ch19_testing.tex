@@ -1,0 +1,146 @@
+\chapter{Testing}
+\label{ch:testing}
+
+The repository has 28 test modules and a shared fixture file, 4,066 lines in total. This chapter explains how the suite is built, what it proves, what it cannot see, and which tests would have caught the defects in Chapter~\ref{ch:findings}.
+
+\section{Strategy: hermetic by default}
+
+The default suite never touches the network, a paid model, a Qdrant server or the real corpus:
+
+\begin{itemize}
+  \item \textbf{No credentials.} An autouse fixture deletes \code{GOOGLE_API_KEY}, every \code{QDRANT_*} variable, \code{VIDYARAG_PROFILE}, \code{LOG_LEVEL} and \code{LOG_FORMAT} before each test, so a developer's \code{.env} cannot leak in \ev{tests/conftest.py:21-38}. CI provides no real key.
+  \item \textbf{In-process Qdrant.} The \code{memory_settings} fixture builds \code{Settings} with no dotenv file, a fake key, \code{:memory:} storage, a \code{test_collection} and the \code{baseline} profile \ev{tests/conftest.py:42-52}.
+  \item \textbf{Synthetic PDFs.} Parser tests \enquote{build small PDFs in-process rather than shipping fixture files}, using PyMuPDF to create pages and insert text \ev{tests/test\_parse.py:3-35}.
+  \item \textbf{Mocked HTTP.} Download tests use respx to simulate full downloads, partial content, ignored range headers and stale partial files.
+  \item \textbf{Fake models.} Embeddings are stubbed and language-model clients are small fake objects, so no model is downloaded in CI \ev{git 9ccd6c2}.
+  \item \textbf{Live tests are opt-in.} Three tests in \code{tests/test_live_pipeline.py} carry the \code{costly} marker, are deselected by \code{-m "not costly"} everywhere, and skip themselves if no key or index is available.
+\end{itemize}
+
+pytest runs with \code{-ra --strict-markers --strict-config} and \code{asyncio_mode = "auto"}; two markers are registered, \code{costly} (3 tests) and \code{integration} (none) \ev{pyproject.toml:193-208}.
+
+\begin{measured}[the suite on the analysed commit]
+\code{pytest -m "not costly" --cov}: \textbf{401 passed, 1 skipped, 3 deselected} in 72 seconds; \textbf{coverage 64.24\%} of 3,029 statements and 626 branches, above the 60\% floor. The skipped test is \code{tests/test_eval_preflight.py:46}, which only runs when the evaluation dependency group is \emph{absent}; its counterpart runs when the group is present.
+\end{measured}
+
+\section{Inventory}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{4.3cm}>{\centering\arraybackslash}p{1.0cm}>{\raggedright\arraybackslash}p{4.0cm}>{\raggedright\arraybackslash}p{6.0cm}@{}}
+\toprule
+\textbf{Module} & \textbf{Tests} & \textbf{Protects} & \textbf{Representative tests}\\
+\midrule
+\endhead
+\code{test_corpus.py} & 7 & The corpus registry & \code{test_every_indexed_title_is_cc_by}, \code{test_only_first_editions_are_indexed}\\
+\code{test_download.py} & 11 & Idempotent, resumable, atomic download & \code{test_resumes_from_a_partial_file}, \code{test_ignored_range_header_restarts_cleanly}, \code{test_failed_download_leaves_no_usable_file}\\
+\code{test_parse.py} & 21 & Outline structure, exclusions, cleaning, page numbers & \code{test_entries_are_sorted_by_page}, \code{test_excluded_section_does_not_exclude_its_siblings}, \code{test_reads_number_from_running_head}\\
+\code{test_chunk.py} & 19 & Sentence splitting, packing, overlap, ids & \code{test_chunks_do_not_span_sections}, \code{test_cites_the_printed_page_not_the_pdf_index}, \code{test_oversized_sentence_is_emitted_rather_than_dropped}\\
+\code{test_collection.py} & 14 & Collection schema, ids, writes & \code{test_rewriting_the_same_chunk_does_not_duplicate}, \code{test_rejects_a_dimension_mismatch}\\
+\code{test_store.py} & 7 & Client factory & \code{test_embedded_index_persists_across_clients}, \code{test_cloud_target_redacts_the_api_key}\\
+\code{test_pipeline.py} & 7 & The ingest orchestrator & \code{test_second_run_embeds_nothing_and_does_not_duplicate}, \code{test_resumes_after_a_partial_run}\\
+\code{test_settings.py} & 25 & Settings, profiles, merging & \code{test_baseline_is_a_true_control_group}, \code{test_env_example_names_a_profile_that_exists}, \code{test_enabling_unimplemented_hybrid_retrieval_fails_loudly}\\
+\code{test_rerank.py} & 8 & Reranking and movement statistics & \code{test_does_not_invent_or_drop_candidates}, \code{test_counts_promotions_into_the_context_window}\\
+\code{test_decompose.py} & 12 & Splitting and fusion & \code{test_api_failure_degrades_to_baseline}, \code{test_agreement_across_sub_questions_outranks_one_strong_hit}\\
+\code{test_citations.py} & 26 & Marker parsing and validation & \code{test_every_citation_resolves_to_a_real_page_and_section}, \code{test_ignores_non_citation_brackets}, \code{test_prunes_invalid_numbers_out_of_a_group}\\
+\code{test_generate.py} & 12 & Prompt and generation & \code{test_empty_context_never_reaches_the_model}, \code{test_strips_citations_the_model_invented}, \code{test_records_usage_and_timing_in_the_trace}\\
+\code{test_corrective.py} & 31 & Score, policy, reformulation, loop & \code{test_policy_accepts_rather_than_abstains_when_grading_failed}, \code{test_a_refusal_does_not_burn_a_retry}, \code{test_attempts_are_bounded}\\
+\code{test_guard.py} & 36 & Injection patterns and screening & \code{test_blocks_injection}, \code{test_leaves_textbook_prose_alone}, \code{test_quarantine_is_per_chunk_not_per_query}\\
+\code{test_trace.py} & 13 & Timing, usage, pricing & \code{test_stage_records_even_when_the_block_raises}, \code{test_same_stage_can_be_timed_more_than_once}\\
+\code{test_api.py} & 16 & All four endpoints & \code{test_missing_api_key_is_a_503_not_a_500}, \code{test_makes_no_llm_call}, \code{test_rejects_unknown_fields}\\
+\code{test_goldset.py} & 18 & Gold-set schema and loader & \code{test_multi_hop_requires_two_chunks}, \code{test_unanswerable_must_not_carry_a_reference}\\
+\code{test_eval_verify.py} & 17 & Unanswerable proposal and triage & \code{test_off_topic_is_rejected_even_when_unanswered}, \code{test_near_duplicate_is_rejected_despite_passing_both_checks}\\
+\code{test_eval_metrics.py} & 36 & Retrieval metrics, score cleaning, rate limiter, abstention statistics & \code{test_a_cache_hit_turns_pacing_off_again}, \code{test_refusing_everything_is_caught_by_false_abstention_rate}\\
+\code{test_retrieval_metrics_ranking.py} & 6 & Which list each metric reads & \code{test_mrr_follows_the_reranked_ordering}, \code{test_pool_recall_is_unchanged_by_reordering}\\
+\code{test_answer_cache.py} & 16 & Cache keys and storage & \code{test_changes_when_anything_that_affects_the_answer_changes}, \code{test_corrupt_entry_is_a_miss_not_a_crash}\\
+\code{test_answer_retry.py} & 6 & Transient retries during evaluation & \code{test_a_rate_limit_is_retried_and_succeeds}, \code{test_a_permanent_error_is_not_retried}\\
+\code{test_eval_validity.py} & 15 & The 10\% rule, reports, run discovery & \code{test_the_incident_run_is_invalid}, \code{test_report_withholds_every_metric}, \code{test_run_discovery_ignores_the_scratch_directory}\\
+\code{test_eval_preflight.py} & 7 & Dependency pre-check & \code{test_run_evaluation_checks_before_touching_the_pipeline}\\
+\code{test_container_contract.py} & 6 & Dockerfile and packaging contracts & \code{test_healthcheck_asks_the_server_instead_of_opening_the_index}, \code{test_the_venv_is_built_at_the_path_it_runs_from}\\
+\code{test_space_payload.py} & 5 & The Space deployment payload & \code{test_staged_app_is_syntactically_valid}, \code{test_shipped_source_avoids_python_311_only_names}\\
+\code{test_docs_consistency.py} & 5 & Documents that must match code & \code{test_the_standalone_diagram_matches_the_one_in_the_readme}, \code{test_no_code_or_config_claims_the_thresholds_were_tuned}\\
+\code{test_live_pipeline.py} & 3 & The real system (\code{costly}) & \code{test_answers_a_question_the_corpus_covers}, \code{test_abstains_on_a_question_the_corpus_cannot_support}, \code{test_blocks_an_injection_before_spending_anything}\\
+\midrule
+Total & 405 & & 402 hermetic, 3 live\\
+\bottomrule
+\end{longtable}
+
+Counts include parametrised cases and were collected during this analysis \tagM.
+
+\section{Techniques worth recognising}
+
+\begin{description}[style=nextline]
+  \item[Tests named as specifications.] A failing test's name states the broken promise, for example \code{test_exhausting_the_budget_abstains_rather_than_shipping_the_draft}.
+  \item[Incidents become regression tests.] The three cardiovascular headings, the 39-of-58 incident run, the smoke run in the evidence directory and the pre-check ordering all have tests.
+  \item[Contracts over non-Python files.] Tests read the Dockerfile, \code{pyproject.toml}, the README's Mermaid diagram, \code{docs/EVALUATION.md} and \code{.gitignore}, and fail when they drift from the code. The container contracts were confirmed to fail against the previous Dockerfile \ev{git 88d7969}.
+  \item[Environment-aware assertions.] The dependency pre-check has one test for each state of the environment, after a version that assumed the developer's packages turned CI red \ev{git 4e09511}.
+  \item[Deployment artefacts tested before deployment.] The generated Space \code{app.py} must compile and must not use Python 3.11-only names --- the two failures that once stopped the Space starting.
+  \item[A small live layer.] Three end-to-end tests exist because \enquote{every bug that reached the deployed Space was invisible to the hermetic suite} (README).
+\end{description}
+
+\section{Coverage}
+
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{2.2cm}L@{}}
+\toprule
+\textbf{Coverage} & \textbf{Modules}\\
+\midrule
+100\% & \code{api/models}, \code{correct/policy}, \code{evaluation/goldset}, \code{evaluation/retrieval}, \code{generate/citations}, \code{generate/prompts}, all three guard modules, \code{retrieve/dense}\\
+90--99\% & \code{observe/trace} 99, \code{ingest/corpus} 98, \code{ingest/pipeline} 98, \code{ingest/download} 97, \code{settings} 97, \code{store/collection} 97, \code{retrieve/decompose} 96, \code{correct/loop} 94, \code{ingest/chunk} 92, \code{evaluation/answer_cache} 92, \code{retrieve/rerank} 91\\
+75--89\% & \code{api/routes_v1} 89, \code{ingest/parse} 87, \code{evaluation/abstention} 86, \code{generate/answer} 81, \code{store/client} 77, \code{_compat} 75\\
+50--74\% & \code{llm/provider} 68, \code{evaluation/report} 65, \code{api/main} 63, \code{correct/grader} 57, \code{evaluation/runner} 56, \code{pipeline} 56, \code{evaluation/metrics} 55\\
+Below 50\% & \code{observe/logging} 44, \code{evaluation/verify} 43, \code{cli} 0, \code{evaluation/draft} 0\\
+\bottomrule
+\end{tabularx}
+\end{center}
+\vspace{-4pt}{\raggedleft\tagM\par}
+
+\code{app/app.py} is outside the coverage source and has no tests.
+
+\begin{measured}[uncovered lines that matter]
+\begin{itemize}
+  \item \code{pipeline.py}: lines 93--96 (decomposition), 121--128 (reranking), 137--140 (context guard), 160--164 (input-guard block), 174 and 203--260 (the entire self-check path). The hermetic suite exercises only the baseline path through \code{Pipeline}; every optional stage is tested in isolation, and their wiring together only by the three live tests.
+  \item \code{correct/grader.py}: lines 200--233, the body of \code{grade_answer} --- the real grading call and its response parsing.
+  \item \code{evaluation/abstention.py}: lines 128--144, the body of \code{judge_abstention}.
+\end{itemize}
+\end{measured}
+
+\section{What the tests cannot see}
+
+\begin{itemize}
+  \item \textbf{Behaviour of real models.} Fakes return whatever a test chooses. The abstention judge's truncation (F1) could only appear with a real response --- or with a test that feeds it one.
+  \item \textbf{Whole-trace invariants.} No test checks that a trace's total equals elapsed time (F3), or that every model call records usage (F4).
+  \item \textbf{How failures are presented.} Nothing checks what the API or demo show when grading fails (F5), and the demo has no tests at all.
+  \item \textbf{Pipeline integration without the network}, as the coverage gaps above show (F6).
+  \item \textbf{API promises}: \code{book_slug} on \code{/v1/query} (F10) and the meaning of \code{grounded} for blocked questions (F11).
+  \item \textbf{The CLI and gold-set drafting} (0\% coverage), concurrency, load, and adversarial inputs beyond the hand-written guard cases.
+\end{itemize}
+
+\section{Tests that would have caught the findings}
+
+\begin{recommended}
+\begin{center}\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{2.5cm}L@{}}
+\toprule
+\textbf{Finding} & \textbf{Test to add}\\
+\midrule
+F1 judge & A fake async client returning \code{"REF"}, \code{"REFUSED"}, \code{"**REFUSED**"} and \code{""}; assert the intended verdict for each, and that the request allows enough output tokens.\\
+F3 latency & A corrective pipeline with fakes and a controlled clock; assert that \code{total_ms} equals the sum of top-level stages, not nested ones.\\
+F4 tokens & A fake grader response carrying usage metadata; assert a \code{grading} usage entry in the trace.\\
+F5 fail-open & A grader that raises; assert the answer is marked unverified and the demo does not print \enquote{Self-check passed}.\\
+F6 integration & A \code{guarded} pipeline over in-memory Qdrant with fake embedder, reranker and model; assert the stage order and trace fields for accept, retry, abstain and block.\\
+F7 cache key & Changing \code{use_reranker} or a threshold must change \code{answer_key}.\\
+F10, F11 API & \code{/v1/query} with \code{book_slug} filters retrieval; a blocked question returns \code{grounded=false} and a \code{blocked} flag.\\
+F17 ingest report & \code{vidyarag ingest} with a custom \code{QDRANT_PATH} writes its report beside that index.\\
+F21 movement & \code{rank_movement} with a context of 3 counts promotions into 3, not 5.\\
+F28 hyphenation & Assert the intended result for \texttt{"well-\textbackslash nknown"} explicitly.\\
+\bottomrule
+\end{tabularx}
+\end{center}
+\end{recommended}
+
+\section{Running the tests}
+
+\begin{lstlisting}[language=bash]
+uv run pytest -m "not costly"                                  # what CI runs (plus --cov)
+uv run pytest -m "not costly" --cov --cov-report=term-missing   # with uncovered lines
+uv run pytest tests/test_corrective.py -k refusal -v            # one module, filtered
+uv run pytest -m costly                                         # the 3 live tests (key + index)
+\end{lstlisting}

@@ -1,0 +1,82 @@
+\chapter{Design Decisions and Trade-offs}
+\label{ch:tradeoffs}
+
+Every major design decision in VidyaRAG was a choice between alternatives with different costs. This chapter lists them in one place. The \emph{decision}, \emph{alternatives} and \emph{stated reason} columns are verified from the code, configuration comments, \code{docs/DESIGN.md} and commit messages. The \emph{cost} column says whether the cost is stated in the repository or inferred.
+
+\section{Retrieval and generation}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.9cm}>{\raggedright\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}p{4.4cm}>{\raggedright\arraybackslash}p{4.8cm}@{}}
+\toprule
+\textbf{Decision} & \textbf{Alternatives} & \textbf{Stated reason} & \textbf{Cost}\\
+\midrule
+\endhead
+No orchestration framework & LlamaIndex (planned, removed), LangChain & A few hundred lines over three libraries; a framework \enquote{would have added indirection without removing any of it} & More code to own; fewer ready-made integrations \tagI\\
+Local ONNX embeddings (BGE base) & OpenAI embeddings; PyTorch models & Free, no key; retrieval has no third-party runtime dependency; no torch in the image & A smaller model than hosted options; CPU cold start \tagI\\
+Gemini \emph{lite} models & \code{gemini-3.5-flash}; OpenAI & 3.5 Flash's free tier allowed 20 requests a day; OpenAI needed billing & A weaker generator and grader (stated)\\
+Pinned model ids & \code{-latest} aliases & Benchmarks stay attributable & Must be updated by hand when models retire (stated: 2.5 models already 404)\\
+Chunks of 512 tokens, 64 overlap, within sections & 256 or 1024; crossing sections & A self-contained concept per chunk; metadata exactly true & Short definitions can fall between chunks (stated as a limitation)\\
+Pool of 20, context of 5 & Other sizes & A 4$\times$ pool gives the reranker room & Latency; never swept \tagI\\
+MiniLM cross-encoder & \code{bge-reranker-base} (not measured), Jina v2 (non-commercial licence) & 80\,MB, ONNX, fits free hosting & The better model was never compared (stated)\\
+Reject decomposition & Keep it; reserve slots per sub-question & Measured: multi-hop context recall fell & The multi-hop weakness remains (stated)\\
+No hybrid search & BM25 plus dense & Pool recall already 0.967; would need re-indexing & Exact-term queries unmeasured \tagI\\
+Versioned prompt, temperature 0 & Unversioned prompts & Results attributable to wording & Temperature 0 still varies (measured)\\
+\bottomrule
+\end{longtable}
+
+\section{Self-check and safety}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.9cm}>{\raggedright\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}p{4.4cm}>{\raggedright\arraybackslash}p{4.8cm}@{}}
+\toprule
+\textbf{Decision} & \textbf{Alternatives} & \textbf{Stated reason} & \textbf{Cost}\\
+\midrule
+\endhead
+Claim-level grading & One answer-level score & Names what a retry should search for & An extra model call per question (stated); the retry fired once in 58\\
+A separate grader model & Self-grading & Avoids self-grading bias & Two models to manage \tagI\\
+\code{partial} weighted 0.5 & Binary verdicts; tuned weights & Forcing binary biases scores upward; tuning would fit the gold set & Arbitrary but disclosed\\
+Untuned thresholds (0.8, 0.5) & A sweep & Twelve unanswerable questions are too few; would spend the gold set & Their effect is unmeasured; in practice they decided one retry (measured)\\
+Fail open on grading errors & Fail closed & An API error must not look like caution & Unverified answers look verified (Section~\ref{sec:trace-failopen})\\
+Refusal $\rightarrow$ abstain, not retry & Retry on refusal & No failed claim to search for & A refusal caused by a retrieval miss gets no second search \tagI\\
+Two attempts & More attempts & Bounded latency and cost & At most one recovery\\
+Regular-expression guards & Model-based classifier & Cheap, deterministic, explainable; false positives on textbook prose were the constraint & Easily bypassed (measured)\\
+Block questions, quarantine passages & Sanitise; refuse on bad passages & Do not edit for an attacker; one bad document must not deny service & Legitimate phrasings can be refused (measured)\\
+\bottomrule
+\end{longtable}
+
+\section{Evaluation}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.9cm}>{\raggedright\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}p{4.4cm}>{\raggedright\arraybackslash}p{4.8cm}@{}}
+\toprule
+\textbf{Decision} & \textbf{Alternatives} & \textbf{Stated reason} & \textbf{Cost}\\
+\midrule
+\endhead
+RAGAS, via an OpenAI-compatible client to Gemini & Hand-written metrics & Standard metrics are stronger evidence & Two upstream workarounds; judged by a lite model \tagI\\
+Deterministic retrieval metrics beside RAGAS & RAGAS only & Free, exact, and they locate faults & ---\\
+LLM-drafted, verified gold set & Fully hand-written & Review small enough to happen; provenance recorded & Passage-shaped questions; no ambiguous type (stated)\\
+One frozen control, single-flag ablations & Combined changes & Attributable deltas & Only one run per profile \tagI\\
+Two-phase runner with caches & Interleaved generation and grading & Grading failures never destroy paid generation & Cache key risk (F7)\\
+Withhold metrics above 10\% failures & Report partial runs & A partial run measures an easier set & Some quota-limited runs must be redone\\
+A model judge for prose refusals & Keyword matching & Keywords would be guesswork & A single-point failure (F1)\\
+\bottomrule
+\end{longtable}
+
+\section{Engineering and deployment}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.9cm}>{\raggedright\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}p{4.4cm}>{\raggedright\arraybackslash}p{4.8cm}@{}}
+\toprule
+\textbf{Decision} & \textbf{Alternatives} & \textbf{Stated reason} & \textbf{Cost}\\
+\midrule
+\endhead
+YAML profiles with \code{extra="forbid"} & Environment flags & Diffable, citable configurations; typos fail & A little more ceremony \tagI\\
+Trace returned with every answer & Logs or a metrics backend & Latency and cost inspectable where the answer is & No aggregation, alerting or history \tagI\\
+Embedded index shipped with the Space & Qdrant Cloud with a keep-alive job & Free clusters expire; no network hop & Exact search does not scale past about 20,000 points (stated)\\
+Gradio on ZeroGPU with an unused GPU declaration & A paid CPU Space & The only free Gradio hardware & Tied to a platform quirk; Python 3.10 (stated)\\
+Python 3.10 floor via \code{_compat.py} & Require 3.11 & The Space pins 3.10 & A shim and a wider CI matrix\\
+Torch-free Docker image, index mounted & Baked data and models & A small image; data outside the build & First request downloads models \tagI\\
+Space dependencies pinned to major versions & A lockfile for the Space & Hard pins can stop resolving months later & Space and CI may run different versions \tagI\\
+Manual Space deployment & CI/CD & Not stated & Drift between \code{main} and the demo \tagI\\
+\bottomrule
+\end{longtable}
+
+\begin{interview}
+Choose three of these to discuss in depth, and describe each as a trade-off rather than a preference. For example: \enquote{I shipped the index inside the Space instead of using a managed vector database. It removes an expiring dependency and a network hop; the cost is exact search, fine at 3,608 chunks and not past about 20,000, where the same client factory points at a Qdrant server.}
+\end{interview}
